@@ -1,54 +1,115 @@
-const platforms = [
-  { name: "LinkedIn", color: "#0a66c2", reach: 48200, engagement: 2840, conversions: 126, trend: 12.4 },
-  { name: "Instagram", color: "#c13584", reach: 75600, engagement: 6120, conversions: 218, trend: 8.7 },
-  { name: "Facebook", color: "#1877f2", reach: 38900, engagement: 1930, conversions: 81, trend: -2.8 },
-  { name: "TikTok", color: "#111111", reach: 92400, engagement: 8480, conversions: 174, trend: 18.9 },
-  { name: "YouTube", color: "#ff0000", reach: 44100, engagement: 2360, conversions: 96, trend: 6.2 },
-  { name: "Google Analytics", color: "#f9ab00", reach: 53800, engagement: 3190, conversions: 312, trend: 4.1 }
-];
-
-const defaultRules = [
-  { title: "Engagement spike", detail: "Alert when any platform grows engagement by more than 15% week over week." },
-  { title: "Report ready", detail: "Generate a summary every Monday at 9:00 and stage it for review." },
-  { title: "Conversion dip", detail: "Flag channels where conversions fall by more than 8%." }
-];
-
-const state = {
-  connected: JSON.parse(localStorage.getItem("metricflow.connected") || "null") || {
-    LinkedIn: true,
-    Instagram: true,
-    Facebook: false,
-    TikTok: true,
-    YouTube: true,
-    "Google Analytics": true
-  },
-  customPlatforms: JSON.parse(localStorage.getItem("metricflow.customPlatforms") || "[]"),
-  rules: JSON.parse(localStorage.getItem("metricflow.rules") || "null") || defaultRules,
-  settings: JSON.parse(localStorage.getItem("metricflow.settings") || "null") || {
+const seedState = {
+  sources: [
+    { name: "LinkedIn", color: "#0a66c2", reach: 48200, engagement: 2840, conversions: 126, trend: 12.4, connected: true },
+    { name: "Instagram", color: "#c13584", reach: 75600, engagement: 6120, conversions: 218, trend: 8.7, connected: true },
+    { name: "Facebook", color: "#1877f2", reach: 38900, engagement: 1930, conversions: 81, trend: -2.8, connected: false },
+    { name: "TikTok", color: "#111111", reach: 92400, engagement: 8480, conversions: 174, trend: 18.9, connected: true },
+    { name: "YouTube", color: "#ff0000", reach: 44100, engagement: 2360, conversions: 96, trend: 6.2, connected: true },
+    { name: "Google Analytics", color: "#f9ab00", reach: 53800, engagement: 3190, conversions: 312, trend: 4.1, connected: true }
+  ],
+  rules: [
+    { id: "rule-engagement-spike", title: "Engagement spike", detail: "Alert when any platform grows engagement by more than 15% week over week." },
+    { id: "rule-report-ready", title: "Report ready", detail: "Generate a summary every Monday at 9:00 and stage it for review." },
+    { id: "rule-conversion-dip", title: "Conversion dip", detail: "Flag channels where conversions fall by more than 8%." }
+  ],
+  settings: {
     companyName: "Northstar Studio",
     defaultKpi: "Engagement rate",
     autoRefresh: true
   },
-  schedule: JSON.parse(localStorage.getItem("metricflow.schedule") || "null") || {
+  schedule: {
     frequency: "Weekly",
     day: "Monday",
     recipients: "team@example.com"
-  }
+  },
+  reports: []
 };
 
-const currencyFormatter = new Intl.NumberFormat("en-US");
+let state = loadFallbackState();
+let backendOnline = false;
+
+const numberFormatter = new Intl.NumberFormat("en-US");
 const percentFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 
-function allPlatforms() {
-  return [...platforms, ...state.customPlatforms];
+function loadFallbackState() {
+  return JSON.parse(localStorage.getItem("metricflow.state") || "null") || structuredClone(seedState);
 }
 
-function activePlatforms() {
-  return allPlatforms().filter((platform) => state.connected[platform.name] !== false);
+function saveFallbackState() {
+  localStorage.setItem("metricflow.state", JSON.stringify(state));
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    headers: { "content-type": "application/json", ...(options.headers || {}) },
+    ...options
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: "Request failed" }));
+    throw new Error(error.message || "Request failed");
+  }
+  const type = response.headers.get("content-type") || "";
+  return type.includes("application/json") ? response.json() : response.text();
+}
+
+async function loadBackendState() {
+  try {
+    const data = await api("/api/state");
+    state = data;
+    backendOnline = true;
+    document.querySelector("#syncStatus").textContent = "Backend connected";
+  } catch {
+    backendOnline = false;
+    document.querySelector("#syncStatus").textContent = "Browser-only mode";
+  }
+}
+
+function connectedSources() {
+  return state.sources.filter((source) => source.connected);
+}
+
+function getSummary() {
+  if (state.summary) return state.summary;
+  const active = connectedSources();
+  const totalReach = active.reduce((sum, source) => sum + Number(source.reach || 0), 0);
+  const totalEngagement = active.reduce((sum, source) => sum + Number(source.engagement || 0), 0);
+  const totalConversions = active.reduce((sum, source) => sum + Number(source.conversions || 0), 0);
+  return {
+    totalReach,
+    totalEngagement,
+    totalConversions,
+    engagementRate: totalReach ? (totalEngagement / totalReach) * 100 : 0,
+    connectedSources: active.length,
+    totalSources: state.sources.length,
+    timeSavedHours: Number((active.length * 1.1 + 0.9).toFixed(1))
+  };
+}
+
+function getInsights() {
+  if (state.insights) return state.insights;
+  const active = connectedSources();
+  const bestReach = [...active].sort((a, b) => b.reach - a.reach)[0];
+  const bestConversion = [...active].sort((a, b) => b.conversions - a.conversions)[0];
+  const needsAttention = active.find((source) => source.trend < 0);
+
+  return [
+    {
+      title: `${bestReach?.name || "Top channel"} is driving reach`,
+      detail: `Prioritize the content format that lifted ${bestReach?.name || "your leading platform"} over the last reporting period.`
+    },
+    {
+      title: `${bestConversion?.name || "Conversion channel"} is closest to revenue`,
+      detail: "Use this channel as the benchmark for landing-page and campaign attribution."
+    },
+    {
+      title: needsAttention ? `${needsAttention.name} needs attention` : "No channel is declining",
+      detail: needsAttention ? "Engagement is softening. Queue a content audit before next week's report." : "Current connected sources show positive movement across the board."
+    }
+  ];
 }
 
 function formatNumber(value) {
-  return currencyFormatter.format(Math.round(value));
+  return numberFormatter.format(Math.round(value));
 }
 
 function showToast(message) {
@@ -59,25 +120,13 @@ function showToast(message) {
   showToast.timer = window.setTimeout(() => toast.classList.remove("show"), 2600);
 }
 
-function saveState() {
-  localStorage.setItem("metricflow.connected", JSON.stringify(state.connected));
-  localStorage.setItem("metricflow.customPlatforms", JSON.stringify(state.customPlatforms));
-  localStorage.setItem("metricflow.rules", JSON.stringify(state.rules));
-  localStorage.setItem("metricflow.settings", JSON.stringify(state.settings));
-  localStorage.setItem("metricflow.schedule", JSON.stringify(state.schedule));
-}
-
 function renderKpis() {
-  const active = activePlatforms();
-  const reach = active.reduce((sum, platform) => sum + platform.reach, 0);
-  const engagement = active.reduce((sum, platform) => sum + platform.engagement, 0);
-  const conversions = active.reduce((sum, platform) => sum + platform.conversions, 0);
-  const engagementRate = reach ? (engagement / reach) * 100 : 0;
+  const summary = getSummary();
   const kpis = [
-    ["Total reach", formatNumber(reach), "+9.8%"],
-    ["Engagement rate", `${percentFormatter.format(engagementRate)}%`, "+3.1%"],
-    ["Conversions", formatNumber(conversions), "+6.4%"],
-    ["Connected sources", `${active.length}/${allPlatforms().length}`, "Live"]
+    ["Total reach", formatNumber(summary.totalReach), "+9.8%"],
+    ["Engagement rate", `${percentFormatter.format(summary.engagementRate)}%`, "+3.1%"],
+    ["Conversions", formatNumber(summary.totalConversions), "+6.4%"],
+    ["Connected sources", `${summary.connectedSources}/${summary.totalSources}`, backendOnline ? "API live" : "Local"]
   ];
 
   document.querySelector("#kpiGrid").innerHTML = kpis.map(([label, value, change]) => `
@@ -90,42 +139,24 @@ function renderKpis() {
 }
 
 function renderPlatformRows() {
-  document.querySelector("#platformRows").innerHTML = activePlatforms().map((platform) => `
+  document.querySelector("#platformRows").innerHTML = connectedSources().map((source) => `
     <tr>
       <td>
         <div class="platform-name">
-          <span class="platform-dot" style="background:${platform.color}"></span>
-          ${platform.name}
+          <span class="platform-dot" style="background:${source.color}"></span>
+          ${source.name}
         </div>
       </td>
-      <td>${formatNumber(platform.reach)}</td>
-      <td>${formatNumber(platform.engagement)}</td>
-      <td>${formatNumber(platform.conversions)}</td>
-      <td class="${platform.trend >= 0 ? "trend-up" : "trend-down"}">${platform.trend >= 0 ? "↑" : "↓"} ${Math.abs(platform.trend)}%</td>
+      <td>${formatNumber(source.reach)}</td>
+      <td>${formatNumber(source.engagement)}</td>
+      <td>${formatNumber(source.conversions)}</td>
+      <td class="${source.trend >= 0 ? "trend-up" : "trend-down"}">${source.trend >= 0 ? "Up" : "Down"} ${Math.abs(source.trend)}%</td>
     </tr>
   `).join("");
 }
 
 function renderInsights() {
-  const bestReach = activePlatforms().sort((a, b) => b.reach - a.reach)[0];
-  const bestConversion = activePlatforms().sort((a, b) => b.conversions - a.conversions)[0];
-  const needsAttention = activePlatforms().find((platform) => platform.trend < 0);
-  const insights = [
-    {
-      title: `${bestReach?.name || "Top channel"} is driving reach`,
-      detail: `Prioritize the content format that lifted ${bestReach?.name || "your leading platform"} over the last reporting period.`
-    },
-    {
-      title: `${bestConversion?.name || "Conversion channel"} is closest to revenue`,
-      detail: `Use this channel as the benchmark for landing-page and campaign attribution.`
-    },
-    {
-      title: needsAttention ? `${needsAttention.name} needs attention` : "No channel is declining",
-      detail: needsAttention ? "Engagement is softening. Queue a content audit before next week's report." : "Current connected sources show positive movement across the board."
-    }
-  ];
-
-  document.querySelector("#insightList").innerHTML = insights.map((insight) => `
+  document.querySelector("#insightList").innerHTML = getInsights().map((insight) => `
     <article class="insight">
       <strong>${insight.title}</strong>
       <p>${insight.detail}</p>
@@ -134,71 +165,90 @@ function renderInsights() {
 }
 
 function renderSources() {
-  document.querySelector("#sourceGrid").innerHTML = allPlatforms().map((platform) => {
-    const connected = state.connected[platform.name] !== false;
-    return `
-      <article class="source-card">
-        <header>
-          <strong>${platform.name}</strong>
-          <span class="connection-pill ${connected ? "" : "off"}">${connected ? "Connected" : "Off"}</span>
-        </header>
-        <span>${formatNumber(platform.reach)} reach · ${formatNumber(platform.engagement)} engagements</span>
-        <button class="${connected ? "secondary-button" : "primary-button"}" data-source="${platform.name}" type="button">
-          ${connected ? "Disconnect" : "Connect"}
-        </button>
-      </article>
-    `;
-  }).join("");
-}
-
-function renderRules() {
-  document.querySelector("#ruleList").innerHTML = state.rules.map((rule, index) => `
-    <article class="rule">
-      <strong>${rule.title}</strong>
-      <p>${rule.detail}</p>
-      <button class="secondary-button" data-remove-rule="${index}" type="button">Remove</button>
+  document.querySelector("#sourceGrid").innerHTML = state.sources.map((source) => `
+    <article class="source-card">
+      <header>
+        <strong>${source.name}</strong>
+        <span class="connection-pill ${source.connected ? "" : "off"}">${source.connected ? "Connected" : "Off"}</span>
+      </header>
+      <span>${formatNumber(source.reach)} reach / ${formatNumber(source.engagement)} engagements</span>
+      <button class="${source.connected ? "secondary-button" : "primary-button"}" data-source="${source.name}" type="button">
+        ${source.connected ? "Disconnect" : "Connect"}
+      </button>
     </article>
   `).join("");
 }
 
-function generateReport() {
-  const title = document.querySelector("#reportName").value.trim() || "Performance report";
-  const audience = document.querySelector("#reportAudience").value;
-  const sections = [...document.querySelectorAll("fieldset input:checked")].map((input) => input.value);
-  const active = activePlatforms();
-  const totalReach = active.reduce((sum, platform) => sum + platform.reach, 0);
-  const totalEngagement = active.reduce((sum, platform) => sum + platform.engagement, 0);
-  const top = [...active].sort((a, b) => b.engagement - a.engagement)[0];
+function renderRules() {
+  document.querySelector("#ruleList").innerHTML = state.rules.map((rule) => `
+    <article class="rule">
+      <strong>${rule.title}</strong>
+      <p>${rule.detail}</p>
+      <button class="secondary-button" data-remove-rule="${rule.id}" type="button">Remove</button>
+    </article>
+  `).join("");
+}
+
+function renderReport(report) {
+  const summary = report?.summary || getSummary();
+  const title = report?.title || document.querySelector("#reportName").value.trim() || "Performance report";
+  const audience = report?.audience || document.querySelector("#reportAudience").value;
+  const sections = report?.sections || [...document.querySelectorAll("fieldset input:checked")].map((input) => input.value);
+  const recommendation = report?.recommendation || `${connectedSources().sort((a, b) => b.engagement - a.engagement)[0]?.name || "Your strongest channel"} is the current engagement leader. Shift one additional campaign test into that channel next period and watch conversion efficiency.`;
 
   document.querySelector("#previewTitle").textContent = title;
   document.querySelector("#previewAudience").textContent = audience;
-  document.querySelector("#previewDate").textContent = new Date().toLocaleDateString(undefined, {
+  document.querySelector("#previewDate").textContent = new Date(report?.createdAt || Date.now()).toLocaleDateString(undefined, {
     month: "long",
     day: "numeric",
     year: "numeric"
   });
-
   document.querySelector("#previewContent").innerHTML = `
     <h2>Executive Summary</h2>
-    <p>${state.settings.companyName} reached ${formatNumber(totalReach)} people and generated ${formatNumber(totalEngagement)} engagements across ${active.length} active sources.</p>
+    <p>${state.settings.companyName} reached ${formatNumber(summary.totalReach)} people and generated ${formatNumber(summary.totalEngagement)} engagements across ${summary.connectedSources} active sources.</p>
     <h2>Included Sections</h2>
     <ul>${sections.map((section) => `<li>${section}</li>`).join("")}</ul>
     <h2>Top Opportunity</h2>
-    <p>${top?.name || "Your strongest channel"} is the current engagement leader. Shift one additional campaign test into that channel next period and watch conversion efficiency.</p>
+    <p>${recommendation}</p>
   `;
+}
+
+async function generateReport() {
+  const payload = {
+    title: document.querySelector("#reportName").value.trim() || "Performance report",
+    audience: document.querySelector("#reportAudience").value,
+    sections: [...document.querySelectorAll("fieldset input:checked")].map((input) => input.value)
+  };
+
+  if (backendOnline) {
+    const result = await api("/api/reports", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    state.reports = result.reports;
+    renderReport(result.report);
+  } else {
+    renderReport(payload);
+    saveFallbackState();
+  }
   showToast("Report preview generated");
 }
 
 function exportCsv() {
-  const rows = [["platform", "reach", "engagement", "conversions", "trend"], ...activePlatforms().map((platform) => [
-    platform.name,
-    platform.reach,
-    platform.engagement,
-    platform.conversions,
-    platform.trend
+  if (backendOnline) {
+    window.location.href = "/api/export.csv";
+    showToast("CSV export requested from backend");
+    return;
+  }
+
+  const rows = [["platform", "reach", "engagement", "conversions", "trend"], ...connectedSources().map((source) => [
+    source.name,
+    source.reach,
+    source.engagement,
+    source.conversions,
+    source.trend
   ])];
-  const csv = rows.map((row) => row.join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
+  const blob = new Blob([rows.map((row) => row.join(",")).join("\n")], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -208,9 +258,8 @@ function exportCsv() {
   showToast("CSV export ready");
 }
 
-function importCsv() {
-  const text = document.querySelector("#csvInput").value.trim();
-  const [, ...rows] = text.split(/\r?\n/);
+function importCsvLocally(csv) {
+  const [, ...rows] = csv.trim().split(/\r?\n/);
   const imports = rows.map((row, index) => {
     const [name, reach, engagement, conversions] = row.split(",").map((cell) => cell.trim());
     return {
@@ -219,17 +268,69 @@ function importCsv() {
       reach: Number(reach) || 0,
       engagement: Number(engagement) || 0,
       conversions: Number(conversions) || 0,
-      trend: 3 + index
+      trend: 3 + index,
+      connected: true,
+      imported: true
     };
-  }).filter((platform) => platform.name);
-
-  state.customPlatforms = imports;
-  imports.forEach((platform) => {
-    state.connected[platform.name] = true;
   });
-  saveState();
+  state.sources = state.sources.filter((source) => !source.imported).concat(imports);
+}
+
+async function importCsv() {
+  const csv = document.querySelector("#csvInput").value.trim();
+  if (backendOnline) {
+    const result = await api("/api/import-csv", {
+      method: "POST",
+      body: JSON.stringify({ csv })
+    });
+    state.sources = result.sources;
+    state.summary = result.summary;
+  } else {
+    importCsvLocally(csv);
+    saveFallbackState();
+  }
   renderAll();
-  showToast(`${imports.length} CSV sources imported`);
+  showToast("CSV sources imported");
+}
+
+async function toggleSource(name) {
+  const source = state.sources.find((item) => item.name === name);
+  if (!source) return;
+  const connected = !source.connected;
+
+  if (backendOnline) {
+    const result = await api(`/api/sources/${encodeURIComponent(name)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ connected })
+    });
+    source.connected = result.source.connected;
+    state.summary = result.summary;
+  } else {
+    source.connected = connected;
+    saveFallbackState();
+  }
+  renderAll();
+  showToast(`${name} ${source.connected ? "connected" : "disconnected"}`);
+}
+
+function hydrateControls() {
+  document.querySelector("#companyName").value = state.settings.companyName;
+  document.querySelector("#defaultKpi").value = state.settings.defaultKpi;
+  document.querySelector("#autoRefresh").checked = state.settings.autoRefresh;
+  document.querySelector("#scheduleFrequency").value = state.schedule.frequency;
+  document.querySelector("#scheduleDay").value = state.schedule.day;
+  document.querySelector("#recipients").value = state.schedule.recipients;
+}
+
+function renderAll() {
+  delete state.summary;
+  delete state.insights;
+  renderKpis();
+  renderPlatformRows();
+  renderInsights();
+  renderSources();
+  renderRules();
+  document.querySelector("#timeSaved").textContent = `${getSummary().timeSavedHours} hours`;
 }
 
 function wireEvents() {
@@ -245,86 +346,84 @@ function wireEvents() {
 
   document.querySelector("#sourceGrid").addEventListener("click", (event) => {
     const button = event.target.closest("[data-source]");
-    if (!button) return;
-    const name = button.dataset.source;
-    state.connected[name] = state.connected[name] === false;
-    saveState();
-    renderAll();
-    showToast(`${name} ${state.connected[name] ? "connected" : "disconnected"}`);
+    if (button) toggleSource(button.dataset.source).catch((error) => showToast(error.message));
   });
 
-  document.querySelector("#ruleList").addEventListener("click", (event) => {
+  document.querySelector("#ruleList").addEventListener("click", async (event) => {
     const button = event.target.closest("[data-remove-rule]");
     if (!button) return;
-    state.rules.splice(Number(button.dataset.removeRule), 1);
-    saveState();
+    if (backendOnline) {
+      const result = await api(`/api/rules/${encodeURIComponent(button.dataset.removeRule)}`, { method: "DELETE" });
+      state.rules = result.rules;
+    } else {
+      state.rules = state.rules.filter((rule) => rule.id !== button.dataset.removeRule);
+      saveFallbackState();
+    }
     renderRules();
     showToast("Rule removed");
   });
 
-  document.querySelector("#addRule").addEventListener("click", () => {
-    state.rules.push({
+  document.querySelector("#addRule").addEventListener("click", async () => {
+    const payload = {
       title: "Audience shift",
       detail: "Notify the team when a channel's audience growth outpaces its engagement growth."
-    });
-    saveState();
+    };
+    if (backendOnline) {
+      const result = await api("/api/rules", { method: "POST", body: JSON.stringify(payload) });
+      state.rules = result.rules;
+    } else {
+      state.rules.push({ id: `rule-${Date.now()}`, ...payload });
+      saveFallbackState();
+    }
     renderRules();
     showToast("Rule added");
   });
 
-  document.querySelector("#saveSchedule").addEventListener("click", () => {
+  document.querySelector("#saveSchedule").addEventListener("click", async () => {
     state.schedule = {
       frequency: document.querySelector("#scheduleFrequency").value,
       day: document.querySelector("#scheduleDay").value,
       recipients: document.querySelector("#recipients").value
     };
-    saveState();
+    if (backendOnline) await api("/api/schedule", { method: "PUT", body: JSON.stringify(state.schedule) });
+    saveFallbackState();
     showToast("Schedule saved");
   });
 
-  document.querySelector("#saveSettings").addEventListener("click", () => {
+  document.querySelector("#saveSettings").addEventListener("click", async () => {
     state.settings = {
       companyName: document.querySelector("#companyName").value || "Your company",
       defaultKpi: document.querySelector("#defaultKpi").value,
       autoRefresh: document.querySelector("#autoRefresh").checked
     };
-    saveState();
-    generateReport();
+    if (backendOnline) await api("/api/settings", { method: "PUT", body: JSON.stringify(state.settings) });
+    saveFallbackState();
+    renderReport();
     showToast("Settings saved");
   });
 
-  document.querySelector("#generateReport").addEventListener("click", generateReport);
+  document.querySelector("#generateReport").addEventListener("click", () => generateReport().catch((error) => showToast(error.message)));
   document.querySelector("#exportCsv").addEventListener("click", exportCsv);
-  document.querySelector("#importCsv").addEventListener("click", importCsv);
+  document.querySelector("#importCsv").addEventListener("click", () => importCsv().catch((error) => showToast(error.message)));
   document.querySelector("#newReport").addEventListener("click", () => {
     document.querySelector('[data-view="reports"]').click();
     document.querySelector("#reportName").focus();
   });
-  document.querySelector("#refreshData").addEventListener("click", () => {
-    document.querySelector("#syncStatus").textContent = "Last sync just now";
-    showToast("Metrics refreshed");
+  document.querySelector("#refreshData").addEventListener("click", async () => {
+    await loadBackendState();
+    hydrateControls();
+    renderAll();
+    renderReport();
+    showToast(backendOnline ? "Metrics refreshed from backend" : "Using browser-only state");
   });
 }
 
-function hydrateControls() {
-  document.querySelector("#companyName").value = state.settings.companyName;
-  document.querySelector("#defaultKpi").value = state.settings.defaultKpi;
-  document.querySelector("#autoRefresh").checked = state.settings.autoRefresh;
-  document.querySelector("#scheduleFrequency").value = state.schedule.frequency;
-  document.querySelector("#scheduleDay").value = state.schedule.day;
-  document.querySelector("#recipients").value = state.schedule.recipients;
+async function boot() {
+  wireEvents();
+  await loadBackendState();
+  hydrateControls();
+  renderAll();
+  renderReport();
 }
 
-function renderAll() {
-  renderKpis();
-  renderPlatformRows();
-  renderInsights();
-  renderSources();
-  renderRules();
-  document.querySelector("#timeSaved").textContent = `${(activePlatforms().length * 1.1 + 0.9).toFixed(1)} hours`;
-}
-
-hydrateControls();
-wireEvents();
-renderAll();
-generateReport();
+boot();
