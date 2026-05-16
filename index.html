@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MetricFlow Analytics</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Primary">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">M</div>
+          <div>
+            <strong>MetricFlow</strong>
+            <span>Analytics automation</span>
+          </div>
+        </div>
+        <nav class="nav-list" aria-label="Sections">
+          <button class="nav-item active" data-view="overview" type="button">
+            <span aria-hidden="true">⌂</span> Overview
+          </button>
+          <button class="nav-item" data-view="sources" type="button">
+            <span aria-hidden="true">≡</span> Sources
+          </button>
+          <button class="nav-item" data-view="reports" type="button">
+            <span aria-hidden="true">▣</span> Reports
+          </button>
+          <button class="nav-item" data-view="automation" type="button">
+            <span aria-hidden="true">◎</span> Automation
+          </button>
+          <button class="nav-item" data-view="settings" type="button">
+            <span aria-hidden="true">⚙</span> Settings
+          </button>
+        </nav>
+        <div class="sidebar-footer">
+          <span class="status-dot"></span>
+          <span id="syncStatus">Last sync just now</span>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Social media reporting hub</p>
+            <h1 id="viewTitle">Overview</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" id="refreshData" type="button" title="Refresh data" aria-label="Refresh data">↻</button>
+            <button class="primary-button" id="newReport" type="button">New report</button>
+          </div>
+        </header>
+
+        <section class="view active" id="overview" aria-labelledby="overview-heading">
+          <div class="hero-panel">
+            <div>
+              <p class="eyebrow">Weekly time saved</p>
+              <h2 id="timeSaved">6.4 hours</h2>
+              <p>Automated pulls, normalized KPIs, and scheduled report delivery based on your active sources.</p>
+            </div>
+            <div class="hero-chart" aria-label="Cross-platform performance chart">
+              <div style="height: 44%"></div>
+              <div style="height: 68%"></div>
+              <div style="height: 52%"></div>
+              <div style="height: 82%"></div>
+              <div style="height: 61%"></div>
+              <div style="height: 74%"></div>
+              <div style="height: 92%"></div>
+            </div>
+          </div>
+
+          <div class="kpi-grid" id="kpiGrid"></div>
+
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2>Platform Performance</h2>
+                  <p>Normalized engagement, reach, and conversion trends.</p>
+                </div>
+                <select id="dateRange" aria-label="Date range">
+                  <option value="7">Last 7 days</option>
+                  <option value="30" selected>Last 30 days</option>
+                  <option value="90">Last 90 days</option>
+                </select>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Platform</th>
+                      <th>Reach</th>
+                      <th>Engagement</th>
+                      <th>Conversions</th>
+                      <th>Trend</th>
+                    </tr>
+                  </thead>
+                  <tbody id="platformRows"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2>Insight Queue</h2>
+                  <p>Generated from recent campaign movement.</p>
+                </div>
+              </div>
+              <div class="insight-list" id="insightList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="sources" aria-labelledby="sources-heading">
+          <div class="section-band">
+            <h2 id="sources-heading">Connect Analytics Sources</h2>
+            <p>Choose the channels you report on. Connected sources feed the dashboard, report builder, and automation rules.</p>
+          </div>
+          <div class="source-grid" id="sourceGrid"></div>
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>CSV Import</h2>
+                <p>Drop in metrics from any unsupported source.</p>
+              </div>
+            </div>
+            <div class="import-box">
+              <textarea id="csvInput" aria-label="CSV input">platform,reach,engagement,conversions
+Newsletter,18500,940,86
+Podcast,7200,410,28</textarea>
+              <button class="secondary-button" id="importCsv" type="button">Import CSV</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="reports" aria-labelledby="reports-heading">
+          <div class="report-layout">
+            <section class="panel report-builder">
+              <div class="panel-header">
+                <div>
+                  <h2 id="reports-heading">Report Builder</h2>
+                  <p>Create a client-ready report from live metrics.</p>
+                </div>
+              </div>
+              <label>
+                Report name
+                <input id="reportName" value="Weekly performance report">
+              </label>
+              <label>
+                Audience
+                <select id="reportAudience">
+                  <option>Leadership team</option>
+                  <option>Client</option>
+                  <option>Marketing operations</option>
+                </select>
+              </label>
+              <fieldset>
+                <legend>Sections</legend>
+                <label><input type="checkbox" value="Executive summary" checked> Executive summary</label>
+                <label><input type="checkbox" value="Platform scorecard" checked> Platform scorecard</label>
+                <label><input type="checkbox" value="Top posts" checked> Top posts</label>
+                <label><input type="checkbox" value="Recommendations" checked> Recommendations</label>
+              </fieldset>
+              <div class="button-row">
+                <button class="primary-button" id="generateReport" type="button">Generate preview</button>
+                <button class="secondary-button" id="exportCsv" type="button">Export CSV</button>
+              </div>
+            </section>
+
+            <section class="report-preview" aria-live="polite">
+              <div class="report-page">
+                <div class="report-cover">
+                  <p id="previewAudience">Leadership team</p>
+                  <h2 id="previewTitle">Weekly performance report</h2>
+                  <span id="previewDate"></span>
+                </div>
+                <div id="previewContent"></div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="automation" aria-labelledby="automation-heading">
+          <div class="automation-grid">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2 id="automation-heading">Scheduled Reporting</h2>
+                  <p>Send recurring summaries without rebuilding the deck each week.</p>
+                </div>
+              </div>
+              <label>
+                Frequency
+                <select id="scheduleFrequency">
+                  <option>Weekly</option>
+                  <option>Bi-weekly</option>
+                  <option>Monthly</option>
+                </select>
+              </label>
+              <label>
+                Delivery day
+                <select id="scheduleDay">
+                  <option>Monday</option>
+                  <option>Tuesday</option>
+                  <option>Wednesday</option>
+                  <option>Thursday</option>
+                  <option>Friday</option>
+                </select>
+              </label>
+              <label>
+                Recipients
+                <input id="recipients" value="team@example.com">
+              </label>
+              <button class="primary-button" id="saveSchedule" type="button">Save schedule</button>
+            </section>
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2>Automation Rules</h2>
+                  <p>Alerts and recommendations that trigger on metric changes.</p>
+                </div>
+              </div>
+              <div class="rule-list" id="ruleList"></div>
+              <button class="secondary-button" id="addRule" type="button">Add rule</button>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="settings" aria-labelledby="settings-heading">
+          <section class="panel settings-panel">
+            <div class="panel-header">
+              <div>
+                <h2 id="settings-heading">Workspace Settings</h2>
+                <p>These choices are stored locally in this browser.</p>
+              </div>
+            </div>
+            <label>
+              Company name
+              <input id="companyName" value="Northstar Studio">
+            </label>
+            <label>
+              Default KPI
+              <select id="defaultKpi">
+                <option>Engagement rate</option>
+                <option>Reach growth</option>
+                <option>Conversions</option>
+              </select>
+            </label>
+            <label class="toggle-row">
+              <input id="autoRefresh" type="checkbox" checked>
+              Refresh metrics automatically
+            </label>
+            <button class="primary-button" id="saveSettings" type="button">Save settings</button>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
