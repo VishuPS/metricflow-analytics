@@ -14,7 +14,13 @@ A local MVP for automated social media analytics collection and reporting.
 
 ## Open It
 
-Run the backend server:
+Install dependencies:
+
+```powershell
+npm install
+```
+
+For local development without Supabase, run the backend server as-is. It will log a warning and fall back to `data/store.json`:
 
 ```powershell
 node server.js
@@ -28,14 +34,22 @@ http://localhost:4173
 
 The dashboard still has a browser-only fallback if you open `index.html` directly, but backend mode is the main path.
 
+To use Supabase locally, copy `.env.example` to `.env` and set:
+
+```text
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
 ## Deploy
 
-This repo includes a `render.yaml` blueprint for Render.
+The backend stores runtime data in Supabase Postgres when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set. No persistent disk is required.
 
-1. In Render, create a new Blueprint from `VishuPS/metricflow-analytics`.
-2. Render will use `npm start`, expose the service on its assigned `PORT`, and check `/api/health`.
-3. Runtime data is written to `DATA_DIR=/var/data`, backed by a 1 GB persistent disk on the `starter` plan.
-4. After deploy, open the Render URL and confirm `/api/health` returns `{ "ok": true }`.
+1. Create a Supabase project.
+2. In the Supabase SQL editor, run `schema.sql`.
+3. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in your hosting provider.
+4. If you have local data to preserve, run `npm run migrate:supabase` after setting the env vars locally.
+5. Deploy with `npm start`, then confirm `/api/health` returns `{ "ok": true }`.
 
 ## API
 
@@ -56,5 +70,7 @@ This repo includes a `render.yaml` blueprint for Render.
 - `index.html` - application structure and views.
 - `styles.css` - responsive product UI.
 - `app.js` - frontend API client, report generation, CSV import/export, and UI interactions.
-- `server.js` - local HTTP server, API routes, static serving, and JSON persistence.
-- `data/store.json` - runtime data store created automatically and ignored by Git.
+- `server.js` - HTTP server, API routes, static serving, Supabase persistence, and JSON fallback.
+- `schema.sql` - Supabase Postgres table definitions.
+- `scripts/migrate-to-supabase.js` - one-time migration from `data/store.json` to Supabase.
+- `data/store.json` - local fallback data store created automatically and ignored by Git.

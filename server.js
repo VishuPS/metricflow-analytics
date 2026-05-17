@@ -3,10 +3,27 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { URL } = require("node:url");
 
+try {
+  require("dotenv").config();
+} catch {
+  // dotenv is only needed when local Supabase env vars are stored in .env.
+}
+
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = __dirname;
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, "data");
 const STORE_FILE = path.join(DATA_DIR, "store.json");
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const USE_SUPABASE = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
+
+if (!USE_SUPABASE) {
+  const missing = [
+    !SUPABASE_URL && "SUPABASE_URL",
+    !SUPABASE_SERVICE_ROLE_KEY && "SUPABASE_SERVICE_ROLE_KEY"
+  ].filter(Boolean).join(" and ");
+  console.warn(`Supabase not configured: missing ${missing}. Falling back to ${STORE_FILE}.`);
+}
 
 const seedStore = {
   sources: [
@@ -43,24 +60,213 @@ const contentTypes = {
   ".md": "text/markdown; charset=utf-8"
 };
 
-async function ensureStore() {
+let supabase;
+let supabaseStoreReady = false;
+
+function getSupabase() {
+  if (!supabase) {
+    const { createClient } = require("@supabase/supabase-js");
+    supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+  }
+  return supabase;
+}
+
+function assertSupabase(result, action) {
+  if (result.error) {
+    throw new Error(`${action}: ${result.error.message}`);
+  }
+  return result.data;
+}
+
+async function ensureFileStore() {
   await fs.mkdir(DATA_DIR, { recursive: true });
   try {
     await fs.access(STORE_FILE);
   } catch {
-    await writeStore(seedStore);
+    await writeFileStore(seedStore);
   }
 }
 
-async function readStore() {
-  await ensureStore();
+async function readFileStore() {
+  await ensureFileStore();
   const content = await fs.readFile(STORE_FILE, "utf8");
   return JSON.parse(content);
 }
 
-async function writeStore(store) {
+async function writeFileStore(store) {
   await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.writeFile(STORE_FILE, `${JSON.stringify(store, null, 2)}\n`, "utf8");
+}
+
+function sourceToRow(source, index = 0) {
+  return {
+    name: source.name,
+    color: source.color,
+    reach: Number(source.reach || 0),
+    engagement: Number(source.engagement || 0),
+    conversions: Number(source.conversions || 0),
+    trend: Number(source.trend || 0),
+    connected: Boolean(source.connected),
+    imported: Boolean(source.imported),
+    position: index,
+    updated_at: new Date().toISOString()
+  };
+}
+
+function sourceFromRow(row) {
+  return {
+    name: row.name,
+    color: row.color,
+    reach: Number(row.reach || 0),
+    engagement: Number(row.engagement || 0),
+    conversions: Number(row.conversions || 0),
+    trend: Number(row.trend || 0),
+    connected: Boolean(row.connected),
+    ...(row.imported ? { imported: true } : {})
+  };
+}
+
+function reportToRow(report) {
+  return {
+    id: report.id,
+    title: report.title,
+    audience: report.audience,
+    sections: Array.isArray(report.sections) ? report.sections : [],
+    summary: report.summary || {},
+    recommendation: report.recommendation,
+    created_at: report.createdAt || new Date().toISOString()
+  };
+}
+
+function reportFromRow(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    audience: row.audience,
+    sections: Array.isArray(row.sections) ? row.sections : [],
+    createdAt: row.created_at,
+    summary: row.summary || {},
+    recommendation: row.recommendation
+  };
+}
+
+async function replaceTable(table, rows, requiredColumn) {
+  const client = getSupabase();
+  assertSupabase(await client.from(table).delete().neq(requiredColumn, ""), `Clear ${table}`);
+  if (rows.length) {
+    assertSupabase(await client.from(table).insert(rows), `Insert ${table}`);
+  }
+}
+
+async function ensureSupabaseStore() {
+  if (supabaseStoreReady) return;
+
+  const client = getSupabase();
+  const sources = assertSupabase(await client.from("sources").select("name").limit(1), "Read sources");
+  if (!sources.length) {
+    assertSupabase(await client.from("sources").insert(seedStore.sources.map(sourceToRow)), "Seed sources");
+  }
+
+  const rules = assertSupabase(await client.from("rules").select("id").limit(1), "Read rules");
+  if (!rules.length) {
+    assertSupabase(await client.from("rules").insert(seedStore.rules), "Seed rules");
+  }
+
+  const settings = assertSupabase(await client.from("settings").select("id").eq("id", "default").limit(1), "Read settings");
+  if (!settings.length) {
+    assertSupabase(await client.from("settings").insert({
+      id: "default",
+      company_name: seedStore.settings.companyName,
+      default_kpi: seedStore.settings.defaultKpi,
+      auto_refresh: seedStore.settings.autoRefresh
+    }), "Seed settings");
+  }
+
+  const schedule = assertSupabase(await client.from("schedule").select("id").eq("id", "default").limit(1), "Read schedule");
+  if (!schedule.length) {
+    assertSupabase(await client.from("schedule").insert({
+      id: "default",
+      frequency: seedStore.schedule.frequency,
+      day: seedStore.schedule.day,
+      recipients: seedStore.schedule.recipients
+    }), "Seed schedule");
+  }
+
+  supabaseStoreReady = true;
+}
+
+async function readSupabaseStore() {
+  await ensureSupabaseStore();
+  const client = getSupabase();
+  const sources = assertSupabase(await client.from("sources").select("*").order("position", { ascending: true }).order("created_at", { ascending: true }), "Read sources");
+  const rules = assertSupabase(await client.from("rules").select("*").order("created_at", { ascending: true }), "Read rules");
+  const settings = assertSupabase(await client.from("settings").select("*").eq("id", "default").limit(1), "Read settings")[0];
+  const schedule = assertSupabase(await client.from("schedule").select("*").eq("id", "default").limit(1), "Read schedule")[0];
+  const reports = assertSupabase(await client.from("reports").select("*").order("created_at", { ascending: false }).limit(20), "Read reports");
+
+  return {
+    sources: sources.map(sourceFromRow),
+    rules: rules.map((rule) => ({ id: rule.id, title: rule.title, detail: rule.detail })),
+    settings: {
+      companyName: settings.company_name,
+      defaultKpi: settings.default_kpi,
+      autoRefresh: Boolean(settings.auto_refresh)
+    },
+    schedule: {
+      frequency: schedule.frequency,
+      day: schedule.day,
+      recipients: schedule.recipients
+    },
+    reports: reports.map(reportFromRow)
+  };
+}
+
+async function writeSupabaseStore(store) {
+  await ensureSupabaseStore();
+  const client = getSupabase();
+  await replaceTable("sources", store.sources.map(sourceToRow), "name");
+  await replaceTable("rules", store.rules.map((rule) => ({
+    id: rule.id,
+    title: rule.title,
+    detail: rule.detail
+  })), "id");
+  await replaceTable("reports", store.reports.slice(0, 20).map(reportToRow), "id");
+  assertSupabase(await client.from("settings").upsert({
+    id: "default",
+    company_name: store.settings.companyName,
+    default_kpi: store.settings.defaultKpi,
+    auto_refresh: Boolean(store.settings.autoRefresh),
+    updated_at: new Date().toISOString()
+  }), "Save settings");
+  assertSupabase(await client.from("schedule").upsert({
+    id: "default",
+    frequency: store.schedule.frequency,
+    day: store.schedule.day,
+    recipients: store.schedule.recipients,
+    updated_at: new Date().toISOString()
+  }), "Save schedule");
+}
+
+async function checkStorage() {
+  if (!USE_SUPABASE) {
+    await ensureFileStore();
+    return;
+  }
+  await ensureSupabaseStore();
+  assertSupabase(await getSupabase().from("settings").select("id").eq("id", "default").limit(1), "Check Supabase");
+}
+
+async function readStore() {
+  return USE_SUPABASE ? readSupabaseStore() : readFileStore();
+}
+
+async function writeStore(store) {
+  return USE_SUPABASE ? writeSupabaseStore(store) : writeFileStore(store);
 }
 
 function activeSources(store) {
@@ -175,13 +381,19 @@ function csvForSources(store) {
 }
 
 async function routeApi(request, response, url) {
-  const store = await readStore();
   const method = request.method || "GET";
   const parts = url.pathname.split("/").filter(Boolean);
 
   if (method === "GET" && url.pathname === "/api/health") {
-    return sendJson(response, 200, { ok: true, service: "MetricFlow API" });
+    try {
+      await checkStorage();
+      return sendJson(response, 200, { ok: true, service: "MetricFlow API" });
+    } catch (error) {
+      return sendJson(response, 500, { ok: false, service: "MetricFlow API", message: error.message || "Storage unavailable" });
+    }
   }
+
+  const store = await readStore();
 
   if (method === "GET" && url.pathname === "/api/state") {
     return sendJson(response, 200, {
@@ -305,7 +517,7 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-ensureStore()
+checkStorage()
   .then(() => {
     server.listen(PORT, () => {
       console.log(`MetricFlow running at http://localhost:${PORT}`);
