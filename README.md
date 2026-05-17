@@ -51,6 +51,16 @@ The backend stores runtime data in Supabase Postgres when `SUPABASE_URL` and `SU
 4. If you have local data to preserve, run `npm run migrate:supabase` after setting the env vars locally.
 5. Deploy with `npm start`, then confirm `/api/health` returns `{ "ok": true }`.
 
+## Cloudflare Pages
+
+Cloudflare Pages can host the static dashboard from `dist` and run the API through Pages Functions in `functions/api/[[path]].js`.
+
+1. In Cloudflare Pages, connect `VishuPS/metricflow-analytics`.
+2. Set the build command to `npm run build:cloudflare`.
+3. Set the build output directory to `dist`.
+4. Add `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` as encrypted environment variables.
+5. Deploy, then confirm `/api/health` returns `{ "ok": true }`.
+
 ## API
 
 - `GET /api/health`
@@ -71,6 +81,8 @@ The backend stores runtime data in Supabase Postgres when `SUPABASE_URL` and `SU
 - `styles.css` - responsive product UI.
 - `app.js` - frontend API client, report generation, CSV import/export, and UI interactions.
 - `server.js` - HTTP server, API routes, static serving, Supabase persistence, and JSON fallback.
+- `functions/api/[[path]].js` - Cloudflare Pages Functions API adapter.
 - `schema.sql` - Supabase Postgres table definitions.
 - `scripts/migrate-to-supabase.js` - one-time migration from `data/store.json` to Supabase.
+- `scripts/build-cloudflare.js` - copies static frontend files into `dist` for Cloudflare Pages.
 - `data/store.json` - local fallback data store created automatically and ignored by Git.
