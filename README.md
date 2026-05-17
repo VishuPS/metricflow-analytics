@@ -28,6 +28,15 @@ http://localhost:4173
 
 The dashboard still has a browser-only fallback if you open `index.html` directly, but backend mode is the main path.
 
+## Deploy
+
+This repo includes a `render.yaml` blueprint for Render.
+
+1. In Render, create a new Blueprint from `VishuPS/metricflow-analytics`.
+2. Render will use `npm start`, expose the service on its assigned `PORT`, and check `/api/health`.
+3. Runtime data is written to `DATA_DIR=/var/data`, backed by a 1 GB persistent disk on the `starter` plan.
+4. After deploy, open the Render URL and confirm `/api/health` returns `{ "ok": true }`.
+
 ## API
 
 - `GET /api/health`

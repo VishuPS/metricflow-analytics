@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: metricflow-analytics
+    runtime: node
+    plan: starter
+    buildCommand: ""
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: metricflow-data
+      mountPath: /var/data
+      sizeGB: 1

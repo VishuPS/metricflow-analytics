@@ -5,7 +5,7 @@ const { URL } = require("node:url");
 
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = __dirname;
-const DATA_DIR = path.join(ROOT, "data");
+const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, "data");
 const STORE_FILE = path.join(DATA_DIR, "store.json");
 
 const seedStore = {
