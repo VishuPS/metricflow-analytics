@@ -1,5 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
-
 const seedStore = {
   sources: [
     { name: "LinkedIn", color: "#0a66c2", reach: 48200, engagement: 2840, conversions: 126, trend: 12.4, connected: true },
@@ -37,22 +35,9 @@ function json(payload, status = 200) {
   });
 }
 
-function assertSupabase(result, action) {
-  if (result.error) throw new Error(`${action}: ${result.error.message}`);
-  return result.data;
-}
-
-function getSupabase(env) {
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
-  }
-
-  return createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  });
+function requireDb(env) {
+  if (!env.DB) throw new Error("Missing Cloudflare D1 binding named DB");
+  return env.DB;
 }
 
 function sourceToRow(source, index = 0) {
@@ -63,8 +48,8 @@ function sourceToRow(source, index = 0) {
     engagement: Number(source.engagement || 0),
     conversions: Number(source.conversions || 0),
     trend: Number(source.trend || 0),
-    connected: Boolean(source.connected),
-    imported: Boolean(source.imported),
+    connected: source.connected ? 1 : 0,
+    imported: source.imported ? 1 : 0,
     position: index,
     updated_at: new Date().toISOString()
   };
@@ -88,8 +73,8 @@ function reportToRow(report) {
     id: report.id,
     title: report.title,
     audience: report.audience,
-    sections: Array.isArray(report.sections) ? report.sections : [],
-    summary: report.summary || {},
+    sections: JSON.stringify(Array.isArray(report.sections) ? report.sections : []),
+    summary: JSON.stringify(report.summary || {}),
     recommendation: report.recommendation,
     created_at: report.createdAt || new Date().toISOString()
   };
@@ -100,98 +85,11 @@ function reportFromRow(row) {
     id: row.id,
     title: row.title,
     audience: row.audience,
-    sections: Array.isArray(row.sections) ? row.sections : [],
+    sections: JSON.parse(row.sections || "[]"),
     createdAt: row.created_at,
-    summary: row.summary || {},
+    summary: JSON.parse(row.summary || "{}"),
     recommendation: row.recommendation
   };
-}
-
-async function replaceTable(client, table, rows, requiredColumn) {
-  assertSupabase(await client.from(table).delete().neq(requiredColumn, ""), `Clear ${table}`);
-  if (rows.length) assertSupabase(await client.from(table).insert(rows), `Insert ${table}`);
-}
-
-async function ensureSupabaseStore(client) {
-  const sources = assertSupabase(await client.from("sources").select("name").limit(1), "Read sources");
-  if (!sources.length) {
-    assertSupabase(await client.from("sources").insert(seedStore.sources.map(sourceToRow)), "Seed sources");
-  }
-
-  const rules = assertSupabase(await client.from("rules").select("id").limit(1), "Read rules");
-  if (!rules.length) {
-    assertSupabase(await client.from("rules").insert(seedStore.rules), "Seed rules");
-  }
-
-  const settings = assertSupabase(await client.from("settings").select("id").eq("id", "default").limit(1), "Read settings");
-  if (!settings.length) {
-    assertSupabase(await client.from("settings").insert({
-      id: "default",
-      company_name: seedStore.settings.companyName,
-      default_kpi: seedStore.settings.defaultKpi,
-      auto_refresh: seedStore.settings.autoRefresh
-    }), "Seed settings");
-  }
-
-  const schedule = assertSupabase(await client.from("schedule").select("id").eq("id", "default").limit(1), "Read schedule");
-  if (!schedule.length) {
-    assertSupabase(await client.from("schedule").insert({
-      id: "default",
-      frequency: seedStore.schedule.frequency,
-      day: seedStore.schedule.day,
-      recipients: seedStore.schedule.recipients
-    }), "Seed schedule");
-  }
-}
-
-async function readStore(client) {
-  await ensureSupabaseStore(client);
-  const sources = assertSupabase(await client.from("sources").select("*").order("position", { ascending: true }).order("created_at", { ascending: true }), "Read sources");
-  const rules = assertSupabase(await client.from("rules").select("*").order("created_at", { ascending: true }), "Read rules");
-  const settings = assertSupabase(await client.from("settings").select("*").eq("id", "default").limit(1), "Read settings")[0];
-  const schedule = assertSupabase(await client.from("schedule").select("*").eq("id", "default").limit(1), "Read schedule")[0];
-  const reports = assertSupabase(await client.from("reports").select("*").order("created_at", { ascending: false }).limit(20), "Read reports");
-
-  return {
-    sources: sources.map(sourceFromRow),
-    rules: rules.map((rule) => ({ id: rule.id, title: rule.title, detail: rule.detail })),
-    settings: {
-      companyName: settings.company_name,
-      defaultKpi: settings.default_kpi,
-      autoRefresh: Boolean(settings.auto_refresh)
-    },
-    schedule: {
-      frequency: schedule.frequency,
-      day: schedule.day,
-      recipients: schedule.recipients
-    },
-    reports: reports.map(reportFromRow)
-  };
-}
-
-async function writeStore(client, store) {
-  await ensureSupabaseStore(client);
-  await replaceTable(client, "sources", store.sources.map(sourceToRow), "name");
-  await replaceTable(client, "rules", store.rules.map((rule) => ({
-    id: rule.id,
-    title: rule.title,
-    detail: rule.detail
-  })), "id");
-  await replaceTable(client, "reports", store.reports.slice(0, 20).map(reportToRow), "id");
-  assertSupabase(await client.from("settings").upsert({
-    id: "default",
-    company_name: store.settings.companyName,
-    default_kpi: store.settings.defaultKpi,
-    auto_refresh: Boolean(store.settings.autoRefresh),
-    updated_at: new Date().toISOString()
-  }), "Save settings");
-  assertSupabase(await client.from("schedule").upsert({
-    id: "default",
-    frequency: store.schedule.frequency,
-    day: store.schedule.day,
-    recipients: store.schedule.recipients,
-    updated_at: new Date().toISOString()
-  }), "Save schedule");
 }
 
 function activeSources(store) {
@@ -290,19 +188,159 @@ async function readBody(request) {
   }
 }
 
+async function seedTable(db, table, countSql, insertStatements) {
+  const row = await db.prepare(countSql).first();
+  if (Number(row.total || 0) > 0) return;
+  await db.batch(insertStatements);
+}
+
+async function ensureD1Store(db) {
+  await seedTable(
+    db,
+    "sources",
+    "select count(*) as total from sources",
+    seedStore.sources.map((source, index) => {
+      const row = sourceToRow(source, index);
+      return db.prepare(`
+        insert into sources (name, color, reach, engagement, conversions, trend, connected, imported, position, updated_at)
+        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(row.name, row.color, row.reach, row.engagement, row.conversions, row.trend, row.connected, row.imported, row.position, row.updated_at);
+    })
+  );
+
+  await seedTable(
+    db,
+    "rules",
+    "select count(*) as total from rules",
+    seedStore.rules.map((rule) => (
+      db.prepare("insert into rules (id, title, detail) values (?, ?, ?)").bind(rule.id, rule.title, rule.detail)
+    ))
+  );
+
+  const settings = await db.prepare("select id from settings where id = 'default'").first();
+  if (!settings) {
+    await db.prepare(`
+      insert into settings (id, company_name, default_kpi, auto_refresh)
+      values ('default', ?, ?, ?)
+    `).bind(seedStore.settings.companyName, seedStore.settings.defaultKpi, seedStore.settings.autoRefresh ? 1 : 0).run();
+  }
+
+  const schedule = await db.prepare("select id from schedule where id = 'default'").first();
+  if (!schedule) {
+    await db.prepare(`
+      insert into schedule (id, frequency, day, recipients)
+      values ('default', ?, ?, ?)
+    `).bind(seedStore.schedule.frequency, seedStore.schedule.day, seedStore.schedule.recipients).run();
+  }
+}
+
+async function readStore(db) {
+  await ensureD1Store(db);
+  const sources = await db.prepare("select * from sources order by position asc, created_at asc").all();
+  const rules = await db.prepare("select * from rules order by created_at asc").all();
+  const settings = await db.prepare("select * from settings where id = 'default'").first();
+  const schedule = await db.prepare("select * from schedule where id = 'default'").first();
+  const reports = await db.prepare("select * from reports order by created_at desc limit 20").all();
+
+  return {
+    sources: sources.results.map(sourceFromRow),
+    rules: rules.results.map((rule) => ({ id: rule.id, title: rule.title, detail: rule.detail })),
+    settings: {
+      companyName: settings.company_name,
+      defaultKpi: settings.default_kpi,
+      autoRefresh: Boolean(settings.auto_refresh)
+    },
+    schedule: {
+      frequency: schedule.frequency,
+      day: schedule.day,
+      recipients: schedule.recipients
+    },
+    reports: reports.results.map(reportFromRow)
+  };
+}
+
+async function writeStore(db, store) {
+  await ensureD1Store(db);
+  const sourceStatements = store.sources.map((source, index) => {
+    const row = sourceToRow(source, index);
+    return db.prepare(`
+      insert into sources (name, color, reach, engagement, conversions, trend, connected, imported, position, updated_at)
+      values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      on conflict(name) do update set
+        color = excluded.color,
+        reach = excluded.reach,
+        engagement = excluded.engagement,
+        conversions = excluded.conversions,
+        trend = excluded.trend,
+        connected = excluded.connected,
+        imported = excluded.imported,
+        position = excluded.position,
+        updated_at = excluded.updated_at
+    `).bind(row.name, row.color, row.reach, row.engagement, row.conversions, row.trend, row.connected, row.imported, row.position, row.updated_at);
+  });
+  const ruleStatements = store.rules.map((rule) => (
+    db.prepare(`
+      insert into rules (id, title, detail)
+      values (?, ?, ?)
+      on conflict(id) do update set title = excluded.title, detail = excluded.detail
+    `).bind(rule.id, rule.title, rule.detail)
+  ));
+  const reportStatements = store.reports.slice(0, 20).map((report) => {
+    const row = reportToRow(report);
+    return db.prepare(`
+      insert into reports (id, title, audience, sections, summary, recommendation, created_at)
+      values (?, ?, ?, ?, ?, ?, ?)
+      on conflict(id) do update set
+        title = excluded.title,
+        audience = excluded.audience,
+        sections = excluded.sections,
+        summary = excluded.summary,
+        recommendation = excluded.recommendation,
+        created_at = excluded.created_at
+    `).bind(row.id, row.title, row.audience, row.sections, row.summary, row.recommendation, row.created_at);
+  });
+
+  await db.batch([
+    db.prepare("delete from sources"),
+    db.prepare("delete from rules"),
+    db.prepare("delete from reports"),
+    ...sourceStatements,
+    ...ruleStatements,
+    ...reportStatements,
+    db.prepare(`
+      insert into settings (id, company_name, default_kpi, auto_refresh, updated_at)
+      values ('default', ?, ?, ?, ?)
+      on conflict(id) do update set
+        company_name = excluded.company_name,
+        default_kpi = excluded.default_kpi,
+        auto_refresh = excluded.auto_refresh,
+        updated_at = excluded.updated_at
+    `).bind(store.settings.companyName, store.settings.defaultKpi, store.settings.autoRefresh ? 1 : 0, new Date().toISOString()),
+    db.prepare(`
+      insert into schedule (id, frequency, day, recipients, updated_at)
+      values ('default', ?, ?, ?, ?)
+      on conflict(id) do update set
+        frequency = excluded.frequency,
+        day = excluded.day,
+        recipients = excluded.recipients,
+        updated_at = excluded.updated_at
+    `).bind(store.schedule.frequency, store.schedule.day, store.schedule.recipients, new Date().toISOString())
+  ]);
+}
+
 export async function onRequest(context) {
   try {
-    const client = getSupabase(context.env);
+    const db = requireDb(context.env);
     const requestUrl = new URL(context.request.url);
     const method = context.request.method || "GET";
     const parts = requestUrl.pathname.split("/").filter(Boolean);
 
     if (method === "GET" && requestUrl.pathname === "/api/health") {
-      await ensureSupabaseStore(client);
+      await ensureD1Store(db);
       return json({ ok: true, service: "MetricFlow API" });
     }
 
-    const store = await readStore(client);
+    const store = await readStore(db);
 
     if (method === "GET" && requestUrl.pathname === "/api/state") {
       return json({
@@ -327,7 +365,7 @@ export async function onRequest(context) {
       const source = store.sources.find((item) => item.name === sourceName);
       if (!source) return json({ message: "Source not found" }, 404);
       source.connected = Boolean(body.connected);
-      await writeStore(client, store);
+      await writeStore(db, store);
       return json({ source, summary: analyticsSummary(store) });
     }
 
@@ -335,7 +373,7 @@ export async function onRequest(context) {
       const body = await readBody(context.request);
       const imports = parseCsv(body.csv);
       store.sources = store.sources.filter((source) => !source.imported).concat(imports);
-      await writeStore(client, store);
+      await writeStore(db, store);
       return json({ imported: imports.length, sources: store.sources, summary: analyticsSummary(store) }, 201);
     }
 
@@ -346,7 +384,7 @@ export async function onRequest(context) {
         defaultKpi: body.defaultKpi || store.settings.defaultKpi,
         autoRefresh: Boolean(body.autoRefresh)
       };
-      await writeStore(client, store);
+      await writeStore(db, store);
       return json({ settings: store.settings });
     }
 
@@ -357,7 +395,7 @@ export async function onRequest(context) {
         day: body.day || store.schedule.day,
         recipients: body.recipients || store.schedule.recipients
       };
-      await writeStore(client, store);
+      await writeStore(db, store);
       return json({ schedule: store.schedule });
     }
 
@@ -369,14 +407,14 @@ export async function onRequest(context) {
         detail: body.detail || "Notify the team when a channel's audience growth outpaces its engagement growth."
       };
       store.rules.push(rule);
-      await writeStore(client, store);
+      await writeStore(db, store);
       return json({ rule, rules: store.rules }, 201);
     }
 
     if (method === "DELETE" && parts[1] === "rules" && parts[2]) {
       const id = decodeURIComponent(parts[2]);
       store.rules = store.rules.filter((rule) => rule.id !== id);
-      await writeStore(client, store);
+      await writeStore(db, store);
       return json({ rules: store.rules });
     }
 
@@ -389,7 +427,7 @@ export async function onRequest(context) {
       const report = createReport(store, body);
       store.reports.unshift(report);
       store.reports = store.reports.slice(0, 20);
-      await writeStore(client, store);
+      await writeStore(db, store);
       return json({ report, reports: store.reports }, 201);
     }
 

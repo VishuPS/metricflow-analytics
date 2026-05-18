@@ -14,13 +14,7 @@ A local MVP for automated social media analytics collection and reporting.
 
 ## Open It
 
-Install dependencies:
-
-```powershell
-npm install
-```
-
-For local development without Supabase, run the backend server as-is. It will log a warning and fall back to `data/store.json`:
+Run the local backend server:
 
 ```powershell
 node server.js
@@ -32,34 +26,27 @@ Then open:
 http://localhost:4173
 ```
 
-The dashboard still has a browser-only fallback if you open `index.html` directly, but backend mode is the main path.
-
-To use Supabase locally, copy `.env.example` to `.env` and set:
-
-```text
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-```
+The dashboard still has a browser-only fallback if you open `index.html` directly, but backend mode is the main path. Local development uses `data/store.json`; Cloudflare production uses D1.
 
 ## Deploy
 
-The backend stores runtime data in Supabase Postgres when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set. No persistent disk is required.
+Cloudflare Pages hosts the static dashboard from `dist`, Cloudflare Pages Functions run `/api/*`, and Cloudflare D1 stores runtime data. No domain is required; Cloudflare gives you a `pages.dev` URL.
 
-1. Create a Supabase project.
-2. In the Supabase SQL editor, run `schema.sql`.
-3. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in your hosting provider.
-4. If you have local data to preserve, run `npm run migrate:supabase` after setting the env vars locally.
-5. Deploy with `npm start`, then confirm `/api/health` returns `{ "ok": true }`.
+1. In Cloudflare, create a D1 database named `metricflow-analytics`.
+2. Run `schema.sql` against that D1 database.
+3. In Cloudflare Pages, connect `VishuPS/metricflow-analytics`.
+4. Set the build command to `npm run build:cloudflare`.
+5. Set the build output directory to `dist`.
+6. Add a D1 binding named `DB` that points to the `metricflow-analytics` database.
+7. Deploy, then confirm `/api/health` returns `{ "ok": true }`.
 
-## Cloudflare Pages
+To preserve local `data/store.json` data, generate a D1 seed file:
 
-Cloudflare Pages can host the static dashboard from `dist` and run the API through Pages Functions in `functions/api/[[path]].js`.
+```powershell
+npm run migrate:d1
+```
 
-1. In Cloudflare Pages, connect `VishuPS/metricflow-analytics`.
-2. Set the build command to `npm run build:cloudflare`.
-3. Set the build output directory to `dist`.
-4. Add `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` as encrypted environment variables.
-5. Deploy, then confirm `/api/health` returns `{ "ok": true }`.
+Then run the generated `dist/d1-seed.sql` against D1 after `schema.sql`.
 
 ## API
 
@@ -80,9 +67,9 @@ Cloudflare Pages can host the static dashboard from `dist` and run the API throu
 - `index.html` - application structure and views.
 - `styles.css` - responsive product UI.
 - `app.js` - frontend API client, report generation, CSV import/export, and UI interactions.
-- `server.js` - HTTP server, API routes, static serving, Supabase persistence, and JSON fallback.
-- `functions/api/[[path]].js` - Cloudflare Pages Functions API adapter.
-- `schema.sql` - Supabase Postgres table definitions.
-- `scripts/migrate-to-supabase.js` - one-time migration from `data/store.json` to Supabase.
+- `server.js` - local HTTP server, API routes, static serving, and JSON persistence.
+- `functions/api/[[path]].js` - Cloudflare Pages Functions API adapter backed by D1.
+- `schema.sql` - Cloudflare D1 table definitions.
+- `scripts/migrate-to-d1.js` - generates one-time seed SQL from `data/store.json`.
 - `scripts/build-cloudflare.js` - copies static frontend files into `dist` for Cloudflare Pages.
 - `data/store.json` - local fallback data store created automatically and ignored by Git.

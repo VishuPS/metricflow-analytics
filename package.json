@@ -5,13 +5,9 @@
   "description": "Local MVP backend and dashboard for automated social media analytics reporting.",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check app.js && node --check scripts/migrate-to-supabase.js && node --check scripts/build-cloudflare.js",
-    "migrate:supabase": "node scripts/migrate-to-supabase.js",
+    "check": "node --check server.js && node --check app.js && node --check scripts/migrate-to-d1.js && node --check scripts/build-cloudflare.js",
+    "migrate:d1": "node scripts/migrate-to-d1.js",
     "build:cloudflare": "node scripts/build-cloudflare.js"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.0.0",
-    "dotenv": "^16.4.7"
   },
   "engines": {
     "node": ">=18"
