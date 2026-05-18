@@ -37,7 +37,7 @@ Cloudflare Pages hosts the static dashboard from `dist`, Cloudflare Pages Functi
 3. In Cloudflare Pages, connect `VishuPS/metricflow-analytics`.
 4. Set the build command to `npm run build:cloudflare`.
 5. Set the build output directory to `dist`.
-6. Add a D1 binding named `DB` that points to the `metricflow-analytics` database.
+6. Add a D1 binding in the Pages dashboard named `DB` that points to the `metricflow-analytics` database.
 7. Leave the deploy command blank in the Pages build settings. Do not use `npx wrangler deploy`; that command is for Workers, not Pages.
 8. Deploy, then confirm `/api/health` returns `{ "ok": true }`.
 
