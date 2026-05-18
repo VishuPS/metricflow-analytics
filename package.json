@@ -7,7 +7,8 @@
     "start": "node server.js",
     "check": "node --check server.js && node --check app.js && node --check scripts/migrate-to-d1.js && node --check scripts/build-cloudflare.js",
     "migrate:d1": "node scripts/migrate-to-d1.js",
-    "build:cloudflare": "node scripts/build-cloudflare.js"
+    "build:cloudflare": "node scripts/build-cloudflare.js",
+    "deploy:pages": "npm run build:cloudflare && wrangler pages deploy dist"
   },
   "engines": {
     "node": ">=18"
