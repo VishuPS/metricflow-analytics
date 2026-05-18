@@ -10,6 +10,7 @@ A local MVP for automated social media analytics collection and reporting.
 - Generate a client-ready report preview from selected sections.
 - Export the current platform scorecard as CSV.
 - Configure scheduled reporting and automation rules.
+- Connect Google Analytics through OAuth and sync GA4 metrics into the dashboard.
 - Save workspace settings, connected sources, imported CSV data, rules, reports, and schedules through the local backend.
 
 ## Open It
@@ -38,8 +39,30 @@ Cloudflare Pages hosts the static dashboard from `dist`, Cloudflare Pages Functi
 4. Set the build command to `npm run build:cloudflare`.
 5. Set the build output directory to `dist`.
 6. Add a D1 binding in the Pages dashboard named `DB` that points to the `metricflow-analytics` database.
-7. Leave the deploy command blank in the Pages build settings. Do not use `npx wrangler deploy`; that command is for Workers, not Pages.
-8. Deploy, then confirm `/api/health` returns `{ "ok": true }`.
+7. Add these Pages environment variables when enabling Google Analytics:
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+   - `GOOGLE_REDIRECT_URI=https://metricflow-analytics.pages.dev/api/google/callback`
+   - `GA4_PROPERTY_ID`
+8. Leave the deploy command blank in the Pages build settings. Do not use `npx wrangler deploy`; that command is for Workers, not Pages.
+9. Deploy, then confirm `/api/health` returns `{ "ok": true }`.
+
+## Google Analytics
+
+The MVP supports one global GA4 connection before app user accounts exist.
+
+1. In Google Cloud Console, enable the Google Analytics Data API.
+2. Create an OAuth 2.0 web client.
+3. Add local and production redirect URIs:
+
+```text
+http://localhost:4173/api/google/callback
+https://metricflow-analytics.pages.dev/api/google/callback
+```
+
+4. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and `GA4_PROPERTY_ID`.
+5. Apply the latest `schema.sql` to D1 so `google_connections` and `metric_snapshots` exist.
+6. Open Sources, connect Google Analytics, then sync GA4 metrics.
 
 If you deploy manually with Wrangler, use Pages deploy:
 
@@ -59,6 +82,10 @@ Then run the generated `dist/d1-seed.sql` against D1 after `schema.sql`.
 
 - `GET /api/health`
 - `GET /api/state`
+- `GET /api/google/status`
+- `GET /api/google/connect`
+- `GET /api/google/callback`
+- `POST /api/sources/google-analytics/sync`
 - `PATCH /api/sources/:name`
 - `POST /api/import-csv`
 - `POST /api/reports`
@@ -77,6 +104,7 @@ Then run the generated `dist/d1-seed.sql` against D1 after `schema.sql`.
 - `server.js` - local HTTP server, API routes, static serving, and JSON persistence.
 - `functions/api/[[path]].js` - Cloudflare Pages Functions API adapter backed by D1.
 - `schema.sql` - Cloudflare D1 table definitions.
+- `.env.example` - local Google Analytics integration variables.
 - `scripts/migrate-to-d1.js` - generates one-time seed SQL from `data/store.json`.
 - `scripts/build-cloudflare.js` - copies static frontend files into `dist` for Cloudflare Pages.
 - `data/store.json` - local fallback data store created automatically and ignored by Git.

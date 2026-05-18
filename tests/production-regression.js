@@ -49,6 +49,39 @@ async function mockProductionWrites(page) {
       });
     }
 
+    if (method === "POST" && url.pathname === "/api/sources/google-analytics/sync") {
+      const snapshot = {
+        id: "snapshot-google-analytics-test",
+        source: "Google Analytics",
+        snapshotDate: "2026-05-18",
+        reach: 61000,
+        engagement: 4200,
+        conversions: 140
+      };
+      const sources = [
+        { name: "LinkedIn", color: "#0a66c2", reach: 48200, engagement: 2840, conversions: 126, trend: 12.4, connected: true },
+        { name: "Google Analytics", color: "#f9ab00", reach: 61000, engagement: 4200, conversions: 140, trend: 4.2, connected: true }
+      ];
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          snapshot,
+          sources,
+          googleAnalytics: { configured: true, connected: true, propertyId: "123456789" },
+          summary: {
+            totalReach: 109200,
+            totalEngagement: 7040,
+            totalConversions: 266,
+            engagementRate: 6.4,
+            connectedSources: 2,
+            totalSources: 2,
+            timeSavedHours: 3.1
+          }
+        })
+      });
+    }
+
     if (method === "POST" && url.pathname === "/api/reports") {
       const payload = request.postDataJSON();
       const report = {
@@ -188,6 +221,10 @@ async function runUiRegression(browser, projectName, contextOptions) {
   await expectText(page.locator("#toast"), /Report preview generated/, "report toast");
 
   await openView(page, "Sources");
+  await expectText(page.locator("#googleStatus"), /Google|Ready|Missing|Connected|Backend/, "Google status renders");
+  await page.getByRole("button", { name: "Sync GA4 metrics" }).click();
+  await expectText(page.locator("#sourceGrid"), /Google Analytics/, "Google Analytics sync render");
+  await expectText(page.locator("#toast"), /Google Analytics synced/, "Google Analytics sync toast");
   await page.locator("#csvInput").fill("platform,reach,engagement,conversions\nNewsletter,18500,940,86");
   await page.getByRole("button", { name: "Import CSV" }).click();
   await expectText(page.locator("#sourceGrid"), /Newsletter/, "CSV import render");

@@ -118,6 +118,19 @@
             <p>Choose the channels you report on. Connected sources feed the dashboard, report builder, and automation rules.</p>
           </div>
           <div class="source-grid" id="sourceGrid"></div>
+          <section class="panel integration-panel">
+            <div class="panel-header">
+              <div>
+                <h2>Google Analytics API</h2>
+                <p id="googleStatus">Not connected</p>
+              </div>
+              <div class="button-row">
+                <button class="secondary-button" id="connectGoogle" type="button">Connect Google Analytics</button>
+                <button class="primary-button" id="syncGoogle" type="button">Sync GA4 metrics</button>
+              </div>
+            </div>
+            <p class="integration-note">Uses one configured GA4 property for this MVP. Add Google OAuth credentials and a GA4 property ID in the backend environment.</p>
+          </section>
           <section class="panel">
             <div class="panel-header">
               <div>

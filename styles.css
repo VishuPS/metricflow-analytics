@@ -421,6 +421,14 @@ th {
   margin-bottom: 0;
 }
 
+.integration-panel {
+  margin-bottom: 14px;
+}
+
+.integration-note {
+  margin-bottom: 0;
+}
+
 .source-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }

@@ -32,7 +32,9 @@ const seedStore = {
     day: "Monday",
     recipients: "team@example.com"
   },
-  reports: []
+  reports: [],
+  googleConnection: null,
+  metricSnapshots: []
 };
 
 const contentTypes = {
@@ -174,6 +176,168 @@ function csvForSources(store) {
   return rows.map((row) => row.join(",")).join("\n");
 }
 
+function getGoogleConfig(request) {
+  const host = request.headers.host || `localhost:${PORT}`;
+  const protocol = host.includes("localhost") ? "http" : "https";
+  return {
+    clientId: process.env.GOOGLE_CLIENT_ID || "",
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || `${protocol}://${host}/api/google/callback`,
+    propertyId: process.env.GA4_PROPERTY_ID || ""
+  };
+}
+
+function googleStatus(store, request) {
+  const config = getGoogleConfig(request);
+  const connection = store.googleConnection || {};
+  return {
+    configured: Boolean(config.clientId && config.clientSecret),
+    connected: Boolean(connection.refreshToken || connection.accessToken),
+    propertyId: connection.propertyId || config.propertyId || ""
+  };
+}
+
+function requireGoogleConfig(request) {
+  const config = getGoogleConfig(request);
+  if (!config.clientId || !config.clientSecret) {
+    throw new Error("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET");
+  }
+  return config;
+}
+
+function googleAuthUrl(request) {
+  const config = requireGoogleConfig(request);
+  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  url.searchParams.set("client_id", config.clientId);
+  url.searchParams.set("redirect_uri", config.redirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("access_type", "offline");
+  url.searchParams.set("prompt", "consent");
+  url.searchParams.set("scope", "https://www.googleapis.com/auth/analytics.readonly");
+  return url.toString();
+}
+
+async function exchangeGoogleCode(request, code) {
+  const config = requireGoogleConfig(request);
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code,
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      redirect_uri: config.redirectUri,
+      grant_type: "authorization_code"
+    })
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error_description || payload.error || "Google token exchange failed");
+  return payload;
+}
+
+async function refreshGoogleToken(request, store) {
+  const config = requireGoogleConfig(request);
+  const connection = store.googleConnection;
+  if (!connection?.refreshToken) throw new Error("Google Analytics is not connected");
+  const expiresAt = connection.expiresAt ? new Date(connection.expiresAt).getTime() : 0;
+  if (connection.accessToken && expiresAt > Date.now() + 60_000) return connection.accessToken;
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      refresh_token: connection.refreshToken,
+      grant_type: "refresh_token"
+    })
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error_description || payload.error || "Google token refresh failed");
+
+  connection.accessToken = payload.access_token;
+  connection.expiresAt = new Date(Date.now() + Number(payload.expires_in || 3600) * 1000).toISOString();
+  return connection.accessToken;
+}
+
+function upsertGoogleSource(store, snapshot, trend) {
+  const source = store.sources.find((item) => item.name === "Google Analytics");
+  const data = {
+    name: "Google Analytics",
+    color: "#f9ab00",
+    reach: snapshot.reach,
+    engagement: snapshot.engagement,
+    conversions: snapshot.conversions,
+    trend,
+    connected: true
+  };
+  if (source) Object.assign(source, data);
+  else store.sources.push(data);
+}
+
+function buildGoogleSnapshot(report) {
+  const rows = report.rows || [];
+  const totals = rows.reduce((sum, row) => {
+    const values = row.metricValues || [];
+    sum.reach += Number(values[0]?.value || 0);
+    sum.sessions += Number(values[1]?.value || 0);
+    sum.engagementRate += Number(values[2]?.value || 0);
+    sum.conversions += Number(values[3]?.value || 0);
+    return sum;
+  }, { reach: 0, sessions: 0, engagementRate: 0, conversions: 0 });
+  const avgEngagementRate = rows.length ? totals.engagementRate / rows.length : 0;
+  return {
+    id: `snapshot-google-analytics-${Date.now()}`,
+    source: "Google Analytics",
+    snapshotDate: new Date().toISOString().slice(0, 10),
+    reach: Math.round(totals.reach),
+    engagement: Math.round(totals.sessions * avgEngagementRate),
+    conversions: Math.round(totals.conversions),
+    raw: report
+  };
+}
+
+function googleTrend(store, snapshot) {
+  const previous = [...(store.metricSnapshots || [])]
+    .filter((item) => item.source === "Google Analytics")
+    .sort((a, b) => String(b.snapshotDate).localeCompare(String(a.snapshotDate)))[0];
+  if (!previous || !previous.reach) return 0;
+  return Number((((snapshot.reach - previous.reach) / previous.reach) * 100).toFixed(1));
+}
+
+async function syncGoogleAnalytics(request, store) {
+  const config = getGoogleConfig(request);
+  const propertyId = store.googleConnection?.propertyId || config.propertyId;
+  if (!propertyId) throw new Error("Missing GA4_PROPERTY_ID");
+  const accessToken = await refreshGoogleToken(request, store);
+
+  const response = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
+      dimensions: [{ name: "date" }],
+      metrics: [
+        { name: "activeUsers" },
+        { name: "sessions" },
+        { name: "engagementRate" },
+        { name: "conversions" }
+      ]
+    })
+  });
+  const report = await response.json();
+  if (!response.ok) throw new Error(report.error?.message || "Google Analytics report failed");
+
+  const snapshot = buildGoogleSnapshot(report);
+  const trend = googleTrend(store, snapshot);
+  store.metricSnapshots = [...(store.metricSnapshots || []), snapshot].slice(-100);
+  upsertGoogleSource(store, snapshot, trend);
+  return snapshot;
+}
+
 async function routeApi(request, response, url) {
   const store = await readStore();
   const method = request.method || "GET";
@@ -186,8 +350,56 @@ async function routeApi(request, response, url) {
   if (method === "GET" && url.pathname === "/api/state") {
     return sendJson(response, 200, {
       ...store,
+      googleAnalytics: googleStatus(store, request),
       summary: analyticsSummary(store),
       insights: buildInsights(store)
+    });
+  }
+
+  if (method === "GET" && url.pathname === "/api/google/status") {
+    return sendJson(response, 200, googleStatus(store, request));
+  }
+
+  if (method === "GET" && url.pathname === "/api/google/connect") {
+    try {
+      response.writeHead(302, { location: googleAuthUrl(request) });
+      return response.end();
+    } catch (error) {
+      return sendJson(response, 400, { message: error.message });
+    }
+  }
+
+  if (method === "GET" && url.pathname === "/api/google/callback") {
+    try {
+      if (url.searchParams.get("error")) throw new Error(url.searchParams.get("error"));
+      const code = url.searchParams.get("code");
+      if (!code) throw new Error("Missing Google authorization code");
+      const token = await exchangeGoogleCode(request, code);
+      const config = getGoogleConfig(request);
+      store.googleConnection = {
+        propertyId: config.propertyId,
+        accessToken: token.access_token,
+        refreshToken: token.refresh_token || store.googleConnection?.refreshToken,
+        expiresAt: new Date(Date.now() + Number(token.expires_in || 3600) * 1000).toISOString(),
+        connectedAt: new Date().toISOString()
+      };
+      await writeStore(store);
+      response.writeHead(302, { location: "/?ga=connected" });
+      return response.end();
+    } catch (error) {
+      response.writeHead(302, { location: `/?ga=error&message=${encodeURIComponent(error.message)}` });
+      return response.end();
+    }
+  }
+
+  if (method === "POST" && url.pathname === "/api/sources/google-analytics/sync") {
+    const snapshot = await syncGoogleAnalytics(request, store);
+    await writeStore(store);
+    return sendJson(response, 200, {
+      snapshot,
+      sources: store.sources,
+      googleAnalytics: googleStatus(store, request),
+      summary: analyticsSummary(store)
     });
   }
 

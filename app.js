@@ -27,6 +27,7 @@ const seedState = {
 
 let state = loadFallbackState();
 let backendOnline = false;
+let googleAnalytics = { connected: false, propertyId: "" };
 
 const numberFormatter = new Intl.NumberFormat("en-US");
 const percentFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
@@ -56,6 +57,7 @@ async function loadBackendState() {
   try {
     const data = await api("/api/state");
     state = data;
+    googleAnalytics = data.googleAnalytics || { connected: false, propertyId: "" };
     backendOnline = true;
     document.querySelector("#syncStatus").textContent = "Backend connected";
   } catch {
@@ -177,6 +179,20 @@ function renderSources() {
       </button>
     </article>
   `).join("");
+}
+
+function renderGoogleStatus() {
+  const status = document.querySelector("#googleStatus");
+  if (!status) return;
+  if (!backendOnline) {
+    status.textContent = "Backend required";
+    return;
+  }
+  if (googleAnalytics.connected) {
+    status.textContent = `Connected${googleAnalytics.propertyId ? ` to GA4 property ${googleAnalytics.propertyId}` : ""}`;
+    return;
+  }
+  status.textContent = googleAnalytics.configured ? "Ready to connect" : "Missing Google OAuth configuration";
 }
 
 function renderRules() {
@@ -330,6 +346,7 @@ function renderAll() {
   renderInsights();
   renderSources();
   renderRules();
+  renderGoogleStatus();
   document.querySelector("#timeSaved").textContent = `${getSummary().timeSavedHours} hours`;
 }
 
@@ -405,6 +422,29 @@ function wireEvents() {
   document.querySelector("#generateReport").addEventListener("click", () => generateReport().catch((error) => showToast(error.message)));
   document.querySelector("#exportCsv").addEventListener("click", exportCsv);
   document.querySelector("#importCsv").addEventListener("click", () => importCsv().catch((error) => showToast(error.message)));
+  document.querySelector("#connectGoogle").addEventListener("click", () => {
+    if (!backendOnline) {
+      showToast("Backend required for Google Analytics");
+      return;
+    }
+    window.location.href = "/api/google/connect";
+  });
+  document.querySelector("#syncGoogle").addEventListener("click", async () => {
+    if (!backendOnline) {
+      showToast("Backend required for Google Analytics");
+      return;
+    }
+    try {
+      const result = await api("/api/sources/google-analytics/sync", { method: "POST" });
+      state.sources = result.sources;
+      state.summary = result.summary;
+      googleAnalytics = result.googleAnalytics || googleAnalytics;
+      renderAll();
+      showToast(`Google Analytics synced for ${result.snapshot.snapshotDate}`);
+    } catch (error) {
+      showToast(error.message);
+    }
+  });
   document.querySelector("#newReport").addEventListener("click", () => {
     document.querySelector('[data-view="reports"]').click();
     document.querySelector("#reportName").focus();
@@ -424,6 +464,9 @@ async function boot() {
   hydrateControls();
   renderAll();
   renderReport();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("ga") === "connected") showToast("Google Analytics connected");
+  if (params.get("ga") === "error") showToast(params.get("message") || "Google Analytics connection failed");
 }
 
 boot();
