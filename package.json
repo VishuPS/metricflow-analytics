@@ -6,9 +6,14 @@
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js && node --check app.js && node --check scripts/migrate-to-d1.js && node --check scripts/build-cloudflare.js",
+    "test:smoke": "node tests/production-regression.js",
+    "test:smoke:headed": "node tests/production-regression.js --headed",
     "migrate:d1": "node scripts/migrate-to-d1.js",
     "build:cloudflare": "node scripts/build-cloudflare.js",
     "deploy:pages": "npm run build:cloudflare && wrangler pages deploy dist"
+  },
+  "devDependencies": {
+    "playwright": "^1.52.0"
   },
   "engines": {
     "node": ">=18"
