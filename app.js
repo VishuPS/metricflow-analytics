@@ -50,7 +50,8 @@ function saveFallbackState() {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
+  const baseUrl = window.METRICFLOW_API_BASE_URL || "";
+  const response = await fetch(`${baseUrl}${path}`, {
     headers: { "content-type": "application/json", ...(options.headers || {}) },
     ...options
   });

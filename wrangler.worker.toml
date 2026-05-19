@@ -1,0 +1,15 @@
+name = "metricflow-api"
+main = "workers/metricflow-api.js"
+compatibility_date = "2026-05-19"
+
+kv_namespaces = [
+  { binding = "METRICFLOW_STORE", id = "00a2f91175ac4a1c96b5d349aca449cf" }
+]
+
+[vars]
+LINKEDIN_DEMO_MODE = "false"
+CORS_ORIGIN = "https://metricflow-analytics.pages.dev"
+PAGES_URL = "https://metricflow-analytics.pages.dev"
+
+[triggers]
+crons = ["15 * * * *"]

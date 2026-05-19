@@ -41,24 +41,66 @@ The database version of this model lives in `schema.sql`.
 
 ## Connector Flow
 
-Connector routes follow the same contract for each platform:
+The Express backend exposes an OAuth and ingestion contract per platform:
 
-- `GET /api/connectors`
-- `GET /api/connectors/:id/connect`
-- `GET /api/connectors/:id/callback`
-- `PATCH /api/connectors/:id`
-- `POST /api/connectors/:id/sync`
-- `POST /api/ingest/run`
+- `GET /oauth/:source/authorize`
+- `GET /oauth/:source/callback`
+- `POST /api/ingest/:source`
+- `GET /api/posts?source=linkedin&from=YYYY-MM-DD&to=YYYY-MM-DD`
 
-Demo mode produces normalized sample posts and metrics. OAuth token exchange is wired for each connector, and the platform-specific fetch adapters are isolated behind `fetchConnectorPosts` / `normalizeRawPost` / `normalizeRawMetric` in `server.js`.
+LinkedIn is the complete reference implementation in `connectors/linkedin.js`. It includes OAuth code exchange, UGC post fetch, Social Actions metrics, organization share analytics, and normalization. Instagram, YouTube, and GA4 are scaffolded in `connectors/` and intentionally return clear "not implemented" errors until their API mapping is filled in.
+
+OAuth tokens are stored in `data/store.json` under:
+
+```json
+{
+  "sources": {
+    "linkedin": {
+      "connected": true,
+      "accessToken": "..."
+    }
+  }
+}
+```
+
+Set `LINKEDIN_DEMO_MODE=true` to exercise LinkedIn ingestion without calling LinkedIn APIs.
+
+## Normalized Post Schema
+
+All platform adapters must return this shape:
+
+```js
+{
+  source: "linkedin",
+  post_id: String,
+  author_id: String,
+  published_at: String,
+  url: String,
+  text: String,
+  media_type: "image" | "video" | "carousel" | "text",
+  reach: Number | null,
+  impressions: Number | null,
+  engagements: Number | null,
+  likes: Number | null,
+  comments: Number | null,
+  shares: Number | null,
+  saves: Number | null,
+  clicks: Number | null,
+  conversions: Number | null,
+  platform_raw: Object
+}
+```
 
 ## API
 
 - `GET /api/health`
 - `GET /api/state`
+- `GET /oauth/:source/authorize`
+- `GET /oauth/:source/callback`
+- `POST /api/ingest/:source`
+- `GET /api/posts`
 - `GET /api/connectors`
 - `GET /api/connectors/:id/connect`
-- `GET /api/connectors/:id/callback`
 - `PATCH /api/connectors/:id`
 - `POST /api/connectors/:id/sync`
 - `POST /api/ingest/run`
@@ -83,7 +125,7 @@ Cloudflare Pages hosts the static dashboard from `dist`, Cloudflare Pages Functi
 
 ## Auto-Deploy
 
-This repo includes `.github/workflows/cloudflare-pages.yml`. Every push to `main` builds the app and deploys `dist` to the Cloudflare Pages project named `metricflow-analytics`.
+This repo includes `.github/workflows/cloudflare-pages.yml`. Every push to `main` deploys the Worker API first, then builds the static app and deploys `dist` to the Cloudflare Pages project named `metricflow-analytics`.
 
 Add these GitHub repository secrets before the first workflow run:
 
@@ -91,6 +133,46 @@ Add these GitHub repository secrets before the first workflow run:
 - `CLOUDFLARE_ACCOUNT_ID`
 
 The API token needs Cloudflare Pages edit permissions for the account. You can also run the workflow manually from the GitHub Actions tab with `workflow_dispatch`.
+
+## Worker Backend
+
+The cloud backend lives in `workers/metricflow-api.js` and deploys as the Cloudflare Worker named `metricflow-api`.
+
+Create a KV namespace once:
+
+```powershell
+wrangler kv namespace create METRICFLOW_STORE
+```
+
+Copy the generated namespace id into `wrangler.worker.toml`:
+
+```toml
+kv_namespaces = [
+  { binding = "METRICFLOW_STORE", id = "your_namespace_id" }
+]
+```
+
+Set Worker secrets for OAuth:
+
+```powershell
+wrangler secret put LINKEDIN_CLIENT_ID --config wrangler.worker.toml
+wrangler secret put LINKEDIN_CLIENT_SECRET --config wrangler.worker.toml
+wrangler secret put LINKEDIN_AUTHOR_URN --config wrangler.worker.toml
+wrangler secret put LINKEDIN_ORGANIZATION_URN --config wrangler.worker.toml
+```
+
+For GitHub Actions, add matching repository secrets if you want the workflow environment to carry the same values:
+
+- `LINKEDIN_CLIENT_ID`
+- `LINKEDIN_CLIENT_SECRET`
+- `LINKEDIN_REDIRECT_URI`
+- `LINKEDIN_AUTHOR_URN`
+- `LINKEDIN_ORGANIZATION_URN`
+
+Pages can call the Worker in two ways:
+
+- Same-origin during local development: leave `config.js` as `""`.
+- Separate Worker URL in production: set `window.METRICFLOW_API_BASE_URL` in `config.js` to your Worker URL, or bind a custom route/domain so `/api/*` reaches the Worker.
 
 To generate D1 seed SQL from local `data/store.json`:
 
@@ -103,7 +185,12 @@ npm run migrate:d1
 - `index.html` - post intelligence UI structure.
 - `styles.css` - responsive product UI.
 - `app.js` - frontend API client, ranking views, content intelligence, and report preview.
-- `server.js` - local HTTP server, connector architecture, ingestion pipeline, comparison engines, and JSON persistence.
+- `server.js` - Express backend, OAuth routes, ingestion routes, scheduler loop, and API compatibility routes.
+- `storage.js` - JSON state helpers: `loadState`, `saveState`, `savePosts`, and `mergePosts`.
+- `rollups.js` - daily, weekly, and monthly rollup generation.
+- `scheduler.js` - automatic ingestion loop driven by `state.schedule`.
+- `connectors/linkedin.js` - complete LinkedIn connector implementation.
+- `connectors/instagram.js`, `connectors/youtube.js`, `connectors/ga4.js` - API scaffolds.
 - `functions/api/[[path]].js` - Cloudflare Pages Functions API adapter with the post-level contract.
 - `schema.sql` - normalized connector, post, and historical metric table definitions.
 - `.env.example` - connector OAuth environment variables.
