@@ -1,16 +1,13 @@
 const seedState = {
-  sources: [
-    { name: "LinkedIn", color: "#0a66c2", reach: 48200, engagement: 2840, conversions: 126, trend: 12.4, connected: true },
-    { name: "Instagram", color: "#c13584", reach: 75600, engagement: 6120, conversions: 218, trend: 8.7, connected: true },
-    { name: "Facebook", color: "#1877f2", reach: 38900, engagement: 1930, conversions: 81, trend: -2.8, connected: false },
-    { name: "TikTok", color: "#111111", reach: 92400, engagement: 8480, conversions: 174, trend: 18.9, connected: true },
-    { name: "YouTube", color: "#ff0000", reach: 44100, engagement: 2360, conversions: 96, trend: 6.2, connected: true },
-    { name: "Google Analytics", color: "#f9ab00", reach: 53800, engagement: 3190, conversions: 312, trend: 4.1, connected: true }
-  ],
+  connectors: [],
+  posts: [],
+  metrics: [],
+  postRankings: [],
+  insights: [],
+  patterns: [],
+  contentIntelligence: { recommendations: [], winningFormats: [], nextBrief: {} },
   rules: [
-    { id: "rule-engagement-spike", title: "Engagement spike", detail: "Alert when any platform grows engagement by more than 15% week over week." },
-    { id: "rule-report-ready", title: "Report ready", detail: "Generate a summary every Monday at 9:00 and stage it for review." },
-    { id: "rule-conversion-dip", title: "Conversion dip", detail: "Flag channels where conversions fall by more than 8%." }
+    { id: "rule-spike", title: "Spike detection", detail: "Flag posts whose engagement grows more than 35% versus their prior observation." }
   ],
   settings: {
     companyName: "Northstar Studio",
@@ -22,22 +19,34 @@ const seedState = {
     day: "Monday",
     recipients: "team@example.com"
   },
-  reports: []
+  reports: [],
+  summary: {
+    totalReach: 0,
+    totalEngagement: 0,
+    totalConversions: 0,
+    attributedRevenue: 0,
+    engagementRate: 0,
+    connectedSources: 0,
+    totalSources: 4,
+    trackedPosts: 0,
+    deltas: { reach: 0, engagement: 0, conversions: 0 },
+    timeSavedHours: 0
+  }
 };
 
 let state = loadFallbackState();
 let backendOnline = false;
-let googleAnalytics = { connected: false, propertyId: "" };
 
 const numberFormatter = new Intl.NumberFormat("en-US");
+const currencyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const percentFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 
 function loadFallbackState() {
-  return JSON.parse(localStorage.getItem("metricflow.state") || "null") || structuredClone(seedState);
+  return JSON.parse(localStorage.getItem("metricflow.state.v2") || "null") || structuredClone(seedState);
 }
 
 function saveFallbackState() {
-  localStorage.setItem("metricflow.state", JSON.stringify(state));
+  localStorage.setItem("metricflow.state.v2", JSON.stringify(state));
 }
 
 async function api(path, options = {}) {
@@ -55,9 +64,7 @@ async function api(path, options = {}) {
 
 async function loadBackendState() {
   try {
-    const data = await api("/api/state");
-    state = data;
-    googleAnalytics = data.googleAnalytics || { connected: false, propertyId: "" };
+    state = await api("/api/state");
     backendOnline = true;
     document.querySelector("#syncStatus").textContent = "Backend connected";
   } catch {
@@ -66,52 +73,17 @@ async function loadBackendState() {
   }
 }
 
-function connectedSources() {
-  return state.sources.filter((source) => source.connected);
-}
-
-function getSummary() {
-  if (state.summary) return state.summary;
-  const active = connectedSources();
-  const totalReach = active.reduce((sum, source) => sum + Number(source.reach || 0), 0);
-  const totalEngagement = active.reduce((sum, source) => sum + Number(source.engagement || 0), 0);
-  const totalConversions = active.reduce((sum, source) => sum + Number(source.conversions || 0), 0);
-  return {
-    totalReach,
-    totalEngagement,
-    totalConversions,
-    engagementRate: totalReach ? (totalEngagement / totalReach) * 100 : 0,
-    connectedSources: active.length,
-    totalSources: state.sources.length,
-    timeSavedHours: Number((active.length * 1.1 + 0.9).toFixed(1))
-  };
-}
-
-function getInsights() {
-  if (state.insights) return state.insights;
-  const active = connectedSources();
-  const bestReach = [...active].sort((a, b) => b.reach - a.reach)[0];
-  const bestConversion = [...active].sort((a, b) => b.conversions - a.conversions)[0];
-  const needsAttention = active.find((source) => source.trend < 0);
-
-  return [
-    {
-      title: `${bestReach?.name || "Top channel"} is driving reach`,
-      detail: `Prioritize the content format that lifted ${bestReach?.name || "your leading platform"} over the last reporting period.`
-    },
-    {
-      title: `${bestConversion?.name || "Conversion channel"} is closest to revenue`,
-      detail: "Use this channel as the benchmark for landing-page and campaign attribution."
-    },
-    {
-      title: needsAttention ? `${needsAttention.name} needs attention` : "No channel is declining",
-      detail: needsAttention ? "Engagement is softening. Queue a content audit before next week's report." : "Current connected sources show positive movement across the board."
-    }
-  ];
-}
-
 function formatNumber(value) {
-  return numberFormatter.format(Math.round(value));
+  return numberFormatter.format(Math.round(Number(value || 0)));
+}
+
+function formatDelta(value) {
+  const number = Number(value || 0);
+  return `${number >= 0 ? "+" : ""}${percentFormatter.format(number)}%`;
+}
+
+function connectorName(id) {
+  return state.connectors.find((connector) => connector.id === id)?.name || id;
 }
 
 function showToast(message) {
@@ -123,80 +95,103 @@ function showToast(message) {
 }
 
 function renderKpis() {
-  const summary = getSummary();
+  const summary = state.summary || seedState.summary;
   const kpis = [
-    ["Total reach", formatNumber(summary.totalReach), "+9.8%"],
-    ["Engagement rate", `${percentFormatter.format(summary.engagementRate)}%`, "+3.1%"],
-    ["Conversions", formatNumber(summary.totalConversions), "+6.4%"],
-    ["Connected sources", `${summary.connectedSources}/${summary.totalSources}`, backendOnline ? "API live" : "Local"]
+    ["Tracked posts", formatNumber(summary.trackedPosts), `${summary.connectedSources}/${summary.totalSources} connectors`],
+    ["Post reach", formatNumber(summary.totalReach), formatDelta(summary.deltas?.reach)],
+    ["Engagement rate", `${percentFormatter.format(summary.engagementRate)}%`, formatDelta(summary.deltas?.engagement)],
+    ["Attributed revenue", currencyFormatter.format(summary.attributedRevenue), formatDelta(summary.deltas?.conversions)]
   ];
 
   document.querySelector("#kpiGrid").innerHTML = kpis.map(([label, value, change]) => `
     <article class="kpi-card">
       <span>${label}</span>
       <strong>${value}</strong>
-      <div class="metric-change">${change}</div>
+      <div class="metric-change ${String(change).startsWith("-") ? "down" : ""}">${change}</div>
     </article>
   `).join("");
 }
 
-function renderPlatformRows() {
-  document.querySelector("#platformRows").innerHTML = connectedSources().map((source) => `
+function renderPostRows() {
+  const rows = state.postRankings || [];
+  document.querySelector("#platformRows").innerHTML = rows.map((post, index) => `
     <tr>
       <td>
         <div class="platform-name">
-          <span class="platform-dot" style="background:${source.color}"></span>
-          ${source.name}
+          <span class="rank-badge">${index + 1}</span>
+          <div>
+            <strong>${post.title}</strong>
+            <small>${connectorName(post.connector)} / ${post.mediaType} / ${post.contentPillar}</small>
+          </div>
         </div>
       </td>
-      <td>${formatNumber(source.reach)}</td>
-      <td>${formatNumber(source.engagement)}</td>
-      <td>${formatNumber(source.conversions)}</td>
-      <td class="${source.trend >= 0 ? "trend-up" : "trend-down"}">${source.trend >= 0 ? "Up" : "Down"} ${Math.abs(source.trend)}%</td>
+      <td>${formatNumber(post.metrics?.reach)}</td>
+      <td>${formatNumber(post.metrics?.engagements)}</td>
+      <td>${formatNumber(post.metrics?.conversions)}</td>
+      <td class="${Number(post.engagementChange || 0) >= 0 ? "trend-up" : "trend-down"}">${formatDelta(post.engagementChange)}</td>
     </tr>
   `).join("");
 }
 
 function renderInsights() {
-  document.querySelector("#insightList").innerHTML = getInsights().map((insight) => `
+  document.querySelector("#insightList").innerHTML = (state.insights || []).map((insight) => `
     <article class="insight">
+      <span>${insight.type || "insight"}</span>
       <strong>${insight.title}</strong>
       <p>${insight.detail}</p>
     </article>
   `).join("");
 }
 
-function renderSources() {
-  document.querySelector("#sourceGrid").innerHTML = state.sources.map((source) => `
+function renderConnectors() {
+  document.querySelector("#sourceGrid").innerHTML = (state.connectors || []).map((connector) => `
     <article class="source-card">
       <header>
-        <strong>${source.name}</strong>
-        <span class="connection-pill ${source.connected ? "" : "off"}">${source.connected ? "Connected" : "Off"}</span>
+        <div>
+          <strong>${connector.name}</strong>
+          <span>${connector.kind === "web" ? "Web analytics" : "Social posts"} connector</span>
+        </div>
+        <span class="connection-pill ${connector.connected ? "" : "off"}">${connector.connected ? "Connected" : "Paused"}</span>
       </header>
-      <span>${formatNumber(source.reach)} reach / ${formatNumber(source.engagement)} engagements</span>
-      <button class="${source.connected ? "secondary-button" : "primary-button"}" data-source="${source.name}" type="button">
-        ${source.connected ? "Disconnect" : "Connect"}
-      </button>
+      <dl>
+        <div><dt>Status</dt><dd>${connector.configured ? "OAuth ready" : "Needs env"}</dd></div>
+        <div><dt>Last sync</dt><dd>${connector.lastSyncAt ? new Date(connector.lastSyncAt).toLocaleDateString() : "Never"}</dd></div>
+      </dl>
+      <div class="button-row">
+        <button class="secondary-button" data-connector="${connector.id}" type="button">${connector.connected ? "Pause" : "Enable"}</button>
+        <button class="primary-button" data-sync-connector="${connector.id}" type="button">Sync</button>
+      </div>
+      <a class="connector-link" href="/api/connectors/${connector.id}/connect">OAuth setup</a>
     </article>
   `).join("");
 }
 
-function renderGoogleStatus() {
-  const status = document.querySelector("#googleStatus");
-  if (!status) return;
-  if (!backendOnline) {
-    status.textContent = "Backend required";
-    return;
-  }
-  if (googleAnalytics.connected) {
-    status.textContent = `Connected${googleAnalytics.propertyId ? ` to GA4 property ${googleAnalytics.propertyId}` : ""}`;
-    return;
-  }
-  status.textContent = googleAnalytics.configured ? "Ready to connect" : "Missing Google OAuth configuration";
+function renderPatterns() {
+  document.querySelector("#patternList").innerHTML = (state.patterns || []).map((pattern) => `
+    <article class="pattern-row">
+      <strong>${pattern.key}</strong>
+      <span>${pattern.posts} posts</span>
+      <span>${percentFormatter.format(pattern.engagementRate)}% ER</span>
+      <span>${percentFormatter.format(pattern.conversionRate)}% CVR</span>
+    </article>
+  `).join("");
+}
+
+function renderContentIntelligence() {
+  const intelligence = state.contentIntelligence || seedState.contentIntelligence;
+  document.querySelector("#recommendationList").innerHTML = (intelligence.recommendations || []).map((item) => `
+    <li>${item}</li>
+  `).join("");
+  const brief = intelligence.nextBrief || {};
+  document.querySelector("#nextBrief").innerHTML = `
+    <div><span>Pillar</span><strong>${brief.contentPillar || "Product Education"}</strong></div>
+    <div><span>Format</span><strong>${brief.format || "carousel"}</strong></div>
+    <p>${brief.angle || "Run a controlled test after the next ingestion cycle."}</p>
+  `;
 }
 
 function renderRules() {
-  document.querySelector("#ruleList").innerHTML = state.rules.map((rule) => `
+  document.querySelector("#ruleList").innerHTML = (state.rules || []).map((rule) => `
     <article class="rule">
       <strong>${rule.title}</strong>
       <p>${rule.detail}</p>
@@ -206,11 +201,11 @@ function renderRules() {
 }
 
 function renderReport(report) {
-  const summary = report?.summary || getSummary();
-  const title = report?.title || document.querySelector("#reportName").value.trim() || "Performance report";
+  const summary = report?.summary || state.summary || seedState.summary;
+  const title = report?.title || document.querySelector("#reportName").value.trim() || "Post intelligence report";
   const audience = report?.audience || document.querySelector("#reportAudience").value;
   const sections = report?.sections || [...document.querySelectorAll("fieldset input:checked")].map((input) => input.value);
-  const recommendation = report?.recommendation || `${connectedSources().sort((a, b) => b.engagement - a.engagement)[0]?.name || "Your strongest channel"} is the current engagement leader. Shift one additional campaign test into that channel next period and watch conversion efficiency.`;
+  const recommendation = report?.recommendation || state.contentIntelligence?.recommendations?.[0] || "Run ingestion before generating recommendations.";
 
   document.querySelector("#previewTitle").textContent = title;
   document.querySelector("#previewAudience").textContent = audience;
@@ -221,17 +216,17 @@ function renderReport(report) {
   });
   document.querySelector("#previewContent").innerHTML = `
     <h2>Executive Summary</h2>
-    <p>${state.settings.companyName} reached ${formatNumber(summary.totalReach)} people and generated ${formatNumber(summary.totalEngagement)} engagements across ${summary.connectedSources} active sources.</p>
+    <p>${state.settings.companyName} tracked ${formatNumber(summary.trackedPosts)} normalized posts across ${summary.connectedSources} connectors, producing ${formatNumber(summary.totalEngagement)} engagements and ${formatNumber(summary.totalConversions)} conversions.</p>
     <h2>Included Sections</h2>
     <ul>${sections.map((section) => `<li>${section}</li>`).join("")}</ul>
-    <h2>Top Opportunity</h2>
+    <h2>Top Recommendation</h2>
     <p>${recommendation}</p>
   `;
 }
 
 async function generateReport() {
   const payload = {
-    title: document.querySelector("#reportName").value.trim() || "Performance report",
+    title: document.querySelector("#reportName").value.trim() || "Post intelligence report",
     audience: document.querySelector("#reportAudience").value,
     sections: [...document.querySelectorAll("fieldset input:checked")].map((input) => input.value)
   };
@@ -253,80 +248,54 @@ async function generateReport() {
 function exportCsv() {
   if (backendOnline) {
     window.location.href = "/api/export.csv";
-    showToast("CSV export requested from backend");
+    showToast("Post CSV export requested");
     return;
   }
-
-  const rows = [["platform", "reach", "engagement", "conversions", "trend"], ...connectedSources().map((source) => [
-    source.name,
-    source.reach,
-    source.engagement,
-    source.conversions,
-    source.trend
-  ])];
-  const blob = new Blob([rows.map((row) => row.join(",")).join("\n")], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "metricflow-report.csv";
-  link.click();
-  URL.revokeObjectURL(url);
-  showToast("CSV export ready");
+  showToast("Backend required for post export");
 }
 
-function importCsvLocally(csv) {
-  const [, ...rows] = csv.trim().split(/\r?\n/);
-  const imports = rows.map((row, index) => {
-    const [name, reach, engagement, conversions] = row.split(",").map((cell) => cell.trim());
-    return {
-      name: name || `Imported ${index + 1}`,
-      color: index % 2 ? "#8f5f2a" : "#3d6b52",
-      reach: Number(reach) || 0,
-      engagement: Number(engagement) || 0,
-      conversions: Number(conversions) || 0,
-      trend: 3 + index,
-      connected: true,
-      imported: true
-    };
-  });
-  state.sources = state.sources.filter((source) => !source.imported).concat(imports);
-}
-
-async function importCsv() {
-  const csv = document.querySelector("#csvInput").value.trim();
-  if (backendOnline) {
-    const result = await api("/api/import-csv", {
-      method: "POST",
-      body: JSON.stringify({ csv })
-    });
-    state.sources = result.sources;
-    state.summary = result.summary;
-  } else {
-    importCsvLocally(csv);
-    saveFallbackState();
-  }
-  renderAll();
-  showToast("CSV sources imported");
-}
-
-async function toggleSource(name) {
-  const source = state.sources.find((item) => item.name === name);
-  if (!source) return;
-  const connected = !source.connected;
+async function toggleConnector(id) {
+  const connector = state.connectors.find((item) => item.id === id);
+  if (!connector) return;
+  const connected = !connector.connected;
 
   if (backendOnline) {
-    const result = await api(`/api/sources/${encodeURIComponent(name)}`, {
+    const result = await api(`/api/connectors/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify({ connected })
     });
-    source.connected = result.source.connected;
+    connector.connected = result.connector.connected;
+    connector.status = result.connector.status;
     state.summary = result.summary;
   } else {
-    source.connected = connected;
+    connector.connected = connected;
     saveFallbackState();
   }
   renderAll();
-  showToast(`${name} ${source.connected ? "connected" : "disconnected"}`);
+  showToast(`${connector.name} ${connector.connected ? "enabled" : "paused"}`);
+}
+
+async function syncConnector(id) {
+  if (!backendOnline) {
+    showToast("Backend required for ingestion");
+    return;
+  }
+  const result = await api(`/api/connectors/${encodeURIComponent(id)}/sync`, { method: "POST" });
+  state = result.state;
+  renderAll();
+  showToast(`${connectorName(id)} ingestion completed`);
+}
+
+async function runIngestion() {
+  if (!backendOnline) {
+    showToast("Backend required for ingestion");
+    return;
+  }
+  const result = await api("/api/ingest/run", { method: "POST" });
+  state = result.state;
+  renderAll();
+  renderReport();
+  showToast("OAuth to posts to metrics pipeline completed");
 }
 
 function hydrateControls() {
@@ -339,15 +308,15 @@ function hydrateControls() {
 }
 
 function renderAll() {
-  delete state.summary;
-  delete state.insights;
   renderKpis();
-  renderPlatformRows();
+  renderPostRows();
   renderInsights();
-  renderSources();
+  renderConnectors();
+  renderPatterns();
+  renderContentIntelligence();
   renderRules();
-  renderGoogleStatus();
-  document.querySelector("#timeSaved").textContent = `${getSummary().timeSavedHours} hours`;
+  document.querySelector("#timeSaved").textContent = `${state.summary?.timeSavedHours || 0} hours`;
+  document.querySelector("#schemaFields").textContent = state.normalizedSchema?.post?.join(" / ") || "Waiting for backend schema";
 }
 
 function wireEvents() {
@@ -357,13 +326,15 @@ function wireEvents() {
       document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
       button.classList.add("active");
       document.querySelector(`#${button.dataset.view}`).classList.add("active");
-      document.querySelector("#viewTitle").textContent = button.textContent.trim();
+      document.querySelector("#viewTitle").textContent = button.dataset.title || button.textContent.trim();
     });
   });
 
   document.querySelector("#sourceGrid").addEventListener("click", (event) => {
-    const button = event.target.closest("[data-source]");
-    if (button) toggleSource(button.dataset.source).catch((error) => showToast(error.message));
+    const toggle = event.target.closest("[data-connector]");
+    const sync = event.target.closest("[data-sync-connector]");
+    if (toggle) toggleConnector(toggle.dataset.connector).catch((error) => showToast(error.message));
+    if (sync) syncConnector(sync.dataset.syncConnector).catch((error) => showToast(error.message));
   });
 
   document.querySelector("#ruleList").addEventListener("click", async (event) => {
@@ -382,8 +353,8 @@ function wireEvents() {
 
   document.querySelector("#addRule").addEventListener("click", async () => {
     const payload = {
-      title: "Audience shift",
-      detail: "Notify the team when a channel's audience growth outpaces its engagement growth."
+      title: "Pattern watch",
+      detail: "Notify the team when a content format beats its historical median twice in a row."
     };
     if (backendOnline) {
       const result = await api("/api/rules", { method: "POST", body: JSON.stringify(payload) });
@@ -421,30 +392,7 @@ function wireEvents() {
 
   document.querySelector("#generateReport").addEventListener("click", () => generateReport().catch((error) => showToast(error.message)));
   document.querySelector("#exportCsv").addEventListener("click", exportCsv);
-  document.querySelector("#importCsv").addEventListener("click", () => importCsv().catch((error) => showToast(error.message)));
-  document.querySelector("#connectGoogle").addEventListener("click", () => {
-    if (!backendOnline) {
-      showToast("Backend required for Google Analytics");
-      return;
-    }
-    window.location.href = "/api/google/connect";
-  });
-  document.querySelector("#syncGoogle").addEventListener("click", async () => {
-    if (!backendOnline) {
-      showToast("Backend required for Google Analytics");
-      return;
-    }
-    try {
-      const result = await api("/api/sources/google-analytics/sync", { method: "POST" });
-      state.sources = result.sources;
-      state.summary = result.summary;
-      googleAnalytics = result.googleAnalytics || googleAnalytics;
-      renderAll();
-      showToast(`Google Analytics synced for ${result.snapshot.snapshotDate}`);
-    } catch (error) {
-      showToast(error.message);
-    }
-  });
+  document.querySelector("#runIngestion").addEventListener("click", () => runIngestion().catch((error) => showToast(error.message)));
   document.querySelector("#newReport").addEventListener("click", () => {
     document.querySelector('[data-view="reports"]').click();
     document.querySelector("#reportName").focus();
@@ -465,8 +413,8 @@ async function boot() {
   renderAll();
   renderReport();
   const params = new URLSearchParams(window.location.search);
-  if (params.get("ga") === "connected") showToast("Google Analytics connected");
-  if (params.get("ga") === "error") showToast(params.get("message") || "Google Analytics connection failed");
+  if (params.get("connector") === "connected") showToast("Connector OAuth completed");
+  if (params.get("connector") === "error") showToast(params.get("message") || "Connector connection failed");
 }
 
 boot();

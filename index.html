@@ -10,40 +10,31 @@
     <div class="app-shell">
       <aside class="sidebar" aria-label="Primary">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">M</div>
+          <div class="brand-mark" aria-hidden="true">MF</div>
           <div>
             <strong>MetricFlow</strong>
-            <span>Analytics automation</span>
+            <span>Post intelligence</span>
           </div>
         </div>
         <nav class="nav-list" aria-label="Sections">
-          <button class="nav-item active" data-view="overview" type="button">
-            <span aria-hidden="true">O</span> Overview
-          </button>
-          <button class="nav-item" data-view="sources" type="button">
-            <span aria-hidden="true">S</span> Sources
-          </button>
-          <button class="nav-item" data-view="reports" type="button">
-            <span aria-hidden="true">R</span> Reports
-          </button>
-          <button class="nav-item" data-view="automation" type="button">
-            <span aria-hidden="true">A</span> Automation
-          </button>
-          <button class="nav-item" data-view="settings" type="button">
-            <span aria-hidden="true">G</span> Settings
-          </button>
+          <button class="nav-item active" data-view="overview" data-title="Post Intelligence" type="button"><span aria-hidden="true">01</span> Overview</button>
+          <button class="nav-item" data-view="sources" data-title="Connectors" type="button"><span aria-hidden="true">02</span> Connectors</button>
+          <button class="nav-item" data-view="intelligence" data-title="Content Intelligence" type="button"><span aria-hidden="true">03</span> Intelligence</button>
+          <button class="nav-item" data-view="reports" data-title="Reports" type="button"><span aria-hidden="true">04</span> Reports</button>
+          <button class="nav-item" data-view="automation" data-title="Automation" type="button"><span aria-hidden="true">05</span> Automation</button>
+          <button class="nav-item" data-view="settings" data-title="Settings" type="button"><span aria-hidden="true">06</span> Settings</button>
         </nav>
         <div class="sidebar-footer">
           <span class="status-dot"></span>
-          <span id="syncStatus">Last sync just now</span>
+          <span id="syncStatus">Loading backend</span>
         </div>
       </aside>
 
       <main class="workspace">
         <header class="topbar">
           <div>
-            <p class="eyebrow">Social media reporting hub</p>
-            <h1 id="viewTitle">Overview</h1>
+            <p class="eyebrow">OAuth > posts > metrics > normalize > store</p>
+            <h1 id="viewTitle">Post Intelligence</h1>
           </div>
           <div class="topbar-actions">
             <button class="icon-button" id="refreshData" type="button" title="Refresh data" aria-label="Refresh data">R</button>
@@ -55,17 +46,16 @@
           <div class="hero-panel">
             <div>
               <p class="eyebrow">Weekly time saved</p>
-              <h2 id="timeSaved">6.4 hours</h2>
-              <p>Automated pulls, normalized KPIs, and scheduled report delivery based on your active sources.</p>
+              <h2 id="timeSaved">0 hours</h2>
+              <p>Post-level ingestion now compares current observations with previous observations, ranks content, and stores historical metrics by day.</p>
+              <button class="hero-action" id="runIngestion" type="button">Run ingestion pipeline</button>
             </div>
-            <div class="hero-chart" aria-label="Cross-platform performance chart">
-              <div style="height: 44%"></div>
-              <div style="height: 68%"></div>
-              <div style="height: 52%"></div>
-              <div style="height: 82%"></div>
-              <div style="height: 61%"></div>
-              <div style="height: 74%"></div>
-              <div style="height: 92%"></div>
+            <div class="pipeline-map" aria-label="Ingestion pipeline">
+              <span>OAuth</span>
+              <span>Fetch posts</span>
+              <span>Fetch metrics</span>
+              <span>Normalize</span>
+              <span>Store history</span>
             </div>
           </div>
 
@@ -75,24 +65,24 @@
             <section class="panel">
               <div class="panel-header">
                 <div>
-                  <h2>Platform Performance</h2>
-                  <p>Normalized engagement, reach, and conversion trends.</p>
+                  <h2>Post Ranking</h2>
+                  <p>Weighted by engagement, conversion, sharing, and previous-vs-current movement.</p>
                 </div>
                 <select id="dateRange" aria-label="Date range">
-                  <option value="7">Last 7 days</option>
-                  <option value="30" selected>Last 30 days</option>
-                  <option value="90">Last 90 days</option>
+                  <option value="daily" selected>Daily history</option>
+                  <option value="weekly">Weekly rollup</option>
+                  <option value="monthly">Monthly rollup</option>
                 </select>
               </div>
               <div class="table-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th>Platform</th>
+                      <th>Post</th>
                       <th>Reach</th>
-                      <th>Engagement</th>
+                      <th>Engagements</th>
                       <th>Conversions</th>
-                      <th>Trend</th>
+                      <th>Change</th>
                     </tr>
                   </thead>
                   <tbody id="platformRows"></tbody>
@@ -103,8 +93,8 @@
             <section class="panel">
               <div class="panel-header">
                 <div>
-                  <h2>Insight Queue</h2>
-                  <p>Generated from recent campaign movement.</p>
+                  <h2>Comparison Engine</h2>
+                  <p>Spike, drop, ranking, and pattern signals from historical metrics.</p>
                 </div>
               </div>
               <div class="insight-list" id="insightList"></div>
@@ -114,37 +104,42 @@
 
         <section class="view" id="sources" aria-labelledby="sources-heading">
           <div class="section-band">
-            <h2 id="sources-heading">Connect Analytics Sources</h2>
-            <p>Choose the channels you report on. Connected sources feed the dashboard, report builder, and automation rules.</p>
+            <h2 id="sources-heading">Connector Architecture</h2>
+            <p>Instagram, LinkedIn, YouTube, and GA4 now connect independently and feed one normalized post schema.</p>
           </div>
           <div class="source-grid" id="sourceGrid"></div>
-          <section class="panel integration-panel">
+          <section class="panel schema-panel">
             <div class="panel-header">
               <div>
-                <h2>Google Analytics API</h2>
-                <p id="googleStatus">Not connected</p>
+                <h2>Normalized Post Schema</h2>
+                <p id="schemaFields">Waiting for backend schema</p>
               </div>
-              <div class="button-row">
-                <button class="secondary-button" id="connectGoogle" type="button">Connect Google Analytics</button>
-                <button class="primary-button" id="syncGoogle" type="button">Sync GA4 metrics</button>
-              </div>
-            </div>
-            <p class="integration-note">Uses one configured GA4 property for this MVP. Add Google OAuth credentials and a GA4 property ID in the backend environment.</p>
-          </section>
-          <section class="panel">
-            <div class="panel-header">
-              <div>
-                <h2>CSV Import</h2>
-                <p>Drop in metrics from any unsupported source.</p>
-              </div>
-            </div>
-            <div class="import-box">
-              <textarea id="csvInput" aria-label="CSV input">platform,reach,engagement,conversions
-Newsletter,18500,940,86
-Podcast,7200,410,28</textarea>
-              <button class="secondary-button" id="importCsv" type="button">Import CSV</button>
             </div>
           </section>
+        </section>
+
+        <section class="view" id="intelligence" aria-labelledby="intelligence-heading">
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2 id="intelligence-heading">Content Patterns</h2>
+                  <p>Format and pillar combinations ranked by normalized performance.</p>
+                </div>
+              </div>
+              <div class="pattern-list" id="patternList"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <h2>Next Content Brief</h2>
+                  <p>Generated from post rankings and repeated performance patterns.</p>
+                </div>
+              </div>
+              <div class="brief-card" id="nextBrief"></div>
+              <ol class="recommendation-list" id="recommendationList"></ol>
+            </section>
+          </div>
         </section>
 
         <section class="view" id="reports" aria-labelledby="reports-heading">
@@ -153,12 +148,12 @@ Podcast,7200,410,28</textarea>
               <div class="panel-header">
                 <div>
                   <h2 id="reports-heading">Report Builder</h2>
-                  <p>Create a client-ready report from live metrics.</p>
+                  <p>Create a post intelligence report from live normalized metrics.</p>
                 </div>
               </div>
               <label>
                 Report name
-                <input id="reportName" value="Weekly performance report">
+                <input id="reportName" value="Post intelligence report">
               </label>
               <label>
                 Audience
@@ -171,9 +166,9 @@ Podcast,7200,410,28</textarea>
               <fieldset>
                 <legend>Sections</legend>
                 <label><input type="checkbox" value="Executive summary" checked> Executive summary</label>
-                <label><input type="checkbox" value="Platform scorecard" checked> Platform scorecard</label>
-                <label><input type="checkbox" value="Top posts" checked> Top posts</label>
-                <label><input type="checkbox" value="Recommendations" checked> Recommendations</label>
+                <label><input type="checkbox" value="Post rankings" checked> Post rankings</label>
+                <label><input type="checkbox" value="Spike and drop analysis" checked> Spike and drop analysis</label>
+                <label><input type="checkbox" value="Content intelligence" checked> Content intelligence</label>
               </fieldset>
               <div class="button-row">
                 <button class="primary-button" id="generateReport" type="button">Generate preview</button>
@@ -185,7 +180,7 @@ Podcast,7200,410,28</textarea>
               <div class="report-page">
                 <div class="report-cover">
                   <p id="previewAudience">Leadership team</p>
-                  <h2 id="previewTitle">Weekly performance report</h2>
+                  <h2 id="previewTitle">Post intelligence report</h2>
                   <span id="previewDate"></span>
                 </div>
                 <div id="previewContent"></div>
@@ -199,15 +194,15 @@ Podcast,7200,410,28</textarea>
             <section class="panel">
               <div class="panel-header">
                 <div>
-                  <h2 id="automation-heading">Scheduled Reporting</h2>
-                  <p>Send recurring summaries without rebuilding the deck each week.</p>
+                  <h2 id="automation-heading">Historical Reporting</h2>
+                  <p>Schedule daily ingestion and weekly or monthly intelligence snapshots.</p>
                 </div>
               </div>
               <label>
                 Frequency
                 <select id="scheduleFrequency">
-                  <option>Weekly</option>
-                  <option>Bi-weekly</option>
+                  <option>Daily</option>
+                  <option selected>Weekly</option>
                   <option>Monthly</option>
                 </select>
               </label>
@@ -231,7 +226,7 @@ Podcast,7200,410,28</textarea>
               <div class="panel-header">
                 <div>
                   <h2>Automation Rules</h2>
-                  <p>Alerts and recommendations that trigger on metric changes.</p>
+                  <p>Comparison rules that trigger on post movement and content patterns.</p>
                 </div>
               </div>
               <div class="rule-list" id="ruleList"></div>
@@ -245,7 +240,7 @@ Podcast,7200,410,28</textarea>
             <div class="panel-header">
               <div>
                 <h2 id="settings-heading">Workspace Settings</h2>
-                <p>These choices are stored locally in this browser.</p>
+                <p>Default reporting preferences for the intelligence layer.</p>
               </div>
             </div>
             <label>

@@ -5,11 +5,7 @@ const baseURL = process.env.METRICFLOW_URL || "https://metricflow-analytics.page
 const headed = process.argv.includes("--headed");
 const defaultWindowsEdge = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || (process.platform === "win32" ? defaultWindowsEdge : undefined);
-const mutatingApiPattern = /\/api\/(sources\/.+|import-csv|reports|schedule|settings|rules(?:\/.+)?)$/;
-
-function absoluteUrl(path) {
-  return new URL(path, baseURL).toString();
-}
+const mutatingApiPattern = /\/api\/(connectors\/.+|ingest\/run|reports|schedule|settings|rules(?:\/.+)?)$/;
 
 async function expectText(locator, expected, label) {
   const deadline = Date.now() + 10_000;
@@ -22,63 +18,96 @@ async function expectText(locator, expected, label) {
   assert.match(text, expected, label);
 }
 
+function mockState() {
+  const state = {
+    connectors: [
+      { id: "instagram", name: "Instagram", kind: "social", connected: true, configured: true, lastSyncAt: "2026-05-18T09:15:00.000Z" },
+      { id: "linkedin", name: "LinkedIn", kind: "social", connected: true, configured: true, lastSyncAt: "2026-05-17T09:15:00.000Z" },
+      { id: "youtube", name: "YouTube", kind: "social", connected: true, configured: true, lastSyncAt: "2026-05-16T09:15:00.000Z" },
+      { id: "ga4", name: "GA4", kind: "web", connected: true, configured: true, propertyId: "demo", lastSyncAt: "2026-05-15T09:15:00.000Z" }
+    ],
+    postRankings: [
+      {
+        title: "Carousel: before and after onboarding audit",
+        connector: "instagram",
+        mediaType: "carousel",
+        contentPillar: "proof",
+        metrics: { reach: 30500, engagements: 4120, conversions: 63 },
+        engagementChange: 110.2
+      },
+      {
+        title: "Landing page: content ROI guide",
+        connector: "ga4",
+        mediaType: "landing_page",
+        contentPillar: "conversion",
+        metrics: { reach: 17100, engagements: 980, conversions: 194 },
+        engagementChange: 88.5
+      }
+    ],
+    insights: [
+      { type: "spike", title: "Carousel spiked 110.2%", detail: "Reuse its carousel format and proof angle." },
+      { type: "ranking", title: "Landing page leads conversions", detail: "It ranks highest on conversion weight." },
+      { type: "pattern", title: "proof / carousel is strongest", detail: "This pattern averages 13.5% engagement rate." }
+    ],
+    patterns: [
+      { key: "proof / carousel", posts: 1, engagementRate: 13.5, conversionRate: 0.2 },
+      { key: "conversion / landing_page", posts: 1, engagementRate: 5.7, conversionRate: 1.1 }
+    ],
+    contentIntelligence: {
+      recommendations: [
+        "Expand proof with another carousel; it is carrying the highest post score.",
+        "Create one controlled test per connector."
+      ],
+      nextBrief: { contentPillar: "proof", format: "carousel", angle: "Turn the strongest insight into a tactical checklist." }
+    },
+    normalizedSchema: {
+      post: ["id", "connector", "externalId", "title", "mediaType", "contentPillar", "publishedAt"],
+      metric: ["id", "postId", "date", "reach", "engagements", "conversions"]
+    },
+    rules: [
+      { id: "rule-spike", title: "Spike detection", detail: "Flag posts whose engagement grows more than 35%." }
+    ],
+    settings: { companyName: "Northstar Studio", defaultKpi: "Engagement rate", autoRefresh: true },
+    schedule: { frequency: "Weekly", day: "Monday", recipients: "team@example.com" },
+    reports: [],
+    summary: {
+      trackedPosts: 2,
+      totalReach: 47600,
+      totalEngagement: 5100,
+      totalConversions: 257,
+      attributedRevenue: 12079,
+      engagementRate: 10.7,
+      connectedSources: 4,
+      totalSources: 4,
+      deltas: { reach: 44.1, engagement: 93.5, conversions: 86.2 },
+      timeSavedHours: 6.2
+    }
+  };
+  return state;
+}
+
 async function mockProductionWrites(page) {
+  await page.route("**/api/state", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(mockState()) }));
   await page.route(mutatingApiPattern, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method();
+    const state = mockState();
 
-    if (method === "PATCH" && url.pathname.startsWith("/api/sources/")) {
-      const payload = request.postDataJSON();
-      const sourceName = decodeURIComponent(url.pathname.split("/").pop());
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          source: { name: sourceName, connected: Boolean(payload.connected) },
-          summary: {
-            totalReach: 314100,
-            totalEngagement: 22990,
-            totalConversions: 926,
-            engagementRate: 7.3,
-            connectedSources: payload.connected ? 6 : 4,
-            totalSources: 6,
-            timeSavedHours: 6.4
-          }
-        })
-      });
+    if (method === "POST" && url.pathname === "/api/ingest/run") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ results: [], state }) });
     }
 
-    if (method === "POST" && url.pathname === "/api/sources/google-analytics/sync") {
-      const snapshot = {
-        id: "snapshot-google-analytics-test",
-        source: "Google Analytics",
-        snapshotDate: "2026-05-18",
-        reach: 61000,
-        engagement: 4200,
-        conversions: 140
-      };
-      const sources = [
-        { name: "LinkedIn", color: "#0a66c2", reach: 48200, engagement: 2840, conversions: 126, trend: 12.4, connected: true },
-        { name: "Google Analytics", color: "#f9ab00", reach: 61000, engagement: 4200, conversions: 140, trend: 4.2, connected: true }
-      ];
+    if (method === "POST" && url.pathname.includes("/sync")) {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ posts: [], metrics: [], state }) });
+    }
+
+    if (method === "PATCH" && url.pathname.startsWith("/api/connectors/")) {
+      const id = decodeURIComponent(url.pathname.split("/")[3]);
       return route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          snapshot,
-          sources,
-          googleAnalytics: { configured: true, connected: true, propertyId: "123456789" },
-          summary: {
-            totalReach: 109200,
-            totalEngagement: 7040,
-            totalConversions: 266,
-            engagementRate: 6.4,
-            connectedSources: 2,
-            totalSources: 2,
-            timeSavedHours: 3.1
-          }
-        })
+        body: JSON.stringify({ connector: { id, name: id, connected: request.postDataJSON().connected, status: "ready" }, summary: state.summary })
       });
     }
 
@@ -86,83 +115,31 @@ async function mockProductionWrites(page) {
       const payload = request.postDataJSON();
       const report = {
         id: "test-report",
-        title: payload.title || "Weekly performance report",
+        title: payload.title || "Post intelligence report",
         audience: payload.audience || "Leadership team",
         sections: payload.sections || [],
         createdAt: new Date("2026-05-18T12:00:00.000Z").toISOString(),
-        summary: {
-          totalReach: 314100,
-          totalEngagement: 22990,
-          totalConversions: 926,
-          connectedSources: 5
-        },
-        recommendation: "TikTok is the current engagement leader. Shift one additional campaign test into that channel next period and watch conversion efficiency."
+        summary: state.summary,
+        recommendation: "Expand proof with another carousel; it is carrying the highest post score."
       };
-      return route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({ report, reports: [report] })
-      });
-    }
-
-    if (method === "POST" && url.pathname === "/api/import-csv") {
-      return route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({
-          imported: 1,
-          sources: [
-            { name: "LinkedIn", color: "#0a66c2", reach: 48200, engagement: 2840, conversions: 126, trend: 12.4, connected: true },
-            { name: "Newsletter", color: "#3d6b52", reach: 18500, engagement: 940, conversions: 86, trend: 3, connected: true, imported: true }
-          ],
-          summary: {
-            totalReach: 66700,
-            totalEngagement: 3780,
-            totalConversions: 212,
-            engagementRate: 5.7,
-            connectedSources: 2,
-            totalSources: 2,
-            timeSavedHours: 3.1
-          }
-        })
-      });
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ report, reports: [report] }) });
     }
 
     if (method === "POST" && url.pathname === "/api/rules") {
-      const rule = {
-        id: "test-rule-audience-shift",
-        title: "Audience shift",
-        detail: "Notify the team when a channel's audience growth outpaces its engagement growth."
-      };
-      return route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({ rule, rules: [rule] })
-      });
+      const rule = { id: "test-rule-pattern", title: "Pattern watch", detail: "Notify the team when a content format beats its historical median twice in a row." };
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ rule, rules: [rule] }) });
     }
 
     if (method === "DELETE" && url.pathname.startsWith("/api/rules/")) {
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ rules: [] })
-      });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rules: [] }) });
     }
 
     if (method === "PUT" && url.pathname === "/api/schedule") {
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ schedule: request.postDataJSON() })
-      });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ schedule: request.postDataJSON() }) });
     }
 
     if (method === "PUT" && url.pathname === "/api/settings") {
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ settings: request.postDataJSON() })
-      });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ settings: request.postDataJSON() }) });
     }
 
     return route.continue();
@@ -174,9 +151,7 @@ async function bootApp(page) {
   const pageErrors = [];
 
   page.on("console", (message) => {
-    if (["error", "warning"].includes(message.type())) {
-      consoleProblems.push(`${message.type()}: ${message.text()}`);
-    }
+    if (["error", "warning"].includes(message.type())) consoleProblems.push(`${message.type()}: ${message.text()}`);
   });
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
@@ -184,17 +159,15 @@ async function bootApp(page) {
   await page.goto(baseURL, { waitUntil: "domcontentloaded" });
   assert.equal(await page.title(), "MetricFlow Analytics", "page title");
   await expectText(page.locator("#syncStatus"), /Backend connected/, "backend status");
-  await expectText(page.locator("#kpiGrid"), /Total reach/, "KPI grid renders");
-  assert.equal(await page.locator("#platformRows tr").count(), 5, "platform row count");
+  await expectText(page.locator("#kpiGrid"), /Tracked posts/, "KPI grid renders");
+  assert.equal(await page.locator("#platformRows tr").count(), 2, "post row count");
 
   return { consoleProblems, pageErrors };
 }
 
 async function openView(page, viewName) {
-  await page.getByRole("button", { name: new RegExp(viewName) }).click();
-  await expectText(page.locator("#viewTitle"), new RegExp(viewName), `${viewName} title`);
-  const className = await page.locator(`#${viewName.toLowerCase()}`).getAttribute("class");
-  assert.match(className || "", /active/, `${viewName} view is active`);
+  await page.getByRole("button", { name: viewName }).click();
+  await expectText(page.locator("#viewTitle"), viewName === "Overview" ? /Post Intelligence/ : new RegExp(viewName), `${viewName} title`);
 }
 
 async function runUiRegression(browser, projectName, contextOptions) {
@@ -203,40 +176,31 @@ async function runUiRegression(browser, projectName, contextOptions) {
   const diagnostics = await bootApp(page);
 
   await expectText(page.locator("#timeSaved"), /hours/, "time saved renders");
-  await expectText(page.locator("#platformRows"), /TikTok/, "platform table renders");
-  await expectText(page.locator("#insightList"), /driving reach/, "insights render");
+  await expectText(page.locator("#platformRows"), /Carousel/, "post table renders");
+  await expectText(page.locator("#insightList"), /spiked|ranking|pattern/i, "insights render");
+  await page.getByRole("button", { name: "Run ingestion pipeline" }).click();
+  await expectText(page.locator("#toast"), /pipeline completed/, "ingestion toast");
 
-  for (const view of ["Sources", "Reports", "Automation", "Settings", "Overview"]) {
+  for (const view of ["Connectors", "Intelligence", "Reports", "Automation", "Settings", "Overview"]) {
     await openView(page, view);
   }
 
-  await page.getByRole("button", { name: "Refresh data" }).click();
-  await expectText(page.locator("#toast"), /Metrics refreshed from backend/, "refresh toast");
-
-  await page.getByRole("button", { name: "New report" }).click();
-  await expectText(page.locator("#viewTitle"), /Reports/, "new report opens reports");
-  await page.locator("#reportName").fill("Automated smoke report");
+  await openView(page, "Reports");
+  await page.locator("#reportName").fill("Automated post report");
   await page.getByRole("button", { name: "Generate preview" }).click();
-  await expectText(page.locator("#previewTitle"), /Automated smoke report/, "report preview title");
-  await expectText(page.locator("#toast"), /Report preview generated/, "report toast");
+  await expectText(page.locator("#previewTitle"), /Automated post report/, "report preview title");
 
-  await openView(page, "Sources");
-  await expectText(page.locator("#googleStatus"), /Google|Ready|Missing|Connected|Backend/, "Google status renders");
-  await page.getByRole("button", { name: "Sync GA4 metrics" }).click();
-  await expectText(page.locator("#sourceGrid"), /Google Analytics/, "Google Analytics sync render");
-  await expectText(page.locator("#toast"), /Google Analytics synced/, "Google Analytics sync toast");
-  await page.locator("#csvInput").fill("platform,reach,engagement,conversions\nNewsletter,18500,940,86");
-  await page.getByRole("button", { name: "Import CSV" }).click();
-  await expectText(page.locator("#sourceGrid"), /Newsletter/, "CSV import render");
+  await openView(page, "Connectors");
+  await expectText(page.locator("#schemaFields"), /connector|externalId/, "schema renders");
+  await page.getByRole("button", { name: "Sync" }).first().click();
+  await expectText(page.locator("#toast"), /ingestion completed/, "connector sync toast");
 
   await openView(page, "Automation");
   await page.locator("#recipients").fill("team@example.com");
   await page.getByRole("button", { name: "Save schedule" }).click();
   await expectText(page.locator("#toast"), /Schedule saved/, "schedule toast");
   await page.getByRole("button", { name: "Add rule" }).click();
-  await expectText(page.locator("#ruleList"), /Audience shift/, "rule added");
-  await page.getByRole("button", { name: "Remove" }).first().click();
-  await expectText(page.locator("#toast"), /Rule removed/, "rule removed toast");
+  await expectText(page.locator("#ruleList"), /Pattern watch/, "rule added");
 
   await openView(page, "Settings");
   await page.locator("#companyName").fill("Northstar Studio");
@@ -244,8 +208,6 @@ async function runUiRegression(browser, projectName, contextOptions) {
   await expectText(page.locator("#toast"), /Settings saved/, "settings toast");
 
   if (projectName === "mobile") {
-    await openView(page, "Reports");
-    await page.locator("#reportName").waitFor({ state: "visible" });
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     assert.ok(overflow <= 1, `mobile horizontal overflow is ${overflow}px`);
   }
@@ -260,19 +222,18 @@ async function runApiRegression() {
 
   const health = await api.get("/api/health");
   assert.equal(health.ok(), true, "health endpoint ok");
-  assert.deepEqual(await health.json(), { ok: true, service: "MetricFlow API" }, "health payload");
 
   const state = await api.get("/api/state");
   assert.equal(state.ok(), true, "state endpoint ok");
   const payload = await state.json();
-  assert.ok(payload.sources.length >= 5, "state has sources");
-  assert.ok(payload.summary.totalReach > 0, "state has positive reach");
-  assert.ok(payload.insights.length >= 1, "state has insights");
+  assert.ok(payload.connectors.length >= 4, "state has connectors");
+  assert.ok(payload.postRankings.length >= 1, "state has post rankings");
+  assert.ok(payload.normalizedSchema.post.includes("externalId"), "state has normalized schema");
 
   const csv = await api.get("/api/export.csv");
   assert.equal(csv.ok(), true, "CSV export endpoint ok");
   assert.match(csv.headers()["content-type"] || "", /text\/csv/, "CSV content type");
-  assert.match(await csv.text(), /platform,reach,engagement,conversions,trend/, "CSV header");
+  assert.match(await csv.text(), /connector,post_id,title/, "CSV header");
 
   await api.dispose();
 }

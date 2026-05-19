@@ -1,17 +1,16 @@
 # MetricFlow Analytics
 
-A local MVP for automated social media analytics collection and reporting.
+A local MVP for post-level social and web analytics intelligence.
 
 ## What It Does
 
-- Connect or disconnect analytics sources such as LinkedIn, Instagram, TikTok, YouTube, Facebook, and Google Analytics.
-- View a normalized KPI dashboard for reach, engagement, conversions, source count, trends, and generated insights.
-- Import unsupported sources with simple CSV data.
-- Generate a client-ready report preview from selected sections.
-- Export the current platform scorecard as CSV.
-- Configure scheduled reporting and automation rules.
-- Connect Google Analytics through OAuth and sync GA4 metrics into the dashboard.
-- Save workspace settings, connected sources, imported CSV data, rules, reports, and schedules through the local backend.
+- Connects Instagram, LinkedIn, YouTube, and GA4 as separate connector definitions instead of hardcoded aggregate sources.
+- Runs an ingestion path shaped as OAuth > fetch posts > fetch metrics > normalize > store.
+- Stores one internal normalized post schema and separate historical metric snapshots.
+- Supports daily metric history now, with schema fields for weekly and monthly rollups through `period` and `date`.
+- Replaces static insight templates with comparison engines for previous-vs-current movement, spikes, drops, post rankings, and content patterns.
+- Adds a content intelligence layer for winning formats, recommendations, and next-brief guidance.
+- Presents a post intelligence dashboard instead of a generic platform scorecard.
 
 ## Open It
 
@@ -27,67 +26,42 @@ Then open:
 http://localhost:4173
 ```
 
-The dashboard still has a browser-only fallback if you open `index.html` directly, but backend mode is the main path. Local development uses `data/store.json`; Cloudflare production uses D1.
+Local development uses `data/store.json`. If an older source-level store exists, the backend migrates runtime state to the new seeded post model.
 
-## Deploy
+## Data Model
 
-Cloudflare Pages hosts the static dashboard from `dist`, Cloudflare Pages Functions run `/api/*`, and Cloudflare D1 stores runtime data. No domain is required; Cloudflare gives you a `pages.dev` URL.
+The app now centers on these structures:
 
-1. In Cloudflare, create a D1 database named `metricflow-analytics`.
-2. Run `schema.sql` against that D1 database.
-3. In Cloudflare Pages, connect `VishuPS/metricflow-analytics`.
-4. Set the build command to `npm run build:cloudflare`.
-5. Set the build output directory to `dist`.
-6. Add a D1 binding in the Pages dashboard named `DB` that points to the `metricflow-analytics` database.
-7. Add these Pages environment variables when enabling Google Analytics:
-   - `GOOGLE_CLIENT_ID`
-   - `GOOGLE_CLIENT_SECRET`
-   - `GOOGLE_REDIRECT_URI=https://metricflow-analytics.pages.dev/api/google/callback`
-   - `GA4_PROPERTY_ID`
-8. Leave the deploy command blank in the Pages build settings. Do not use `npx wrangler deploy`; that command is for Workers, not Pages.
-9. Deploy, then confirm `/api/health` returns `{ "ok": true }`.
+- `connectors`: Instagram, LinkedIn, YouTube, and GA4 connector metadata, OAuth URLs, scopes, status, and last sync time.
+- `connections`: per-connector OAuth/demo connection state.
+- `posts`: normalized internal post records with `id`, `connector`, `externalId`, `canonicalUrl`, `title`, `caption`, `author`, `mediaType`, `campaign`, `contentPillar`, `tags`, `publishedAt`, and `ingestedAt`.
+- `metrics`: historical post metric snapshots with `postId`, `connector`, `period`, `date`, `reach`, `impressions`, `engagements`, `clicks`, `videoViews`, `watchSeconds`, `conversions`, and `revenue`.
 
-## Google Analytics
+The database version of this model lives in `schema.sql`.
 
-The MVP supports one global GA4 connection before app user accounts exist.
+## Connector Flow
 
-1. In Google Cloud Console, enable the Google Analytics Data API.
-2. Create an OAuth 2.0 web client.
-3. Add local and production redirect URIs:
+Connector routes follow the same contract for each platform:
 
-```text
-http://localhost:4173/api/google/callback
-https://metricflow-analytics.pages.dev/api/google/callback
-```
+- `GET /api/connectors`
+- `GET /api/connectors/:id/connect`
+- `GET /api/connectors/:id/callback`
+- `PATCH /api/connectors/:id`
+- `POST /api/connectors/:id/sync`
+- `POST /api/ingest/run`
 
-4. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and `GA4_PROPERTY_ID`.
-5. Apply the latest `schema.sql` to D1 so `google_connections` and `metric_snapshots` exist.
-6. Open Sources, connect Google Analytics, then sync GA4 metrics.
-
-If you deploy manually with Wrangler, use Pages deploy:
-
-```powershell
-npm run deploy:pages
-```
-
-To preserve local `data/store.json` data, generate a D1 seed file:
-
-```powershell
-npm run migrate:d1
-```
-
-Then run the generated `dist/d1-seed.sql` against D1 after `schema.sql`.
+Demo mode produces normalized sample posts and metrics. OAuth token exchange is wired for each connector, and the platform-specific fetch adapters are isolated behind `fetchConnectorPosts` / `normalizeRawPost` / `normalizeRawMetric` in `server.js`.
 
 ## API
 
 - `GET /api/health`
 - `GET /api/state`
-- `GET /api/google/status`
-- `GET /api/google/connect`
-- `GET /api/google/callback`
-- `POST /api/sources/google-analytics/sync`
-- `PATCH /api/sources/:name`
-- `POST /api/import-csv`
+- `GET /api/connectors`
+- `GET /api/connectors/:id/connect`
+- `GET /api/connectors/:id/callback`
+- `PATCH /api/connectors/:id`
+- `POST /api/connectors/:id/sync`
+- `POST /api/ingest/run`
 - `POST /api/reports`
 - `GET /api/reports`
 - `GET /api/export.csv`
@@ -96,15 +70,42 @@ Then run the generated `dist/d1-seed.sql` against D1 after `schema.sql`.
 - `POST /api/rules`
 - `DELETE /api/rules/:id`
 
+## Deploy
+
+Cloudflare Pages hosts the static dashboard from `dist`, Cloudflare Pages Functions run `/api/*`, and Cloudflare D1 can use the normalized schema in `schema.sql`.
+
+1. Create or migrate a D1 database.
+2. Run `schema.sql`.
+3. Set the build command to `npm run build:cloudflare`.
+4. Set the build output directory to `dist`.
+5. Add connector OAuth variables from `.env.example`.
+6. Deploy and confirm `/api/health` returns `{ "ok": true }`.
+
+## Auto-Deploy
+
+This repo includes `.github/workflows/cloudflare-pages.yml`. Every push to `main` builds the app and deploys `dist` to the Cloudflare Pages project named `metricflow-analytics`.
+
+Add these GitHub repository secrets before the first workflow run:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
+The API token needs Cloudflare Pages edit permissions for the account. You can also run the workflow manually from the GitHub Actions tab with `workflow_dispatch`.
+
+To generate D1 seed SQL from local `data/store.json`:
+
+```powershell
+npm run migrate:d1
+```
+
 ## Files
 
-- `index.html` - application structure and views.
+- `index.html` - post intelligence UI structure.
 - `styles.css` - responsive product UI.
-- `app.js` - frontend API client, report generation, CSV import/export, and UI interactions.
-- `server.js` - local HTTP server, API routes, static serving, and JSON persistence.
-- `functions/api/[[path]].js` - Cloudflare Pages Functions API adapter backed by D1.
-- `schema.sql` - Cloudflare D1 table definitions.
-- `.env.example` - local Google Analytics integration variables.
+- `app.js` - frontend API client, ranking views, content intelligence, and report preview.
+- `server.js` - local HTTP server, connector architecture, ingestion pipeline, comparison engines, and JSON persistence.
+- `functions/api/[[path]].js` - Cloudflare Pages Functions API adapter with the post-level contract.
+- `schema.sql` - normalized connector, post, and historical metric table definitions.
+- `.env.example` - connector OAuth environment variables.
 - `scripts/migrate-to-d1.js` - generates one-time seed SQL from `data/store.json`.
 - `scripts/build-cloudflare.js` - copies static frontend files into `dist` for Cloudflare Pages.
-- `data/store.json` - local fallback data store created automatically and ignored by Git.
