@@ -145,6 +145,7 @@ function renderInsights() {
 }
 
 function renderConnectors() {
+  const apiBaseUrl = window.METRICFLOW_API_BASE_URL || "";
   document.querySelector("#sourceGrid").innerHTML = (state.connectors || []).map((connector) => `
     <article class="source-card">
       <header>
@@ -162,7 +163,7 @@ function renderConnectors() {
         <button class="secondary-button" data-connector="${connector.id}" type="button">${connector.connected ? "Pause" : "Enable"}</button>
         <button class="primary-button" data-sync-connector="${connector.id}" type="button">Sync</button>
       </div>
-      <a class="connector-link" href="/api/connectors/${connector.id}/connect">OAuth setup</a>
+      <a class="connector-link" href="${apiBaseUrl}/api/connectors/${connector.id}/connect">OAuth setup</a>
     </article>
   `).join("");
 }
