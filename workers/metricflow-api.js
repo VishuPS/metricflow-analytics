@@ -7,7 +7,7 @@ const connectors = {
     color: "#0a66c2",
     authUrl: "https://www.linkedin.com/oauth/v2/authorization",
     tokenUrl: "https://www.linkedin.com/oauth/v2/accessToken",
-    scopes: ["r_liteprofile", "r_organization_social", "rw_organization_admin"]
+    scopes: ["openid", "profile", "r_organization_admin", "r_organization_social"]
   },
   instagram: {
     id: "instagram",
@@ -295,10 +295,13 @@ function authorize(source, request, env) {
   if (!config.clientSecret) return oauthSetupRequired(source, env, `${source.toUpperCase()}_CLIENT_SECRET`);
 
   const target = new URL(config.connector.authUrl);
+  const scopes = env[`${source.toUpperCase()}_SCOPES`]
+    ? env[`${source.toUpperCase()}_SCOPES`].split(/[,\s]+/).map((scope) => scope.trim()).filter(Boolean)
+    : config.connector.scopes;
   target.searchParams.set("client_id", config.clientId);
   target.searchParams.set("redirect_uri", config.redirectUri);
   target.searchParams.set("response_type", "code");
-  target.searchParams.set("scope", config.connector.scopes.join(" "));
+  target.searchParams.set("scope", scopes.join(" "));
   if (source === "youtube" || source === "ga4") {
     target.searchParams.set("access_type", "offline");
     target.searchParams.set("prompt", "consent");
@@ -488,12 +491,12 @@ async function ingestSource(source, options, env) {
 }
 
 async function fetchLinkedInProfile(accessToken) {
-  const response = await fetch("https://api.linkedin.com/v2/me", {
+  const response = await fetch("https://api.linkedin.com/v2/userinfo", {
     headers: { authorization: `Bearer ${accessToken}`, "x-restli-protocol-version": "2.0.0" }
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || "LinkedIn profile API request failed");
-  return payload;
+  return { id: payload.sub || payload.id, ...payload };
 }
 
 async function fetchLinkedInOrganizations(accessToken) {
