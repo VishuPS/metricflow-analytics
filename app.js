@@ -39,10 +39,12 @@ function showToast(message) {
 }
 
 function navigate(path) {
-  const samePath = window.location.pathname === path;
+  const shouldScrollTop = path === "/" || window.location.pathname === path;
   window.history.pushState({}, "", path);
-  if (samePath) window.scrollTo({ top: 0, behavior: "smooth" });
   render();
+  if (shouldScrollTop) {
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+  }
 }
 
 function captureOAuthReturn() {
