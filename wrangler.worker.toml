@@ -9,8 +9,8 @@ kv_namespaces = [
 
 [vars]
 LINKEDIN_DEMO_MODE = "false"
-CORS_ORIGIN = "https://metricflow-analytics.pages.dev"
-PAGES_URL = "https://metricflow-analytics.pages.dev"
+CORS_ORIGIN = "https://metrillix.com"
+PAGES_URL = "https://metrillix.com"
 
 [triggers]
 crons = ["15 * * * *"]

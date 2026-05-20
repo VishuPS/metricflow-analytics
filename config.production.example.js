@@ -1,1 +1,2 @@
-window.METRICFLOW_API_BASE_URL = "https://metricflow-api.YOUR_WORKERS_SUBDOMAIN.workers.dev";
+window.METRICFLOW_CLOUDFLARE_APP_URL = "https://metrillix.com";
+window.METRICFLOW_API_BASE_URL = "https://api.metrillix.com";

@@ -169,6 +169,16 @@ For GitHub Actions, add matching repository secrets if you want the workflow env
 - `LINKEDIN_CLIENT_SECRET`
 - `LINKEDIN_REDIRECT_URI`
 
+## Production Domain
+
+The production dashboard is configured for:
+
+- App: `https://metrillix.com`
+- API: `https://api.metrillix.com`
+- LinkedIn OAuth callback: `https://api.metrillix.com/oauth/linkedin/callback`
+
+Cloudflare should host `metrillix.com` as an active zone, with Cloudflare Pages attached to the apex domain and the Worker API attached to `api.metrillix.com`. In GitHub repository secrets, set `LINKEDIN_REDIRECT_URI` to the callback URL above before deploying. In the LinkedIn Developer app, add the same callback URL to the authorized redirect URLs.
+
 Pages can call the Worker in two ways:
 
 - Same-origin during local development: leave `config.js` as `""`.
