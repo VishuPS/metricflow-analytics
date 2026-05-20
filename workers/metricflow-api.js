@@ -514,6 +514,7 @@ async function authorizeWithAccount(source, request, env, config) {
   target.searchParams.set("response_type", "code");
   target.searchParams.set("scope", scopes.join(" "));
   target.searchParams.set("state", stateToken);
+  if (source === "linkedin") target.searchParams.set("prompt", "login");
   if (source === "youtube" || source === "ga4") {
     target.searchParams.set("access_type", "offline");
     target.searchParams.set("prompt", "consent");
