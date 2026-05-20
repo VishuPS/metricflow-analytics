@@ -39,7 +39,9 @@ function showToast(message) {
 }
 
 function navigate(path) {
+  const samePath = window.location.pathname === path;
   window.history.pushState({}, "", path);
+  if (samePath) window.scrollTo({ top: 0, behavior: "smooth" });
   render();
 }
 
