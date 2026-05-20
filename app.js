@@ -8,6 +8,7 @@ const linkedInUserStorageKey = "metricflow.linkedinUserId";
 let session = readSession();
 let dashboardState = null;
 let linkedInState = null;
+let linkedInOAuthStatus = null;
 
 const routes = {
   "/": WelcomePage,
@@ -112,6 +113,16 @@ async function loadLinkedInState() {
   return linkedInState;
 }
 
+async function loadLinkedInOAuthStatus() {
+  try {
+    const result = await api("/api/connectors");
+    linkedInOAuthStatus = (result.connectors || []).find((connector) => connector.id === "linkedin") || null;
+  } catch {
+    linkedInOAuthStatus = null;
+  }
+  return linkedInOAuthStatus;
+}
+
 async function loadDashboardState() {
   dashboardState = await api("/api/state");
   return dashboardState;
@@ -201,11 +212,18 @@ function OnboardingPage() {
 }
 
 function ConnectLinkedInStep() {
+  const configured = linkedInOAuthStatus?.configured !== false;
+  const helper = configured
+    ? "Connect the LinkedIn account that administers the organizations you want to analyze."
+    : "LinkedIn OAuth is not configured in the backend yet. Add the app-level LinkedIn client id and secret as Cloudflare Worker secrets.";
+  const action = configured
+    ? `<a class="primary-button link-button" href="${apiBaseUrl}/api/connectors/linkedin/connect" data-connect-linkedin>Connect LinkedIn</a>`
+    : `<button class="primary-button" type="button" disabled>Connect LinkedIn</button>`;
   return `
     <p class="eyebrow">Step 1</p>
     <h1>Connect LinkedIn</h1>
-    <p class="muted">Connect the LinkedIn account that administers the organizations you want to analyze.</p>
-    <a class="primary-button link-button" href="${apiBaseUrl}/api/connectors/linkedin/connect" data-connect-linkedin>Connect LinkedIn</a>
+    <p class="muted">${helper}</p>
+    ${action}
   `;
 }
 
@@ -261,6 +279,7 @@ function Dashboard() {
 async function hydrateOnboarding() {
   const container = document.querySelector("#onboardingContent");
   if (!container) return;
+  await loadLinkedInOAuthStatus();
   const details = await loadLinkedInState();
   const organizations = details.organizations || [];
   if (!organizations.length) {
@@ -341,6 +360,8 @@ async function handleAppClick(event) {
 
   if (event.target.closest("[data-connect-linkedin]")) {
     event.preventDefault();
+    // LinkedIn client id/secret never live in the frontend. The Worker owns
+    // OAuth configuration and returns a LinkedIn authorization redirect.
     window.location.href = `${apiBaseUrl}/api/connectors/linkedin/connect`;
     return;
   }
