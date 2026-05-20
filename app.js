@@ -150,14 +150,79 @@ function TopNav({ right = "login" } = {}) {
 function WelcomePage() {
   return `
     ${TopNav()}
-    <main class="page-shell hero-shell">
-      <section class="hero">
-        <p class="eyebrow">LinkedIn analytics for modern teams</p>
-        <h1>Turn LinkedIn performance into clear decisions.</h1>
-        <p class="hero-copy">Connect your LinkedIn account, choose the organization you manage, and keep your analytics workspace focused on the right tenant.</p>
-        <div class="hero-actions">
-          <button class="primary-button" data-route="/signup">Get Started</button>
-          <button class="text-button" data-route="/login">Log in</button>
+    <main>
+      <section class="welcome-hero">
+        <div class="welcome-copy">
+          <p class="eyebrow">LinkedIn intelligence workspace</p>
+          <h1>MetricFlow turns campaign noise into decisions.</h1>
+          <p class="hero-copy">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed posuere, risus vel feugiat facilisis, arcu mi cursus neque, vitae luctus urna augue at justo.</p>
+          <div class="hero-actions">
+            <button class="primary-button" data-route="/signup">Get Started</button>
+            <button class="text-button" data-route="/login">Log in</button>
+          </div>
+        </div>
+        <div class="product-preview" aria-label="MetricFlow dashboard preview">
+          <div class="preview-toolbar">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="preview-header">
+            <div>
+              <small>Weekly overview</small>
+              <strong>LinkedIn performance</strong>
+            </div>
+            <b>+18.4%</b>
+          </div>
+          <div class="preview-grid">
+            <div><small>Reach</small><strong>84.2k</strong></div>
+            <div><small>Engagement</small><strong>9.8k</strong></div>
+            <div><small>Clicks</small><strong>2.1k</strong></div>
+          </div>
+          <div class="preview-chart">
+            <span style="height: 42%"></span>
+            <span style="height: 68%"></span>
+            <span style="height: 55%"></span>
+            <span style="height: 82%"></span>
+            <span style="height: 74%"></span>
+            <span style="height: 92%"></span>
+          </div>
+          <div class="preview-row"><span>Top post movement</span><strong>Review</strong></div>
+          <div class="preview-row"><span>Campaign signal</span><strong>Ready</strong></div>
+        </div>
+      </section>
+      <section class="welcome-band">
+        <div class="section-heading welcome-heading">
+          <div>
+            <p class="eyebrow">What it does</p>
+            <h2>Built for clear reporting loops.</h2>
+          </div>
+          <p class="muted">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer non justo eget lectus consequat varius.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <span class="feature-icon blue-mark"></span>
+            <h3>Connect</h3>
+            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec at justo vitae sem finibus facilisis.</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon green-mark"></span>
+            <h3>Analyze</h3>
+            <p>Praesent vitae lectus sed erat aliquet tincidunt. Nullam sit amet purus id lacus feugiat suscipit.</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon amber-mark"></span>
+            <h3>Report</h3>
+            <p>Morbi congue neque id metus placerat, ac fermentum justo cursus. Duis non arcu non sem interdum.</p>
+          </article>
+        </div>
+      </section>
+      <section class="welcome-band split-band">
+        <div>
+          <p class="eyebrow">For teams</p>
+          <h2>One place for post performance and next actions.</h2>
+        </div>
+        <div class="copy-columns">
+          <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse faucibus tellus ac augue dapibus, sed efficitur augue ultrices.</p>
+          <p>Aliquam erat volutpat. Vivamus placerat tortor ac sapien sagittis, sed imperdiet mi consequat. Cras mattis libero a sapien laoreet.</p>
         </div>
       </section>
     </main>
