@@ -144,8 +144,7 @@ function TopNav({ right = "login" } = {}) {
   return `
     <header class="top-nav">
       <a class="brand-link" href="/" data-route="/" aria-label="MetricFlow home">
-        <span class="brand-dot"></span>
-        <span>MetricFlow</span>
+        <img class="brand-logo" src="/assets/metric-flow-logo.png" alt="MetricFlow">
       </a>
       <nav>${links}</nav>
     </header>

@@ -62,18 +62,17 @@ button {
 .brand-link {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-size: 18px;
-  font-weight: 800;
+  width: 220px;
+  height: 58px;
   text-decoration: none;
 }
 
-.brand-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  background: var(--blue);
-  box-shadow: 0 0 0 7px var(--blue-soft);
+.brand-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: left center;
 }
 
 .top-nav nav {
@@ -770,6 +769,11 @@ input:focus {
     flex: 0 0 auto;
     white-space: nowrap;
     font-size: 14px;
+  }
+
+  .brand-link {
+    width: 180px;
+    height: 52px;
   }
 
   .page-shell {
