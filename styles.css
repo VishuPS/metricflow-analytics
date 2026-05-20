@@ -79,6 +79,8 @@ button {
   display: flex;
   align-items: center;
   gap: 18px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .nav-link,
@@ -86,6 +88,19 @@ button {
 .inline-link {
   color: var(--blue-dark);
   font-weight: 700;
+}
+
+.nav-signup {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 16px;
+  background: var(--blue);
+  color: var(--white);
+  font-weight: 800;
 }
 
 .page-shell {
@@ -369,6 +384,134 @@ h2 {
   gap: 28px;
 }
 
+.marketing-page {
+  background: var(--white);
+}
+
+.front-hero,
+.front-section,
+.front-cta {
+  width: min(1080px, calc(100% - 40px));
+  margin: 0 auto;
+}
+
+.front-hero {
+  min-height: 620px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 22px;
+  padding: 88px 0;
+  text-align: center;
+}
+
+.front-hero h1 {
+  max-width: 820px;
+  margin-bottom: 0;
+}
+
+.front-hero p {
+  max-width: 620px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1.7;
+}
+
+.front-section {
+  padding: 84px 0;
+  border-top: 1px solid var(--line);
+}
+
+.section-intro,
+.about-section,
+.policy-section,
+.front-cta {
+  text-align: center;
+}
+
+.section-intro {
+  max-width: 680px;
+  margin: 0 auto 34px;
+}
+
+.section-intro h2,
+.about-section h2,
+.front-cta h2 {
+  font-size: 34px;
+  line-height: 1.15;
+}
+
+.feature-placeholder {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  margin-bottom: 18px;
+  background: var(--blue-soft);
+  color: var(--blue-dark);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.about-section {
+  max-width: 760px;
+}
+
+.about-section p,
+.policy-section p {
+  max-width: 720px;
+  margin: 0 auto;
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+.policy-section {
+  padding: 48px 0;
+}
+
+.front-cta {
+  display: grid;
+  place-items: center;
+  gap: 22px;
+  padding: 86px 0;
+  border-top: 1px solid var(--line);
+}
+
+.front-cta h2 {
+  margin-bottom: 0;
+}
+
+.front-footer {
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+  border-top: 1px solid var(--line);
+  padding: 30px 20px;
+  text-align: center;
+}
+
+.front-footer nav {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.front-footer a {
+  color: var(--blue-dark);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.front-footer p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .hero-actions {
   display: flex;
   align-items: center;
@@ -592,7 +735,32 @@ input:focus {
 
 @media (max-width: 760px) {
   .top-nav {
+    min-height: auto;
     padding: 0 20px;
+    gap: 14px;
+    align-items: center;
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+
+  .top-nav nav {
+    flex: 1;
+    flex-wrap: nowrap;
+    gap: 10px 14px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .top-nav nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-link,
+  .nav-signup {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    font-size: 14px;
   }
 
   .page-shell {
@@ -628,6 +796,31 @@ input:focus {
   .welcome-band {
     width: min(100% - 28px, 1120px);
     padding: 48px 0;
+  }
+
+  .front-hero,
+  .front-section,
+  .front-cta {
+    width: min(100% - 28px, 1080px);
+  }
+
+  .front-hero {
+    min-height: 520px;
+    padding: 58px 0;
+  }
+
+  .front-hero p {
+    font-size: 17px;
+  }
+
+  .section-intro h2,
+  .about-section h2,
+  .front-cta h2 {
+    font-size: 28px;
+  }
+
+  .front-section {
+    padding: 58px 0;
   }
 
   .auth-card,
