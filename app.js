@@ -3,7 +3,6 @@ const toast = document.querySelector("#toast");
 const apiBaseUrl = window.METRICFLOW_API_BASE_URL || "";
 const appUrl = window.METRICFLOW_CLOUDFLARE_APP_URL || window.location.origin;
 const sessionKey = "metricflow.session";
-const linkedInUserStorageKey = "metricflow.linkedinUserId";
 
 let session = readSession();
 let dashboardState = null;
@@ -25,7 +24,6 @@ function readSession() {
 function saveSession(nextSession) {
   session = { ...session, ...nextSession };
   localStorage.setItem(sessionKey, JSON.stringify(session));
-  if (session.linkedInUserId) localStorage.setItem(linkedInUserStorageKey, session.linkedInUserId);
 }
 
 function clearSession() {
@@ -61,7 +59,7 @@ function captureOAuthReturn() {
 
 async function api(path, options = {}) {
   const headers = { "content-type": "application/json", ...(options.headers || {}) };
-  const linkedInUserId = session.linkedInUserId || localStorage.getItem(linkedInUserStorageKey);
+  const linkedInUserId = session.linkedInUserId;
   if (linkedInUserId) headers["x-metricflow-user-id"] = linkedInUserId;
   if (session.token) headers.authorization = `Bearer ${session.token}`;
 
@@ -87,7 +85,7 @@ async function authenticate(mode, form) {
     email: result.email || payload.email,
     token: result.token || result.accessToken || session.token || "",
     accountId: result.userId || result.id || session.accountId || "",
-    linkedInUserId: result.linkedinUserId || session.linkedInUserId || localStorage.getItem(linkedInUserStorageKey) || ""
+    linkedInUserId: result.linkedinUserId || ""
   });
   navigate("/dashboard/onboarding");
 }
@@ -396,7 +394,7 @@ async function render() {
   const route = routes[path] ? path : "/";
   const isPrivate = route.startsWith("/dashboard");
 
-  if (isPrivate && !session.email && !session.accountId && !session.linkedInUserId && !localStorage.getItem(linkedInUserStorageKey)) {
+  if (isPrivate && !session.email && !session.accountId && !session.linkedInUserId) {
     window.history.replaceState({}, "", "/login");
     app.innerHTML = LoginPage();
     wirePageEvents();

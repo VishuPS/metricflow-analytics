@@ -613,7 +613,7 @@ function resolveLinkedInUserId(request, state) {
   const fromHeader = request.headers.get("x-metricflow-user-id");
   const fromQuery = requestUrl.searchParams.get("userId");
   const fromCookie = parseCookie(request.headers.get("cookie") || "").metricflow_linkedin_user;
-  const userId = fromHeader || fromQuery || fromCookie || state.sources?.linkedin?.userId;
+  const userId = fromHeader || fromQuery || fromCookie;
   if (!userId) {
     const error = new Error("LinkedIn user id is required");
     error.status = 401;
