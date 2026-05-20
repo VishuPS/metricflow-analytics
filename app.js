@@ -148,10 +148,10 @@ function TopNav({ right = "login" } = {}) {
 
   return `
     <header class="top-nav">
-      <button class="brand-link" data-route="/" aria-label="MetricFlow home">
+      <a class="brand-link" href="/" data-route="/" aria-label="MetricFlow home">
         <span class="brand-dot"></span>
         <span>MetricFlow</span>
-      </button>
+      </a>
       <nav>${links}</nav>
     </header>
   `;
@@ -410,6 +410,7 @@ function wirePageEvents() {
 async function handleAppClick(event) {
   const routeTarget = event.target.closest("[data-route]");
   if (routeTarget) {
+    event.preventDefault();
     navigate(routeTarget.dataset.route);
     return;
   }

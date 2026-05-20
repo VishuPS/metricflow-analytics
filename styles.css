@@ -65,6 +65,7 @@ button {
   gap: 10px;
   font-size: 18px;
   font-weight: 800;
+  text-decoration: none;
 }
 
 .brand-dot {
@@ -738,14 +739,15 @@ input:focus {
     min-height: auto;
     padding: 0 20px;
     gap: 14px;
-    align-items: center;
+    align-items: stretch;
+    flex-direction: column;
     padding-top: 16px;
     padding-bottom: 16px;
   }
 
   .top-nav nav {
-    flex: 1;
     flex-wrap: nowrap;
+    justify-content: flex-start;
     gap: 10px 14px;
     overflow-x: auto;
     padding-bottom: 2px;
