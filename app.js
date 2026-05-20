@@ -134,10 +134,11 @@ function TopNav({ right = "login" } = {}) {
   const links = right === "dashboard"
     ? `<button class="nav-link" data-route="/dashboard">Dashboard</button><button class="nav-link" data-logout>Log out</button>`
     : `<button class="nav-link" data-route="/login">Log in</button>`;
+  const homeRoute = right === "dashboard" ? "/dashboard" : "/";
 
   return `
     <header class="top-nav">
-      <button class="brand-link" data-route="/" aria-label="MetricFlow home">
+      <button class="brand-link" data-route="${homeRoute}" aria-label="MetricFlow home">
         <span class="brand-dot"></span>
         <span>MetricFlow</span>
       </button>
