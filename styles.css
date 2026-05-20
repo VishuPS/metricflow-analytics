@@ -484,6 +484,13 @@ h2 {
   margin-bottom: 0;
 }
 
+.front-cta p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
 .front-footer {
   display: grid;
   gap: 14px;

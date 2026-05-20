@@ -158,7 +158,7 @@ function WelcomePage() {
     <main class="marketing-page">
       <section class="front-hero" id="home">
         <h1>Analytics for LinkedIn, Simplified</h1>
-        <p>Track your LinkedIn performance with clean, actionable insights.</p>
+        <p>Track your LinkedIn performance with clean, actionable insights designed for creators, founders, and marketing teams.</p>
         <div class="hero-actions">
           <button class="primary-button" data-route="/signup">Get Started</button>
           <button class="text-button" data-route="/login">Log In</button>
@@ -168,45 +168,46 @@ function WelcomePage() {
       <section class="front-section" id="features">
         <div class="section-intro">
           <p class="eyebrow">Features</p>
-          <h2>Everything you need to understand LinkedIn performance.</h2>
+          <h2>Understand what works, what grows, and what deserves your next move.</h2>
         </div>
         <div class="feature-grid">
           <article class="feature-card">
             <span class="feature-placeholder">01</span>
             <h3>Post Performance Insights</h3>
-            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer vitae lorem at arcu facilisis pretium.</p>
+            <p>See exactly which posts resonate with your audience. Track impressions, clicks, reactions, comments, and shares — all in one place.</p>
           </article>
           <article class="feature-card">
             <span class="feature-placeholder">02</span>
             <h3>Audience Growth Tracking</h3>
-            <p>Praesent commodo augue sed risus posuere, non pulvinar mi laoreet. Donec luctus sem nec justo.</p>
+            <p>Understand who’s following your Page, how your audience is evolving, and what drives growth over time.</p>
           </article>
           <article class="feature-card">
             <span class="feature-placeholder">03</span>
             <h3>Engagement Analytics</h3>
-            <p>Suspendisse sit amet velit non neque consequat blandit. Aliquam erat volutpat sed tempor.</p>
+            <p>Measure engagement quality, identify trends, and discover the content formats that consistently perform best.</p>
           </article>
         </div>
       </section>
 
       <section class="front-section about-section" id="about">
         <p class="eyebrow">About Us</p>
-        <h2>Built to make LinkedIn reporting simple.</h2>
-        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Metrillix helps teams turn LinkedIn activity into clear reporting, practical insights, and better content decisions without unnecessary complexity.</p>
+        <h2>Metrillix helps professionals understand their LinkedIn impact.</h2>
+        <p>We built Metrillix because creators and businesses deserve analytics that are simple, accurate, and genuinely useful. Our platform turns raw LinkedIn data into clear insights — helping you grow your audience, improve your content strategy, and make smarter decisions with confidence.</p>
       </section>
 
       <section class="front-section policy-section" id="privacy">
         <p class="eyebrow">Privacy Policy</p>
-        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis et lectus sit amet arcu consequat tincidunt.</p>
+        <p>Metrillix collects only the data you explicitly authorize through LinkedIn OAuth. We never access personal messages, private data, or anything outside the permissions you grant. Your analytics belong to you — we do not sell, share, or aggregate your data across accounts. You can revoke access at any time through LinkedIn’s security settings.</p>
       </section>
 
       <section class="front-section policy-section" id="terms">
-        <p class="eyebrow">Terms</p>
-        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus non mauris sed turpis congue posuere.</p>
+        <p class="eyebrow">Terms of Service</p>
+        <p>By using Metrillix, you agree to use the platform responsibly and in compliance with LinkedIn’s API terms. You retain full ownership of your content and analytics. We provide the service “as is” and continuously improve it to ensure accuracy, reliability, and security.</p>
       </section>
 
       <section class="front-cta">
         <h2>Start analyzing your LinkedIn today</h2>
+        <p>Create your account and connect your LinkedIn Page in seconds.</p>
         <button class="primary-button" data-route="/signup">Create Account</button>
       </section>
     </main>
@@ -217,7 +218,7 @@ function WelcomePage() {
         <a href="#terms">Terms of Service</a>
         <a href="mailto:hello@metrillix.com">Contact</a>
       </nav>
-      <p>© 2026 Metrillix. All rights reserved.</p>
+      <p>© 2026 Metrillix — LinkedIn Analytics for Professionals</p>
     </footer>
   `;
 }
