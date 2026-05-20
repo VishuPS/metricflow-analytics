@@ -291,7 +291,8 @@ function authorize(source, request, env) {
   const url = new URL(request.url);
   const config = sourceEnv(source, env, url);
   if (!config.connector) return json({ message: "Unsupported source" }, env, 404);
-  if (!config.clientId) return json({ message: `Missing ${source.toUpperCase()}_CLIENT_ID` }, env, 400);
+  if (!config.clientId) return oauthSetupRequired(source, env, `${source.toUpperCase()}_CLIENT_ID`);
+  if (!config.clientSecret) return oauthSetupRequired(source, env, `${source.toUpperCase()}_CLIENT_SECRET`);
 
   const target = new URL(config.connector.authUrl);
   target.searchParams.set("client_id", config.clientId);
@@ -303,6 +304,38 @@ function authorize(source, request, env) {
     target.searchParams.set("prompt", "consent");
   }
   return Response.redirect(target.toString(), 302);
+}
+
+function oauthSetupRequired(source, env, missingName) {
+  const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MetricFlow OAuth setup required</title>
+    <style>
+      body { margin: 0; font-family: Inter, Arial, sans-serif; background: #fff; color: #14171a; }
+      main { width: min(680px, calc(100% - 40px)); margin: 96px auto; }
+      p { color: #667085; line-height: 1.7; }
+      code { background: #eaf8fd; color: #1689ba; padding: 3px 6px; border-radius: 6px; }
+      a { color: #1689ba; font-weight: 800; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p>MetricFlow</p>
+      <h1>LinkedIn OAuth setup required</h1>
+      <p>The app-level LinkedIn OAuth secret <code>${missingName}</code> is not configured on the Cloudflare Worker yet.</p>
+      <p>This is not a personal LinkedIn token. It belongs to the MetricFlow LinkedIn Developer app and lets each user connect their own LinkedIn account through OAuth.</p>
+      <p>Required redirect URI: <code>${env.LINKEDIN_REDIRECT_URI || "https://metricflow-api.vsooriarachchi.workers.dev/oauth/linkedin/callback"}</code></p>
+      <p><a href="${env.PAGES_URL || "https://metricflow-analytics.pages.dev"}/dashboard/onboarding">Return to onboarding</a></p>
+    </main>
+  </body>
+</html>`;
+  return cors(new Response(html, {
+    status: 400,
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
+  }), env);
 }
 
 async function callback(source, request, env) {

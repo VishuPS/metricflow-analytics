@@ -212,18 +212,14 @@ function OnboardingPage() {
 }
 
 function ConnectLinkedInStep() {
-  const configured = linkedInOAuthStatus?.configured !== false;
-  const helper = configured
-    ? "Connect the LinkedIn account that administers the organizations you want to analyze."
-    : "LinkedIn OAuth is not configured in the backend yet. Add the app-level LinkedIn client id and secret as Cloudflare Worker secrets.";
-  const action = configured
-    ? `<a class="primary-button link-button" href="${apiBaseUrl}/api/connectors/linkedin/connect" data-connect-linkedin>Connect LinkedIn</a>`
-    : `<button class="primary-button" type="button" disabled>Connect LinkedIn</button>`;
+  const helper = linkedInOAuthStatus?.configured === false
+    ? "Connect through the MetricFlow backend. If OAuth setup is still missing, the backend will show the required app configuration without storing any user tokens in the frontend."
+    : "Connect the LinkedIn account that administers the organizations you want to analyze.";
   return `
     <p class="eyebrow">Step 1</p>
     <h1>Connect LinkedIn</h1>
     <p class="muted">${helper}</p>
-    ${action}
+    <a class="primary-button link-button" href="${apiBaseUrl}/api/connectors/linkedin/connect" data-connect-linkedin>Connect LinkedIn</a>
   `;
 }
 
