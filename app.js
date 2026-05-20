@@ -1,487 +1,389 @@
-const seedState = {
-  connectors: [],
-  posts: [],
-  metrics: [],
-  postRankings: [],
-  insights: [],
-  patterns: [],
-  contentIntelligence: { recommendations: [], winningFormats: [], nextBrief: {} },
-  rules: [
-    { id: "rule-spike", title: "Spike detection", detail: "Flag posts whose engagement grows more than 35% versus their prior observation." }
-  ],
-  settings: {
-    companyName: "Northstar Studio",
-    defaultKpi: "Engagement rate",
-    autoRefresh: true
-  },
-  schedule: {
-    frequency: "Weekly",
-    day: "Monday",
-    recipients: "team@example.com"
-  },
-  reports: [],
-  summary: {
-    totalReach: 0,
-    totalEngagement: 0,
-    totalConversions: 0,
-    attributedRevenue: 0,
-    engagementRate: 0,
-    connectedSources: 0,
-    totalSources: 4,
-    trackedPosts: 0,
-    deltas: { reach: 0, engagement: 0, conversions: 0 },
-    timeSavedHours: 0
-  }
+const app = document.querySelector("#app");
+const toast = document.querySelector("#toast");
+const apiBaseUrl = window.METRICFLOW_API_BASE_URL || "";
+const appUrl = window.METRICFLOW_CLOUDFLARE_APP_URL || window.location.origin;
+const sessionKey = "metricflow.session";
+const linkedInUserStorageKey = "metricflow.linkedinUserId";
+
+let session = readSession();
+let dashboardState = null;
+let linkedInState = null;
+
+const routes = {
+  "/": WelcomePage,
+  "/signup": SignupPage,
+  "/login": LoginPage,
+  "/dashboard/onboarding": OnboardingPage,
+  "/dashboard": Dashboard
 };
 
-let state = loadFallbackState();
-let backendOnline = false;
-const linkedInUserStorageKey = "metricflow.linkedinUserId";
-let linkedInUserId = localStorage.getItem(linkedInUserStorageKey) || "";
-
-const numberFormatter = new Intl.NumberFormat("en-US");
-const currencyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const percentFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
-
-function loadFallbackState() {
-  return JSON.parse(localStorage.getItem("metricflow.state.v2") || "null") || structuredClone(seedState);
+function readSession() {
+  return JSON.parse(localStorage.getItem(sessionKey) || "null") || {};
 }
 
-function saveFallbackState() {
-  localStorage.setItem("metricflow.state.v2", JSON.stringify(state));
+function saveSession(nextSession) {
+  session = { ...session, ...nextSession };
+  localStorage.setItem(sessionKey, JSON.stringify(session));
+  if (session.userId) localStorage.setItem(linkedInUserStorageKey, session.userId);
 }
 
-async function api(path, options = {}) {
-  const baseUrl = window.METRICFLOW_API_BASE_URL || "";
-  const headers = { "content-type": "application/json", ...(options.headers || {}) };
-  if (linkedInUserId) headers["x-metricflow-user-id"] = linkedInUserId;
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...options,
-    headers
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: "Request failed" }));
-    throw new Error(error.message || "Request failed");
-  }
-  const type = response.headers.get("content-type") || "";
-  return type.includes("application/json") ? response.json() : response.text();
-}
-
-async function loadBackendState() {
-  try {
-    state = await api("/api/state");
-    backendOnline = true;
-    await refreshLinkedInOrganizations();
-    document.querySelector("#syncStatus").textContent = "Backend connected";
-  } catch {
-    backendOnline = false;
-    document.querySelector("#syncStatus").textContent = "Browser-only mode";
-  }
-}
-
-async function refreshLinkedInOrganizations() {
-  const linkedin = state.sources?.linkedin || {};
-  if (!linkedinUserId && linkedin.userId) {
-    linkedInUserId = linkedin.userId;
-    localStorage.setItem(linkedInUserStorageKey, linkedInUserId);
-  }
-  if (!linkedin.connected) return;
-  try {
-    state.linkedinOrganizations = await api("/api/linkedin/organizations");
-  } catch {
-    state.linkedinOrganizations = { organizations: [], selectedOrganization: linkedin.selectedOrganization || null };
-  }
-}
-
-function formatNumber(value) {
-  return numberFormatter.format(Math.round(Number(value || 0)));
-}
-
-function formatDelta(value) {
-  const number = Number(value || 0);
-  return `${number >= 0 ? "+" : ""}${percentFormatter.format(number)}%`;
-}
-
-function connectorName(id) {
-  return state.connectors.find((connector) => connector.id === id)?.name || id;
+function clearSession() {
+  session = {};
+  localStorage.removeItem(sessionKey);
 }
 
 function showToast(message) {
-  const toast = document.querySelector("#toast");
   toast.textContent = message;
   toast.classList.add("show");
   window.clearTimeout(showToast.timer);
   showToast.timer = window.setTimeout(() => toast.classList.remove("show"), 2600);
 }
 
-function renderKpis() {
-  const summary = state.summary || seedState.summary;
-  const kpis = [
-    ["Tracked posts", formatNumber(summary.trackedPosts), `${summary.connectedSources}/${summary.totalSources} connectors`],
-    ["Post reach", formatNumber(summary.totalReach), formatDelta(summary.deltas?.reach)],
-    ["Engagement rate", `${percentFormatter.format(summary.engagementRate)}%`, formatDelta(summary.deltas?.engagement)],
-    ["Attributed revenue", currencyFormatter.format(summary.attributedRevenue), formatDelta(summary.deltas?.conversions)]
+function navigate(path) {
+  window.history.pushState({}, "", path);
+  render();
+}
+
+function captureOAuthReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const linkedInUserId = params.get("linkedinUserId");
+  if (linkedInUserId) saveSession({ userId: linkedInUserId });
+  if (params.get("connector") === "connected") {
+    window.history.replaceState({}, "", "/dashboard/onboarding");
+    showToast("LinkedIn connected");
+  }
+}
+
+async function api(path, options = {}) {
+  const headers = { "content-type": "application/json", ...(options.headers || {}) };
+  const userId = session.userId || localStorage.getItem(linkedInUserStorageKey);
+  if (userId) headers["x-metricflow-user-id"] = userId;
+  if (session.token) headers.authorization = `Bearer ${session.token}`;
+
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...options,
+    headers
+  });
+  const type = response.headers.get("content-type") || "";
+  const payload = type.includes("application/json") ? await response.json().catch(() => ({})) : await response.text();
+  if (!response.ok) {
+    const message = typeof payload === "string" ? payload : payload.message;
+    throw new Error(message || "Request failed");
+  }
+  return payload;
+}
+
+async function authenticate(mode, form) {
+  const endpoints = mode === "signup" ? ["/api/signup", "/api/auth/signup"] : ["/api/login", "/api/auth/login"];
+  const payload = Object.fromEntries(new FormData(form).entries());
+  const result = await postFirstAvailable(endpoints, payload);
+  saveSession({
+    name: result.name || payload.name || session.name || "",
+    email: result.email || payload.email,
+    token: result.token || result.accessToken || session.token || "",
+    userId: result.userId || result.id || result.linkedinUserId || session.userId || ""
+  });
+  navigate("/dashboard/onboarding");
+}
+
+async function postFirstAvailable(endpoints, payload) {
+  let lastError;
+  for (const endpoint of endpoints) {
+    try {
+      return await api(endpoint, {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+    } catch (error) {
+      lastError = error;
+      if (!/not found|route/i.test(error.message)) throw error;
+    }
+  }
+  throw lastError || new Error("Authentication endpoint unavailable");
+}
+
+async function loadLinkedInState() {
+  try {
+    linkedInState = await api("/api/linkedin/organizations");
+  } catch {
+    linkedInState = { organizations: [], selectedOrganization: null };
+  }
+  return linkedInState;
+}
+
+async function loadDashboardState() {
+  dashboardState = await api("/api/state");
+  return dashboardState;
+}
+
+function TopNav({ right = "login" } = {}) {
+  const links = right === "dashboard"
+    ? `<button class="nav-link" data-route="/dashboard">Dashboard</button><button class="nav-link" data-logout>Log out</button>`
+    : `<button class="nav-link" data-route="/login">Log in</button>`;
+
+  return `
+    <header class="top-nav">
+      <button class="brand-link" data-route="/" aria-label="MetricFlow home">
+        <span class="brand-dot"></span>
+        <span>MetricFlow</span>
+      </button>
+      <nav>${links}</nav>
+    </header>
+  `;
+}
+
+function WelcomePage() {
+  return `
+    ${TopNav()}
+    <main class="page-shell hero-shell">
+      <section class="hero">
+        <p class="eyebrow">LinkedIn analytics for modern teams</p>
+        <h1>Turn LinkedIn performance into clear decisions.</h1>
+        <p class="hero-copy">Connect your LinkedIn account, choose the organization you manage, and keep your analytics workspace focused on the right tenant.</p>
+        <div class="hero-actions">
+          <button class="primary-button" data-route="/signup">Get Started</button>
+          <button class="text-button" data-route="/login">Log in</button>
+        </div>
+      </section>
+    </main>
+  `;
+}
+
+function SignupPage() {
+  return `
+    ${TopNav()}
+    <main class="page-shell auth-shell">
+      <section class="auth-card">
+        <p class="eyebrow">Create account</p>
+        <h1>Start with MetricFlow</h1>
+        <form data-auth="signup">
+          <label>Name<input name="name" autocomplete="name" required></label>
+          <label>Email<input name="email" type="email" autocomplete="email" required></label>
+          <label>Password<input name="password" type="password" autocomplete="new-password" required minlength="8"></label>
+          <button class="primary-button full" type="submit">Sign up</button>
+        </form>
+        <p class="muted">Already have an account? <button class="inline-link" data-route="/login">Log in</button></p>
+      </section>
+    </main>
+  `;
+}
+
+function LoginPage() {
+  return `
+    ${TopNav()}
+    <main class="page-shell auth-shell">
+      <section class="auth-card">
+        <p class="eyebrow">Welcome back</p>
+        <h1>Log in</h1>
+        <form data-auth="login">
+          <label>Email<input name="email" type="email" autocomplete="email" required></label>
+          <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+          <button class="primary-button full" type="submit">Log in</button>
+        </form>
+        <p class="muted">New to MetricFlow? <button class="inline-link" data-route="/signup">Create an account</button></p>
+      </section>
+    </main>
+  `;
+}
+
+function OnboardingPage() {
+  return `
+    ${TopNav({ right: "dashboard" })}
+    <main class="page-shell narrow-shell">
+      <section class="step-card" id="onboardingContent">
+        <p class="eyebrow">Onboarding</p>
+        <h1>Preparing your LinkedIn workspace</h1>
+        <p class="muted">Checking your connection and organization access.</p>
+      </section>
+    </main>
+  `;
+}
+
+function ConnectLinkedInStep() {
+  return `
+    <p class="eyebrow">Step 1</p>
+    <h1>Connect LinkedIn</h1>
+    <p class="muted">Connect the LinkedIn account that administers the organizations you want to analyze.</p>
+    <button class="primary-button" data-connect-linkedin>Connect LinkedIn</button>
+  `;
+}
+
+function SelectOrganizationStep(organizations, selectedOrganization) {
+  const items = organizations.map((organization) => `
+    <button class="org-option ${organization === selectedOrganization ? "selected" : ""}" data-organization="${organization}">
+      <span>${organization}</span>
+      <small>${organization === selectedOrganization ? "Selected" : "Choose"}</small>
+    </button>
+  `).join("");
+
+  return `
+    <p class="eyebrow">Step 2</p>
+    <h1>Select organization</h1>
+    <p class="muted">Choose the LinkedIn organization MetricFlow should use for post ingestion and analytics.</p>
+    <div class="org-list">${items}</div>
+  `;
+}
+
+function DashboardReadyStep() {
+  return `
+    <p class="eyebrow">Step 3</p>
+    <h1>Your dashboard is ready</h1>
+    <p class="muted">MetricFlow has an active LinkedIn organization. You can now load the analytics dashboard.</p>
+    <button class="primary-button" data-route="/dashboard">Open dashboard</button>
+  `;
+}
+
+function Dashboard() {
+  return `
+    ${TopNav({ right: "dashboard" })}
+    <main class="page-shell dashboard-shell">
+      <section class="dashboard-hero">
+        <div>
+          <p class="eyebrow">Dashboard</p>
+          <h1>LinkedIn analytics</h1>
+          <p class="muted" id="dashboardOrg">Loading selected organization.</p>
+        </div>
+        <button class="primary-button" data-sync-linkedin>Sync LinkedIn</button>
+      </section>
+      <section class="metrics-grid" id="metricsGrid"></section>
+      <section class="table-section">
+        <div class="section-heading">
+          <h2>Recent posts</h2>
+          <p class="muted">Normalized from the selected LinkedIn organization.</p>
+        </div>
+        <div class="post-list" id="postList"></div>
+      </section>
+    </main>
+  `;
+}
+
+async function hydrateOnboarding() {
+  const container = document.querySelector("#onboardingContent");
+  if (!container) return;
+  const details = await loadLinkedInState();
+  const organizations = details.organizations || [];
+  if (!organizations.length) {
+    container.innerHTML = ConnectLinkedInStep();
+    return;
+  }
+  if (!details.selectedOrganization) {
+    container.innerHTML = SelectOrganizationStep(organizations, details.selectedOrganization);
+    return;
+  }
+  container.innerHTML = DashboardReadyStep();
+}
+
+async function hydrateDashboard() {
+  const details = await loadLinkedInState();
+  if (!details.selectedOrganization) {
+    navigate("/dashboard/onboarding");
+    return;
+  }
+  document.querySelector("#dashboardOrg").textContent = details.selectedOrganization;
+
+  const state = await loadDashboardState();
+  const summary = state.summary || {};
+  const cards = [
+    ["Tracked posts", summary.trackedPosts || 0],
+    ["Reach", summary.totalReach || 0],
+    ["Engagements", summary.totalEngagement || 0],
+    ["Conversions", summary.totalConversions || 0]
   ];
 
-  document.querySelector("#kpiGrid").innerHTML = kpis.map(([label, value, change]) => `
-    <article class="kpi-card">
+  document.querySelector("#metricsGrid").innerHTML = cards.map(([label, value]) => `
+    <article class="metric-card">
       <span>${label}</span>
-      <strong>${value}</strong>
-      <div class="metric-change ${String(change).startsWith("-") ? "down" : ""}">${change}</div>
+      <strong>${Number(value || 0).toLocaleString()}</strong>
     </article>
   `).join("");
-}
 
-function renderPostRows() {
-  const rows = state.postRankings || [];
-  document.querySelector("#platformRows").innerHTML = rows.map((post, index) => `
-    <tr>
-      <td>
-        <div class="platform-name">
-          <span class="rank-badge">${index + 1}</span>
-          <div>
-            <strong>${post.title}</strong>
-            <small>${connectorName(post.connector)} / ${post.mediaType} / ${post.contentPillar}</small>
-          </div>
-        </div>
-      </td>
-      <td>${formatNumber(post.metrics?.reach)}</td>
-      <td>${formatNumber(post.metrics?.engagements)}</td>
-      <td>${formatNumber(post.metrics?.conversions)}</td>
-      <td class="${Number(post.engagementChange || 0) >= 0 ? "trend-up" : "trend-down"}">${formatDelta(post.engagementChange)}</td>
-    </tr>
-  `).join("");
-}
-
-function renderInsights() {
-  document.querySelector("#insightList").innerHTML = (state.insights || []).map((insight) => `
-    <article class="insight">
-      <span>${insight.type || "insight"}</span>
-      <strong>${insight.title}</strong>
-      <p>${insight.detail}</p>
-    </article>
-  `).join("");
-}
-
-function renderConnectors() {
-  const apiBaseUrl = window.METRICFLOW_API_BASE_URL || "";
-  document.querySelector("#sourceGrid").innerHTML = (state.connectors || []).map((connector) => `
-    <article class="source-card">
-      <header>
-        <div>
-          <strong>${connector.name}</strong>
-          <span>${connector.kind === "web" ? "Web analytics" : "Social posts"} connector</span>
-        </div>
-        <span class="connection-pill ${connector.connected ? "" : "off"}">${connector.connected ? "Connected" : "Paused"}</span>
-      </header>
-      <dl>
-        <div><dt>Status</dt><dd>${connector.configured ? "OAuth ready" : "Needs env"}</dd></div>
-        <div><dt>Last sync</dt><dd>${connector.lastSyncAt ? new Date(connector.lastSyncAt).toLocaleDateString() : "Never"}</dd></div>
-      </dl>
-      <div class="button-row">
-        <button class="secondary-button" data-connector="${connector.id}" type="button">${connector.connected ? "Pause" : "Enable"}</button>
-        <button class="primary-button" data-sync-connector="${connector.id}" type="button">Sync</button>
+  const posts = state.postRankings || [];
+  document.querySelector("#postList").innerHTML = posts.length ? posts.slice(0, 8).map((post) => `
+    <article class="post-row">
+      <div>
+        <strong>${post.title || post.post_id}</strong>
+        <span>${post.mediaType || "post"}</span>
       </div>
-      ${renderLinkedInOrganizationPicker(connector)}
-      <a class="connector-link" href="${apiBaseUrl}/api/connectors/${connector.id}/connect">OAuth setup</a>
+      <small>${Number(post.metrics?.engagements || 0).toLocaleString()} engagements</small>
     </article>
-  `).join("");
+  `).join("") : `<p class="empty-state">No posts yet. Sync LinkedIn to fetch analytics for the selected organization.</p>`;
 }
 
-function renderLinkedInOrganizationPicker(connector) {
-  if (connector.id !== "linkedin" || !connector.connected) return "";
-  const details = state.linkedinOrganizations || {};
-  const organizations = details.organizations || [];
-  const selected = details.selectedOrganization || "";
-  if (!organizations.length) return `<p class="connector-note">Reconnect LinkedIn to load administered organizations.</p>`;
-  return `
-    <label class="organization-picker">
-      Organization
-      <select data-linkedin-organization>
-        <option value="">Select organization</option>
-        ${organizations.map((organization) => `<option value="${organization}" ${organization === selected ? "selected" : ""}>${organization}</option>`).join("")}
-      </select>
-    </label>
-  `;
-}
-
-function renderPatterns() {
-  document.querySelector("#patternList").innerHTML = (state.patterns || []).map((pattern) => `
-    <article class="pattern-row">
-      <strong>${pattern.key}</strong>
-      <span>${pattern.posts} posts</span>
-      <span>${percentFormatter.format(pattern.engagementRate)}% ER</span>
-      <span>${percentFormatter.format(pattern.conversionRate)}% CVR</span>
-    </article>
-  `).join("");
-}
-
-function renderContentIntelligence() {
-  const intelligence = state.contentIntelligence || seedState.contentIntelligence;
-  document.querySelector("#recommendationList").innerHTML = (intelligence.recommendations || []).map((item) => `
-    <li>${item}</li>
-  `).join("");
-  const brief = intelligence.nextBrief || {};
-  document.querySelector("#nextBrief").innerHTML = `
-    <div><span>Pillar</span><strong>${brief.contentPillar || "Product Education"}</strong></div>
-    <div><span>Format</span><strong>${brief.format || "carousel"}</strong></div>
-    <p>${brief.angle || "Run a controlled test after the next ingestion cycle."}</p>
-  `;
-}
-
-function renderRules() {
-  document.querySelector("#ruleList").innerHTML = (state.rules || []).map((rule) => `
-    <article class="rule">
-      <strong>${rule.title}</strong>
-      <p>${rule.detail}</p>
-      <button class="secondary-button" data-remove-rule="${rule.id}" type="button">Remove</button>
-    </article>
-  `).join("");
-}
-
-function renderReport(report) {
-  const summary = report?.summary || state.summary || seedState.summary;
-  const title = report?.title || document.querySelector("#reportName").value.trim() || "Post intelligence report";
-  const audience = report?.audience || document.querySelector("#reportAudience").value;
-  const sections = report?.sections || [...document.querySelectorAll("fieldset input:checked")].map((input) => input.value);
-  const recommendation = report?.recommendation || state.contentIntelligence?.recommendations?.[0] || "Run ingestion before generating recommendations.";
-
-  document.querySelector("#previewTitle").textContent = title;
-  document.querySelector("#previewAudience").textContent = audience;
-  document.querySelector("#previewDate").textContent = new Date(report?.createdAt || Date.now()).toLocaleDateString(undefined, {
-    month: "long",
-    day: "numeric",
-    year: "numeric"
+function wirePageEvents() {
+  document.querySelectorAll("[data-route]").forEach((element) => {
+    element.addEventListener("click", () => navigate(element.dataset.route));
   });
-  document.querySelector("#previewContent").innerHTML = `
-    <h2>Executive Summary</h2>
-    <p>${state.settings.companyName} tracked ${formatNumber(summary.trackedPosts)} normalized posts across ${summary.connectedSources} connectors, producing ${formatNumber(summary.totalEngagement)} engagements and ${formatNumber(summary.totalConversions)} conversions.</p>
-    <h2>Included Sections</h2>
-    <ul>${sections.map((section) => `<li>${section}</li>`).join("")}</ul>
-    <h2>Top Recommendation</h2>
-    <p>${recommendation}</p>
-  `;
-}
 
-async function generateReport() {
-  const payload = {
-    title: document.querySelector("#reportName").value.trim() || "Post intelligence report",
-    audience: document.querySelector("#reportAudience").value,
-    sections: [...document.querySelectorAll("fieldset input:checked")].map((input) => input.value)
-  };
-
-  if (backendOnline) {
-    const result = await api("/api/reports", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-    state.reports = result.reports;
-    renderReport(result.report);
-  } else {
-    renderReport(payload);
-    saveFallbackState();
-  }
-  showToast("Report preview generated");
-}
-
-function exportCsv() {
-  if (backendOnline) {
-    window.location.href = "/api/export.csv";
-    showToast("Post CSV export requested");
-    return;
-  }
-  showToast("Backend required for post export");
-}
-
-async function toggleConnector(id) {
-  const connector = state.connectors.find((item) => item.id === id);
-  if (!connector) return;
-  const connected = !connector.connected;
-
-  if (backendOnline) {
-    const result = await api(`/api/connectors/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      body: JSON.stringify({ connected })
-    });
-    connector.connected = result.connector.connected;
-    connector.status = result.connector.status;
-    state.summary = result.summary;
-  } else {
-    connector.connected = connected;
-    saveFallbackState();
-  }
-  renderAll();
-  showToast(`${connector.name} ${connector.connected ? "enabled" : "paused"}`);
-}
-
-async function syncConnector(id) {
-  if (!backendOnline) {
-    showToast("Backend required for ingestion");
-    return;
-  }
-  const result = await api(`/api/connectors/${encodeURIComponent(id)}/sync`, { method: "POST" });
-  state = result.state;
-  await refreshLinkedInOrganizations();
-  renderAll();
-  showToast(`${connectorName(id)} ingestion completed`);
-}
-
-async function runIngestion() {
-  if (!backendOnline) {
-    showToast("Backend required for ingestion");
-    return;
-  }
-  const result = await api("/api/ingest/run", { method: "POST" });
-  state = result.state;
-  await refreshLinkedInOrganizations();
-  renderAll();
-  renderReport();
-  showToast("OAuth to posts to metrics pipeline completed");
-}
-
-function hydrateControls() {
-  document.querySelector("#companyName").value = state.settings.companyName;
-  document.querySelector("#defaultKpi").value = state.settings.defaultKpi;
-  document.querySelector("#autoRefresh").checked = state.settings.autoRefresh;
-  document.querySelector("#scheduleFrequency").value = state.schedule.frequency;
-  document.querySelector("#scheduleDay").value = state.schedule.day;
-  document.querySelector("#recipients").value = state.schedule.recipients;
-}
-
-function renderAll() {
-  renderKpis();
-  renderPostRows();
-  renderInsights();
-  renderConnectors();
-  renderPatterns();
-  renderContentIntelligence();
-  renderRules();
-  document.querySelector("#timeSaved").textContent = `${state.summary?.timeSavedHours || 0} hours`;
-  document.querySelector("#schemaFields").textContent = state.normalizedSchema?.post?.join(" / ") || "Waiting for backend schema";
-}
-
-function wireEvents() {
-  document.querySelectorAll(".nav-item").forEach((button) => {
-    button.addEventListener("click", () => {
-      document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
-      document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
-      button.classList.add("active");
-      document.querySelector(`#${button.dataset.view}`).classList.add("active");
-      document.querySelector("#viewTitle").textContent = button.dataset.title || button.textContent.trim();
+  document.querySelectorAll("[data-auth]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await authenticate(form.dataset.auth, form);
+      } catch (error) {
+        showToast(error.message);
+      }
     });
   });
 
-  document.querySelector("#sourceGrid").addEventListener("click", (event) => {
-    const toggle = event.target.closest("[data-connector]");
-    const sync = event.target.closest("[data-sync-connector]");
-    if (toggle) toggleConnector(toggle.dataset.connector).catch((error) => showToast(error.message));
-    if (sync) syncConnector(sync.dataset.syncConnector).catch((error) => showToast(error.message));
+  document.querySelector("[data-logout]")?.addEventListener("click", () => {
+    clearSession();
+    navigate("/");
   });
 
-  document.querySelector("#sourceGrid").addEventListener("change", async (event) => {
-    const select = event.target.closest("[data-linkedin-organization]");
-    if (!select) return;
-    if (!select.value) {
-      showToast("Choose a LinkedIn organization");
-      return;
-    }
+  document.querySelector("[data-connect-linkedin]")?.addEventListener("click", () => {
+    window.location.href = `${apiBaseUrl}/api/connectors/linkedin/connect`;
+  });
+
+  document.querySelectorAll("[data-organization]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        const result = await api("/api/linkedin/select-organization", {
+          method: "POST",
+          body: JSON.stringify({ organizationUrn: button.dataset.organization })
+        });
+        linkedInState = result;
+        navigate("/dashboard");
+      } catch (error) {
+        showToast(error.message);
+      }
+    });
+  });
+
+  document.querySelector("[data-sync-linkedin]")?.addEventListener("click", async () => {
     try {
-      const result = await api("/api/linkedin/select-organization", {
-        method: "POST",
-        body: JSON.stringify({ organizationUrn: select.value })
-      });
-      state.linkedinOrganizations = result;
-      state.sources.linkedin = { ...(state.sources.linkedin || {}), selectedOrganization: result.selectedOrganization };
-      renderConnectors();
-      showToast("LinkedIn organization selected");
+      await api("/api/connectors/linkedin/sync", { method: "POST" });
+      await hydrateDashboard();
+      showToast("LinkedIn synced");
     } catch (error) {
       showToast(error.message);
     }
   });
-
-  document.querySelector("#ruleList").addEventListener("click", async (event) => {
-    const button = event.target.closest("[data-remove-rule]");
-    if (!button) return;
-    if (backendOnline) {
-      const result = await api(`/api/rules/${encodeURIComponent(button.dataset.removeRule)}`, { method: "DELETE" });
-      state.rules = result.rules;
-    } else {
-      state.rules = state.rules.filter((rule) => rule.id !== button.dataset.removeRule);
-      saveFallbackState();
-    }
-    renderRules();
-    showToast("Rule removed");
-  });
-
-  document.querySelector("#addRule").addEventListener("click", async () => {
-    const payload = {
-      title: "Pattern watch",
-      detail: "Notify the team when a content format beats its historical median twice in a row."
-    };
-    if (backendOnline) {
-      const result = await api("/api/rules", { method: "POST", body: JSON.stringify(payload) });
-      state.rules = result.rules;
-    } else {
-      state.rules.push({ id: `rule-${Date.now()}`, ...payload });
-      saveFallbackState();
-    }
-    renderRules();
-    showToast("Rule added");
-  });
-
-  document.querySelector("#saveSchedule").addEventListener("click", async () => {
-    state.schedule = {
-      frequency: document.querySelector("#scheduleFrequency").value,
-      day: document.querySelector("#scheduleDay").value,
-      recipients: document.querySelector("#recipients").value
-    };
-    if (backendOnline) await api("/api/schedule", { method: "PUT", body: JSON.stringify(state.schedule) });
-    saveFallbackState();
-    showToast("Schedule saved");
-  });
-
-  document.querySelector("#saveSettings").addEventListener("click", async () => {
-    state.settings = {
-      companyName: document.querySelector("#companyName").value || "Your company",
-      defaultKpi: document.querySelector("#defaultKpi").value,
-      autoRefresh: document.querySelector("#autoRefresh").checked
-    };
-    if (backendOnline) await api("/api/settings", { method: "PUT", body: JSON.stringify(state.settings) });
-    saveFallbackState();
-    renderReport();
-    showToast("Settings saved");
-  });
-
-  document.querySelector("#generateReport").addEventListener("click", () => generateReport().catch((error) => showToast(error.message)));
-  document.querySelector("#exportCsv").addEventListener("click", exportCsv);
-  document.querySelector("#runIngestion").addEventListener("click", () => runIngestion().catch((error) => showToast(error.message)));
-  document.querySelector("#newReport").addEventListener("click", () => {
-    document.querySelector('[data-view="reports"]').click();
-    document.querySelector("#reportName").focus();
-  });
-  document.querySelector("#refreshData").addEventListener("click", async () => {
-    await loadBackendState();
-    hydrateControls();
-    renderAll();
-    renderReport();
-    showToast(backendOnline ? "Metrics refreshed from backend" : "Using browser-only state");
-  });
 }
 
-async function boot() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get("linkedinUserId")) {
-    linkedInUserId = params.get("linkedinUserId");
-    localStorage.setItem(linkedInUserStorageKey, linkedInUserId);
-    window.history.replaceState({}, document.title, window.location.pathname);
+async function render() {
+  const path = window.location.pathname;
+  const route = routes[path] ? path : "/";
+  const isPrivate = route.startsWith("/dashboard");
+
+  if (isPrivate && !session.email && !session.userId && !localStorage.getItem(linkedInUserStorageKey)) {
+    window.history.replaceState({}, "", "/login");
+    app.innerHTML = LoginPage();
+    wirePageEvents();
+    return;
   }
-  wireEvents();
-  await loadBackendState();
-  hydrateControls();
-  renderAll();
-  renderReport();
-  if (params.get("connector") === "connected") showToast("Connector OAuth completed");
-  if (params.get("connector") === "error") showToast(params.get("message") || "Connector connection failed");
+
+  app.innerHTML = routes[route]();
+
+  wirePageEvents();
+
+  try {
+    if (route === "/dashboard/onboarding") await hydrateOnboarding();
+    if (route === "/dashboard") await hydrateDashboard();
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
-boot();
+window.addEventListener("popstate", render);
+captureOAuthReturn();
+render();

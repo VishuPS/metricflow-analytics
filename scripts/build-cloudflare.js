@@ -3,7 +3,7 @@ const path = require("node:path");
 
 const ROOT = path.join(__dirname, "..");
 const DIST = path.join(ROOT, "dist");
-const FILES = ["index.html", "app.js", "styles.css", "config.js"];
+const FILES = ["index.html", "app.js", "styles.css", "config.js", "_redirects"];
 
 async function main() {
   await fs.rm(DIST, { recursive: true, force: true });
