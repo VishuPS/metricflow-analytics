@@ -53,6 +53,10 @@ function captureOAuthReturn() {
     window.history.replaceState({}, "", "/dashboard/onboarding");
     showToast("LinkedIn connected");
   }
+  if (params.get("connector") === "error") {
+    showToast(params.get("message") || "LinkedIn connection failed");
+    window.history.replaceState({}, "", "/dashboard/onboarding");
+  }
 }
 
 async function api(path, options = {}) {
