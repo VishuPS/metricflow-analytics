@@ -49,8 +49,6 @@ function navigate(path) {
 
 function captureOAuthReturn() {
   const params = new URLSearchParams(window.location.search);
-  const linkedInUserId = params.get("linkedinUserId");
-  if (linkedInUserId) saveSession({ linkedInUserId });
   if (params.get("connector") === "connected") {
     window.history.replaceState({}, "", "/dashboard/onboarding");
     showToast("LinkedIn connected");
@@ -63,8 +61,6 @@ function captureOAuthReturn() {
 
 async function api(path, options = {}) {
   const headers = { "content-type": "application/json", ...(options.headers || {}) };
-  const linkedInUserId = session.linkedInUserId;
-  if (linkedInUserId) headers["x-metricflow-user-id"] = linkedInUserId;
   if (session.token) headers.authorization = `Bearer ${session.token}`;
 
   const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -88,8 +84,7 @@ async function authenticate(mode, form) {
     name: result.name || payload.name || session.name || "",
     email: result.email || payload.email,
     token: result.token || result.accessToken || session.token || "",
-    accountId: result.userId || result.id || session.accountId || "",
-    linkedInUserId: result.linkedinUserId || ""
+    accountId: result.userId || result.id || session.accountId || ""
   });
   navigate("/dashboard/onboarding");
 }
@@ -281,11 +276,12 @@ function ConnectLinkedInStep() {
   const helper = linkedInOAuthStatus?.configured === false
     ? "Connect through the MetricFlow backend. If OAuth setup is still missing, the backend will show the required app configuration without storing any user tokens in the frontend."
     : "Connect the LinkedIn account that administers the organizations you want to analyze.";
+  const connectUrl = `${apiBaseUrl}/api/connectors/linkedin/connect?session=${encodeURIComponent(session.token || "")}`;
   return `
     <p class="eyebrow">Step 1</p>
     <h1>Connect LinkedIn</h1>
     <p class="muted">${helper}</p>
-    <a class="primary-button link-button" href="${apiBaseUrl}/api/connectors/linkedin/connect" data-connect-linkedin>Connect LinkedIn</a>
+    <a class="primary-button link-button" href="${connectUrl}" data-connect-linkedin>Connect LinkedIn</a>
   `;
 }
 
@@ -425,7 +421,7 @@ async function handleAppClick(event) {
     event.preventDefault();
     // LinkedIn client id/secret never live in the frontend. The Worker owns
     // OAuth configuration and returns a LinkedIn authorization redirect.
-    window.location.href = `${apiBaseUrl}/api/connectors/linkedin/connect`;
+    window.location.href = `${apiBaseUrl}/api/connectors/linkedin/connect?session=${encodeURIComponent(session.token || "")}`;
     return;
   }
 
@@ -459,7 +455,7 @@ async function render() {
   const route = routes[path] ? path : "/";
   const isPrivate = route.startsWith("/dashboard");
 
-  if (isPrivate && !session.email && !session.accountId && !session.linkedInUserId) {
+  if (isPrivate && !session.email && !session.accountId) {
     window.history.replaceState({}, "", "/login");
     app.innerHTML = LoginPage();
     wirePageEvents();

@@ -1,5 +1,3 @@
-const STORE_KEY = "metricflow:state";
-
 const connectors = {
   linkedin: {
     id: "linkedin",
@@ -62,12 +60,27 @@ export default {
       if (route === "GET /api/health") return json({ ok: true, service: "MetricFlow Worker API" }, env);
       if (route === "POST /api/signup" || route === "POST /api/auth/signup") return json(await signup(request, env), env, 201);
       if (route === "POST /api/login" || route === "POST /api/auth/login") return json(await login(request, env), env);
-      if (route === "GET /api/state") return json(statePayload(await loadState(env)), env);
-      if (route === "GET /api/connectors") return json({ connectors: connectorStatus(await loadState(env), env, url) }, env);
+      if (route === "GET /api/state") {
+        const account = await requireAccount(request, env);
+        return json(await userStatePayload(env, account.id), env);
+      }
+      if (route === "GET /api/connectors") {
+        const account = await requireAccount(request, env);
+        return json({ connectors: connectorStatus(await buildUserState(env, account.id), env, url) }, env);
+      }
       if (route === "GET /api/linkedin/organizations") return json(await linkedinOrganizations(request, env), env);
-      if (route === "GET /api/posts") return json({ posts: filterPosts((await loadState(env)).posts || [], url.searchParams) }, env);
-      if (route === "GET /api/reports") return json({ reports: (await loadState(env)).reports || [] }, env);
-      if (route === "GET /api/export.csv") return csv(await loadState(env), env);
+      if (route === "GET /api/posts") {
+        const account = await requireAccount(request, env);
+        return json({ posts: filterPosts(await loadUserJson(env, userLinkedInKey(account.id, "posts"), []), url.searchParams) }, env);
+      }
+      if (route === "GET /api/reports") {
+        const account = await requireAccount(request, env);
+        return json({ reports: await loadUserJson(env, userDataKey(account.id, "reports"), []) }, env);
+      }
+      if (route === "GET /api/export.csv") {
+        const account = await requireAccount(request, env);
+        return csv(await buildUserState(env, account.id), env);
+      }
 
       const oauthAuthorize = url.pathname.match(/^\/oauth\/([^/]+)\/authorize$/);
       if (request.method === "GET" && oauthAuthorize) return authorize(oauthAuthorize[1], request, env);
@@ -76,17 +89,22 @@ export default {
       if (request.method === "GET" && oauthCallback) return callback(oauthCallback[1], request, env);
 
       const ingest = url.pathname.match(/^\/api\/ingest\/([^/]+)$/);
-      if (request.method === "POST" && ingest) return json(await ingestSource(ingest[1], await readJson(request), env), env);
+      if (request.method === "POST" && ingest) {
+        const account = await requireAccount(request, env);
+        return json(await ingestSource(ingest[1], await readJson(request), env, account.id), env);
+      }
 
       const connectorSync = url.pathname.match(/^\/api\/connectors\/([^/]+)\/sync$/);
       if (request.method === "POST" && connectorSync) {
-        const result = await ingestSource(connectorSync[1], await readJson(request), env);
-        return json({ ...result, state: statePayload(await loadState(env)) }, env);
+        const account = await requireAccount(request, env);
+        const result = await ingestSource(connectorSync[1], await readJson(request), env, account.id);
+        return json({ ...result, state: await userStatePayload(env, account.id) }, env);
       }
 
       const connectorConnect = url.pathname.match(/^\/api\/connectors\/([^/]+)\/connect$/);
       if (request.method === "GET" && connectorConnect) {
-        return Response.redirect(`${url.origin}/oauth/${connectorConnect[1]}/authorize`, 302);
+        const session = url.searchParams.get("session") ? `?session=${encodeURIComponent(url.searchParams.get("session"))}` : "";
+        return Response.redirect(`${url.origin}/oauth/${connectorConnect[1]}/authorize${session}`, 302);
       }
 
       if (request.method === "POST" && url.pathname === "/api/linkedin/select-organization") {
@@ -95,60 +113,62 @@ export default {
 
       const connectorPatch = url.pathname.match(/^\/api\/connectors\/([^/]+)$/);
       if (request.method === "PATCH" && connectorPatch) {
-        const state = await loadState(env);
+        const account = await requireAccount(request, env);
+        const state = await buildUserState(env, account.id);
         const body = await readJson(request);
         state.sources[connectorPatch[1]] = { ...(state.sources[connectorPatch[1]] || {}), connected: Boolean(body.connected) };
-        await saveState(env, state);
         return json({ connector: { id: connectorPatch[1], ...state.sources[connectorPatch[1]] }, summary: summary(state) }, env);
       }
 
       if (request.method === "POST" && url.pathname === "/api/ingest/run") {
-        const state = await loadState(env);
+        const account = await requireAccount(request, env);
+        const state = await buildUserState(env, account.id);
         const results = [];
         for (const [source, sourceState] of Object.entries(state.sources || {})) {
-          if (sourceState.connected && connectors[source]) results.push(await ingestSource(source, {}, env));
+          if (sourceState.connected && connectors[source]) results.push(await ingestSource(source, {}, env, account.id));
         }
-        return json({ results, state: statePayload(await loadState(env)) }, env);
+        return json({ results, state: await userStatePayload(env, account.id) }, env);
       }
 
       if (request.method === "POST" && url.pathname === "/api/reports") {
-        const state = await loadState(env);
+        const account = await requireAccount(request, env);
+        const state = await buildUserState(env, account.id);
         const body = await readJson(request);
         const report = createReport(state, body);
-        state.reports = [report, ...(state.reports || [])].slice(0, 20);
-        await saveState(env, state);
-        return json({ report, reports: state.reports }, env, 201);
+        const reports = [report, ...(await loadUserJson(env, userDataKey(account.id, "reports"), []))].slice(0, 20);
+        await saveUserJson(env, userDataKey(account.id, "reports"), reports);
+        return json({ report, reports }, env, 201);
       }
 
       if (request.method === "PUT" && url.pathname === "/api/schedule") {
-        const state = await loadState(env);
-        state.schedule = { ...state.schedule, ...(await readJson(request)) };
-        await saveState(env, state);
-        return json({ schedule: state.schedule }, env);
+        const account = await requireAccount(request, env);
+        const schedule = { ...defaultState.schedule, ...(await loadUserJson(env, userDataKey(account.id, "schedule"), {})), ...(await readJson(request)) };
+        await saveUserJson(env, userDataKey(account.id, "schedule"), schedule);
+        return json({ schedule }, env);
       }
 
       if (request.method === "PUT" && url.pathname === "/api/settings") {
-        const state = await loadState(env);
-        state.settings = { ...state.settings, ...(await readJson(request)) };
-        await saveState(env, state);
-        return json({ settings: state.settings }, env);
+        const account = await requireAccount(request, env);
+        const settings = { ...defaultState.settings, ...(await loadUserJson(env, userDataKey(account.id, "settings"), {})), ...(await readJson(request)) };
+        await saveUserJson(env, userDataKey(account.id, "settings"), settings);
+        return json({ settings }, env);
       }
 
       if (request.method === "POST" && url.pathname === "/api/rules") {
-        const state = await loadState(env);
+        const account = await requireAccount(request, env);
         const body = await readJson(request);
         const rule = { id: `rule-${Date.now()}`, title: body.title || "Post movement", detail: body.detail || "Notify the team when a normalized post changes materially." };
-        state.rules = [...(state.rules || []), rule];
-        await saveState(env, state);
-        return json({ rule, rules: state.rules }, env, 201);
+        const rules = [...(await loadUserJson(env, userDataKey(account.id, "rules"), defaultState.rules)), rule];
+        await saveUserJson(env, userDataKey(account.id, "rules"), rules);
+        return json({ rule, rules }, env, 201);
       }
 
       const ruleDelete = url.pathname.match(/^\/api\/rules\/([^/]+)$/);
       if (request.method === "DELETE" && ruleDelete) {
-        const state = await loadState(env);
-        state.rules = (state.rules || []).filter((rule) => rule.id !== ruleDelete[1]);
-        await saveState(env, state);
-        return json({ rules: state.rules }, env);
+        const account = await requireAccount(request, env);
+        const rules = (await loadUserJson(env, userDataKey(account.id, "rules"), defaultState.rules)).filter((rule) => rule.id !== ruleDelete[1]);
+        await saveUserJson(env, userDataKey(account.id, "rules"), rules);
+        return json({ rules }, env);
       }
 
       return json({ message: "API route not found" }, env, 404);
@@ -162,25 +182,119 @@ export default {
   }
 };
 
-async function loadState(env) {
-  const raw = await env.METRICFLOW_STORE?.get(STORE_KEY);
-  if (!raw) return structuredClone(defaultState);
-  return migrateState(JSON.parse(raw));
-}
-
-async function saveState(env, state) {
-  await env.METRICFLOW_STORE.put(STORE_KEY, JSON.stringify(migrateState(state), null, 2));
-}
-
-async function loadUserState(env, userId) {
-  if (!userId) return null;
-  const raw = await env.USER_STATE?.get(userId);
-  return raw ? JSON.parse(raw) : null;
-}
-
 async function saveUserState(env, userId, userState) {
   if (!env.USER_STATE) throw new Error("Missing USER_STATE KV binding");
   await env.USER_STATE.put(userId, JSON.stringify(userState, null, 2));
+}
+
+async function loadUserJson(env, key, fallback = null) {
+  const raw = await env.USER_STATE?.get(key);
+  return raw ? JSON.parse(raw) : fallback;
+}
+
+async function saveUserJson(env, key, value) {
+  if (!env.USER_STATE) throw new Error("Missing USER_STATE KV binding");
+  await env.USER_STATE.put(key, JSON.stringify(value, null, 2));
+}
+
+function userDataKey(accountId, name) {
+  return `user:${accountId}:${name}`;
+}
+
+function userLinkedInKey(accountId, name) {
+  return `user:${accountId}:linkedin:${name}`;
+}
+
+function sessionKey(token) {
+  return `session:${token}`;
+}
+
+function oauthStateKey(token) {
+  return `oauth:state:${token}`;
+}
+
+function bearerToken(request) {
+  const header = request.headers.get("authorization") || "";
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : "";
+}
+
+async function createSession(env, account) {
+  const token = `session_${crypto.randomUUID()}`;
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString();
+  await saveUserJson(env, sessionKey(token), {
+    accountId: account.id,
+    name: account.name,
+    email: account.email,
+    expiresAt,
+    createdAt: new Date().toISOString()
+  });
+  return token;
+}
+
+async function requireAccount(request, env) {
+  const requestUrl = new URL(request.url);
+  const token = bearerToken(request) || requestUrl.searchParams.get("session") || "";
+  if (!token) {
+    const error = new Error("Authentication required");
+    error.status = 401;
+    throw error;
+  }
+  const session = await loadUserJson(env, sessionKey(token), null);
+  if (!session || !session.accountId || new Date(session.expiresAt).getTime() <= Date.now()) {
+    const error = new Error("Invalid or expired session");
+    error.status = 401;
+    throw error;
+  }
+  return {
+    id: session.accountId,
+    name: session.name,
+    email: session.email,
+    token
+  };
+}
+
+async function buildUserState(env, accountId) {
+  const token = await loadUserJson(env, userLinkedInKey(accountId, "token"), null);
+  const organizations = await loadUserJson(env, userLinkedInKey(accountId, "organizations"), []);
+  const selectedOrganization = await loadUserJson(env, userLinkedInKey(accountId, "organization"), null);
+  const posts = await loadUserJson(env, userLinkedInKey(accountId, "posts"), []);
+  const analytics = await loadUserJson(env, userLinkedInKey(accountId, "analytics"), null);
+  const sync = await loadUserJson(env, userLinkedInKey(accountId, "sync"), null);
+  const settings = { ...defaultState.settings, ...(await loadUserJson(env, userDataKey(accountId, "settings"), {})) };
+  const schedule = { ...defaultState.schedule, ...(await loadUserJson(env, userDataKey(accountId, "schedule"), {})) };
+  const rules = await loadUserJson(env, userDataKey(accountId, "rules"), defaultState.rules);
+  const reports = await loadUserJson(env, userDataKey(accountId, "reports"), []);
+  const history = analytics?.history || generateHistory(posts);
+
+  return {
+    ...structuredClone(defaultState),
+    sources: {
+      ...structuredClone(defaultState.sources),
+      linkedin: {
+        connected: Boolean(token?.accessToken),
+        selectedOrganization,
+        organizationCount: organizations.length,
+        lastIngestedAt: sync?.lastIngestedAt || null
+      }
+    },
+    posts,
+    history,
+    rules,
+    settings,
+    schedule,
+    reports,
+    linkedin: {
+      organizations,
+      selectedOrganization,
+      sync,
+      connected: Boolean(token?.accessToken)
+    }
+  };
+}
+
+async function userStatePayload(env, accountId) {
+  return statePayload(await buildUserState(env, accountId));
 }
 
 async function signup(request, env) {
@@ -220,7 +334,7 @@ async function signup(request, env) {
   };
   await saveUserState(env, accountKey, account);
   await saveUserState(env, `auth:id:${id}`, { email });
-  return authPayload(account);
+  return authPayload(account, await createSession(env, account));
 }
 
 async function login(request, env) {
@@ -235,16 +349,16 @@ async function login(request, env) {
     error.status = 401;
     throw error;
   }
-  return authPayload(account);
+  return authPayload(account, await createSession(env, account));
 }
 
-function authPayload(account) {
+function authPayload(account, token) {
   return {
     id: account.id,
     userId: account.id,
     name: account.name,
     email: account.email,
-    token: `session_${crypto.randomUUID()}`
+    token
   };
 }
 
@@ -260,20 +374,6 @@ async function hashPassword(password, salt) {
   const data = new TextEncoder().encode(`${salt}:${password}`);
   const digest = await crypto.subtle.digest("SHA-256", data);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function migrateState(state = {}) {
-  return {
-    ...defaultState,
-    ...state,
-    sources: { ...defaultState.sources, ...(state.sources || {}) },
-    posts: Array.isArray(state.posts) ? state.posts : [],
-    history: { ...defaultState.history, ...(state.history || {}) },
-    rules: state.rules || defaultState.rules,
-    settings: state.settings || defaultState.settings,
-    schedule: { ...defaultState.schedule, ...(state.schedule || {}) },
-    reports: state.reports || []
-  };
 }
 
 function sourceEnv(source, env, requestUrl) {
@@ -294,14 +394,27 @@ function authorize(source, request, env) {
   if (!config.clientId) return oauthSetupRequired(source, env, `${source.toUpperCase()}_CLIENT_ID`);
   if (!config.clientSecret) return oauthSetupRequired(source, env, `${source.toUpperCase()}_CLIENT_SECRET`);
 
+  return authorizeWithAccount(source, request, env, config);
+}
+
+async function authorizeWithAccount(source, request, env, config) {
+  const account = await requireAccount(request, env);
   const target = new URL(config.connector.authUrl);
   const scopes = env[`${source.toUpperCase()}_SCOPES`]
     ? env[`${source.toUpperCase()}_SCOPES`].split(/[,\s]+/).map((scope) => scope.trim()).filter(Boolean)
     : config.connector.scopes;
+  const stateToken = crypto.randomUUID();
+  await saveUserJson(env, oauthStateKey(stateToken), {
+    accountId: account.id,
+    source,
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 1000 * 60 * 10).toISOString()
+  });
   target.searchParams.set("client_id", config.clientId);
   target.searchParams.set("redirect_uri", config.redirectUri);
   target.searchParams.set("response_type", "code");
   target.searchParams.set("scope", scopes.join(" "));
+  target.searchParams.set("state", stateToken);
   if (source === "youtube" || source === "ga4") {
     target.searchParams.set("access_type", "offline");
     target.searchParams.set("prompt", "consent");
@@ -349,65 +462,61 @@ async function callback(source, request, env) {
   const code = requestUrl.searchParams.get("code");
   if (!code) return oauthCallbackFailure("Missing OAuth code", requestUrl, env);
   if (!config.clientId || !config.clientSecret) return oauthCallbackFailure(`Missing ${source.toUpperCase()} OAuth credentials`, requestUrl, env);
+  const oauthState = await consumeOAuthState(requestUrl.searchParams.get("state"), source, env);
 
   try {
     const token = await exchangeCodeForToken(config.connector.tokenUrl, code, config.redirectUri, config.clientId, config.clientSecret);
-    const state = await loadState(env);
     if (source === "linkedin") {
       const expiresAt = token.expires_in ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString() : null;
       // Step 1: identify the LinkedIn member who completed OAuth.
       const profile = await fetchLinkedInProfile(token.access_token);
-      const userId = profile.id;
-      if (!userId) throw new Error("LinkedIn profile response did not include an id");
+      if (!profile.id) throw new Error("LinkedIn profile response did not include an id");
 
       // Step 2: discover every organization this member administers.
       const organizations = await fetchLinkedInOrganizations(token.access_token);
-      const previousUserState = await loadUserState(env, userId);
-      const selectedOrganization = organizations.includes(previousUserState?.selectedOrganization)
-        ? previousUserState.selectedOrganization
+      const previousOrganization = await loadUserJson(env, userLinkedInKey(oauthState.accountId, "organization"), null);
+      const selectedOrganization = organizations.includes(previousOrganization)
+        ? previousOrganization
         : null;
 
-      // Step 3: persist user-scoped credentials and tenant choices in USER_STATE.
-      await saveUserState(env, userId, {
+      // Step 3: persist account-scoped credentials and tenant choices in USER_STATE.
+      await saveUserJson(env, userLinkedInKey(oauthState.accountId, "token"), {
         accessToken: token.access_token,
-        refreshToken: token.refresh_token || previousUserState?.refreshToken || null,
+        refreshToken: token.refresh_token || null,
         expiresAt,
-        organizations,
-        selectedOrganization
-      });
-
-      // Step 4: keep only non-secret connector status in the shared app state.
-      state.sources[source] = {
-        ...(state.sources[source] || {}),
-        connected: true,
-        userId,
-        expiresAt,
-        organizationCount: organizations.length,
-        selectedOrganization,
         tokenType: token.token_type,
+        linkedInUserId: profile.id,
         connectedAt: new Date().toISOString()
-      };
-      await saveState(env, state);
+      });
+      await saveUserJson(env, userLinkedInKey(oauthState.accountId, "profile"), profile);
+      await saveUserJson(env, userLinkedInKey(oauthState.accountId, "organizations"), organizations);
+      await saveUserJson(env, userLinkedInKey(oauthState.accountId, "organization"), selectedOrganization);
       const redirectTarget = env.PAGES_URL ? new URL(env.PAGES_URL) : new URL("/", requestUrl.origin);
       redirectTarget.searchParams.set("connector", "connected");
-      redirectTarget.searchParams.set("linkedinUserId", userId);
-      return withUserCookie(Response.redirect(redirectTarget.toString(), 302), userId, env);
+      return Response.redirect(redirectTarget.toString(), 302);
     }
 
-    state.sources[source] = {
-      ...(state.sources[source] || {}),
-      connected: true,
-      accessToken: token.access_token,
-      refreshToken: token.refresh_token,
-      expiresAt: token.expires_in ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString() : null,
-      tokenType: token.token_type,
-      connectedAt: new Date().toISOString()
-    };
-    await saveState(env, state);
+    await saveUserJson(env, userDataKey(oauthState.accountId, `${source}:token`), token);
     return Response.redirect(env.PAGES_URL ? `${env.PAGES_URL}/?connector=connected` : `${requestUrl.origin}/?connector=connected`, 302);
   } catch (error) {
     return oauthCallbackFailure(error.message || "LinkedIn OAuth callback failed", requestUrl, env);
   }
+}
+
+async function consumeOAuthState(stateToken, source, env) {
+  if (!stateToken) {
+    const error = new Error("Missing OAuth state");
+    error.status = 401;
+    throw error;
+  }
+  const state = await loadUserJson(env, oauthStateKey(stateToken), null);
+  if (!state || state.source !== source || new Date(state.expiresAt).getTime() <= Date.now()) {
+    const error = new Error("Invalid or expired OAuth state");
+    error.status = 401;
+    throw error;
+  }
+  await env.USER_STATE?.delete(oauthStateKey(stateToken));
+  return state;
 }
 
 function oauthCallbackFailure(message, requestUrl, env) {
@@ -443,17 +552,15 @@ function parseJson(text) {
   }
 }
 
-async function ingestSource(source, options, env) {
-  const state = await loadState(env);
-  const sourceState = state.sources[source];
+async function ingestSource(source, options, env, accountId) {
+  if (!accountId) {
+    const error = new Error("Account id is required for ingestion");
+    error.status = 401;
+    throw error;
+  }
   if (!connectors[source]) {
     const error = new Error(`Unsupported source: ${source}`);
     error.status = 404;
-    throw error;
-  }
-  if (source !== "linkedin" && !sourceState?.accessToken && env.LINKEDIN_DEMO_MODE !== "true") {
-    const error = new Error(`OAuth token missing for ${source}`);
-    error.status = 401;
     throw error;
   }
   if (source !== "linkedin") {
@@ -462,10 +569,9 @@ async function ingestSource(source, options, env) {
     throw error;
   }
 
-  // Load the active user's LinkedIn credentials from USER_STATE instead of Worker secrets.
-  const userState = env.LINKEDIN_DEMO_MODE === "true" ? null : await loadUserState(env, options.userId || sourceState?.userId);
-  const accessToken = userState?.accessToken || sourceState?.accessToken;
-  const orgUrn = userState?.selectedOrganization;
+  const token = env.LINKEDIN_DEMO_MODE === "true" ? null : await loadUserJson(env, userLinkedInKey(accountId, "token"), null);
+  const accessToken = token?.accessToken;
+  const orgUrn = env.LINKEDIN_DEMO_MODE === "true" ? "urn:li:organization:demo" : await loadUserJson(env, userLinkedInKey(accountId, "organization"), null);
   if (env.LINKEDIN_DEMO_MODE !== "true" && !accessToken) {
     const error = new Error("OAuth token missing for linkedin");
     error.status = 401;
@@ -483,10 +589,22 @@ async function ingestSource(source, options, env) {
   const rawMetrics = env.LINKEDIN_DEMO_MODE === "true" ? Object.fromEntries(postIds.map((id, index) => [id, demoLinkedInMetric(index)])) : await fetchLinkedInMetrics(accessToken, orgUrn, postIds);
   const normalized = normalizeLinkedInPosts(rawPosts, rawMetrics);
 
-  state.posts = mergePosts(state.posts || [], normalized);
-  state.sources[source] = { ...(state.sources[source] || {}), connected: true, selectedOrganization: orgUrn || state.sources[source]?.selectedOrganization || null, lastIngestedAt: new Date().toISOString() };
-  state.history = generateHistory(state.posts);
-  await saveState(env, state);
+  const existingPosts = await loadUserJson(env, userLinkedInKey(accountId, "posts"), []);
+  const posts = mergePosts(existingPosts, normalized);
+  const history = generateHistory(posts);
+  const syncedAt = new Date().toISOString();
+  await saveUserJson(env, userLinkedInKey(accountId, "posts"), posts);
+  await saveUserJson(env, userLinkedInKey(accountId, "analytics"), {
+    history,
+    lastMetrics: rawMetrics,
+    updatedAt: syncedAt
+  });
+  await saveUserJson(env, userLinkedInKey(accountId, "sync"), {
+    lastIngestedAt: syncedAt,
+    fetched: rawPosts.length,
+    saved: normalized.length,
+    organization: orgUrn
+  });
   return { source, fetched: rawPosts.length, saved: normalized.length, posts: normalized };
 }
 
@@ -568,72 +686,31 @@ async function fetchOrganizationAnalytics(accessToken, organizationUrn, postId) 
 }
 
 async function linkedinOrganizations(request, env) {
-  const userId = resolveLinkedInUserId(request, await loadState(env));
-  const userState = await loadUserState(env, userId);
-  if (!userState) {
-    const error = new Error("LinkedIn user state not found");
-    error.status = 404;
-    throw error;
-  }
+  const account = await requireAccount(request, env);
+  const organizations = await loadUserJson(env, userLinkedInKey(account.id, "organizations"), []);
+  const selectedOrganization = await loadUserJson(env, userLinkedInKey(account.id, "organization"), null);
+  const token = await loadUserJson(env, userLinkedInKey(account.id, "token"), null);
   return {
-    userId,
-    organizations: userState.organizations || [],
-    selectedOrganization: userState.selectedOrganization || null
+    userId: account.id,
+    connected: Boolean(token?.accessToken),
+    organizations,
+    selectedOrganization
   };
 }
 
 async function selectLinkedInOrganization(request, env) {
   const body = await readJson(request);
   const organizationUrn = body.organizationUrn;
-  const state = await loadState(env);
-  const userId = resolveLinkedInUserId(request, state);
-  const userState = await loadUserState(env, userId);
-  if (!userState) {
-    const error = new Error("LinkedIn user state not found");
-    error.status = 404;
-    throw error;
-  }
-  if (!userState.organizations?.includes(organizationUrn)) {
+  const account = await requireAccount(request, env);
+  const organizations = await loadUserJson(env, userLinkedInKey(account.id, "organizations"), []);
+  if (!organizations.includes(organizationUrn)) {
     const error = new Error("Organization is not available for this LinkedIn user");
     error.status = 400;
     throw error;
   }
 
-  // Persist the tenant choice in USER_STATE and mirror non-secret status into app state
-  // so existing connector cards stay backward compatible.
-  userState.selectedOrganization = organizationUrn;
-  await saveUserState(env, userId, userState);
-  state.sources.linkedin = { ...(state.sources.linkedin || {}), connected: true, userId, selectedOrganization: organizationUrn };
-  await saveState(env, state);
-  return { userId, organizations: userState.organizations || [], selectedOrganization: organizationUrn };
-}
-
-function resolveLinkedInUserId(request, state) {
-  const requestUrl = new URL(request.url);
-  const fromHeader = request.headers.get("x-metricflow-user-id");
-  const fromQuery = requestUrl.searchParams.get("userId");
-  const fromCookie = parseCookie(request.headers.get("cookie") || "").metricflow_linkedin_user;
-  const userId = fromHeader || fromQuery || fromCookie;
-  if (!userId) {
-    const error = new Error("LinkedIn user id is required");
-    error.status = 401;
-    throw error;
-  }
-  return userId;
-}
-
-function parseCookie(value) {
-  return Object.fromEntries(value.split(";").map((part) => part.trim()).filter(Boolean).map((part) => {
-    const index = part.indexOf("=");
-    return index === -1 ? [part, ""] : [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
-  }));
-}
-
-function withUserCookie(response, userId, env) {
-  const headers = new Headers(response.headers);
-  const secure = env.PAGES_URL || env.CORS_ORIGIN ? "; Secure" : "";
-  headers.append("set-cookie", `metricflow_linkedin_user=${encodeURIComponent(userId)}; Path=/; HttpOnly; SameSite=Lax${secure}; Max-Age=31536000`);
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  await saveUserJson(env, userLinkedInKey(account.id, "organization"), organizationUrn);
+  return { userId: account.id, organizations, selectedOrganization: organizationUrn };
 }
 
 function normalizeLinkedInPosts(rawPosts, rawMetrics = {}) {
@@ -712,22 +789,10 @@ function rollup(posts, period, periodKey, predicate) {
 }
 
 async function runScheduledIngestion(env) {
-  const state = await loadState(env);
-  if (!state.schedule?.autoIngest) return;
-  const lastRun = state.schedule.lastRunAt ? new Date(state.schedule.lastRunAt).getTime() : 0;
-  if (Date.now() - lastRun < scheduleMs(state.schedule.frequency)) return;
-  for (const source of state.schedule.sources || ["linkedin"]) {
-    if (state.sources?.[source]?.connected) await ingestSource(source, {}, env);
-  }
-  const nextState = await loadState(env);
-  nextState.schedule.lastRunAt = new Date().toISOString();
-  await saveState(env, nextState);
-}
-
-function scheduleMs(frequency = "Weekly") {
-  if (String(frequency).toLowerCase() === "daily") return 24 * 60 * 60 * 1000;
-  if (String(frequency).toLowerCase() === "monthly") return 30 * 24 * 60 * 60 * 1000;
-  return 7 * 24 * 60 * 60 * 1000;
+  // Scheduled ingestion was disabled when analytics became user-scoped. A cron
+  // worker must enumerate opted-in accounts before syncing; this Worker does not
+  // maintain a global account index yet.
+  return null;
 }
 
 function filterPosts(posts, params) {
@@ -830,6 +895,6 @@ function cors(response, env) {
   const headers = new Headers(response.headers);
   headers.set("access-control-allow-origin", env.CORS_ORIGIN || "*");
   headers.set("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  headers.set("access-control-allow-headers", "content-type,authorization,x-metricflow-user-id");
+  headers.set("access-control-allow-headers", "content-type,authorization");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }

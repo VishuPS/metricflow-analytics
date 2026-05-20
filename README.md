@@ -141,7 +141,6 @@ The cloud backend lives in `workers/metricflow-api.js` and deploys as the Cloudf
 Create a KV namespace once:
 
 ```powershell
-wrangler kv namespace create METRICFLOW_STORE
 wrangler kv namespace create USER_STATE
 ```
 
@@ -149,7 +148,6 @@ Copy the generated namespace id into `wrangler.worker.toml`:
 
 ```toml
 kv_namespaces = [
-  { binding = "METRICFLOW_STORE", id = "your_namespace_id" },
   { binding = "USER_STATE", id = "your_user_state_namespace_id" }
 ]
 ```
@@ -161,7 +159,31 @@ wrangler secret put LINKEDIN_CLIENT_ID --config wrangler.worker.toml
 wrangler secret put LINKEDIN_CLIENT_SECRET --config wrangler.worker.toml
 ```
 
-LinkedIn organization URNs are discovered per user after OAuth through `organizationAcls` and stored in `USER_STATE`; they are no longer Worker-level secrets.
+MetricFlow production storage is multi-tenant and account-scoped in `USER_STATE`. The Worker no longer reads or writes the old global `metricflow:state` analytics document.
+
+Current KV layout:
+
+```text
+session:{token}
+oauth:state:{token}
+auth:account:{email}
+auth:id:{accountId}
+user:{accountId}:linkedin:profile
+user:{accountId}:linkedin:token
+user:{accountId}:linkedin:organizations
+user:{accountId}:linkedin:organization
+user:{accountId}:linkedin:posts
+user:{accountId}:linkedin:analytics
+user:{accountId}:linkedin:sync
+user:{accountId}:settings
+user:{accountId}:schedule
+user:{accountId}:rules
+user:{accountId}:reports
+```
+
+LinkedIn organization URNs are discovered per account after OAuth through `organizationAcls` and stored under `user:{accountId}:linkedin:*`; they are no longer Worker-level or global app state.
+
+Migration note: old prototype analytics may still exist under `METRICFLOW_STORE` / `metricflow:state`. Leave it untouched for backup or delete that key/namespace after confirming the new user-scoped dashboard data is correct.
 
 LinkedIn OAuth now requests read-only advertising scopes in addition to organization analytics scopes:
 
