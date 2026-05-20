@@ -342,65 +342,76 @@ async function callback(source, request, env) {
   const requestUrl = new URL(request.url);
   const config = sourceEnv(source, env, requestUrl);
   if (!config.connector) return json({ message: "Unsupported source" }, env, 404);
-  if (requestUrl.searchParams.get("error")) throw new Error(requestUrl.searchParams.get("error"));
+  if (requestUrl.searchParams.get("error")) return oauthCallbackFailure(requestUrl.searchParams.get("error"), requestUrl, env);
   const code = requestUrl.searchParams.get("code");
-  if (!code) return json({ message: "Missing OAuth code" }, env, 400);
-  if (!config.clientId || !config.clientSecret) throw new Error(`Missing ${source.toUpperCase()} OAuth credentials`);
+  if (!code) return oauthCallbackFailure("Missing OAuth code", requestUrl, env);
+  if (!config.clientId || !config.clientSecret) return oauthCallbackFailure(`Missing ${source.toUpperCase()} OAuth credentials`, requestUrl, env);
 
-  const token = await exchangeCodeForToken(config.connector.tokenUrl, code, config.redirectUri, config.clientId, config.clientSecret);
-  const state = await loadState(env);
-  if (source === "linkedin") {
-    const expiresAt = token.expires_in ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString() : null;
-    // Step 1: identify the LinkedIn member who completed OAuth.
-    const profile = await fetchLinkedInProfile(token.access_token);
-    const userId = profile.id;
-    if (!userId) throw new Error("LinkedIn profile response did not include an id");
+  try {
+    const token = await exchangeCodeForToken(config.connector.tokenUrl, code, config.redirectUri, config.clientId, config.clientSecret);
+    const state = await loadState(env);
+    if (source === "linkedin") {
+      const expiresAt = token.expires_in ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString() : null;
+      // Step 1: identify the LinkedIn member who completed OAuth.
+      const profile = await fetchLinkedInProfile(token.access_token);
+      const userId = profile.id;
+      if (!userId) throw new Error("LinkedIn profile response did not include an id");
 
-    // Step 2: discover every organization this member administers.
-    const organizations = await fetchLinkedInOrganizations(token.access_token);
-    const previousUserState = await loadUserState(env, userId);
-    const selectedOrganization = organizations.includes(previousUserState?.selectedOrganization)
-      ? previousUserState.selectedOrganization
-      : null;
+      // Step 2: discover every organization this member administers.
+      const organizations = await fetchLinkedInOrganizations(token.access_token);
+      const previousUserState = await loadUserState(env, userId);
+      const selectedOrganization = organizations.includes(previousUserState?.selectedOrganization)
+        ? previousUserState.selectedOrganization
+        : null;
 
-    // Step 3: persist user-scoped credentials and tenant choices in USER_STATE.
-    await saveUserState(env, userId, {
-      accessToken: token.access_token,
-      refreshToken: token.refresh_token || previousUserState?.refreshToken || null,
-      expiresAt,
-      organizations,
-      selectedOrganization
-    });
+      // Step 3: persist user-scoped credentials and tenant choices in USER_STATE.
+      await saveUserState(env, userId, {
+        accessToken: token.access_token,
+        refreshToken: token.refresh_token || previousUserState?.refreshToken || null,
+        expiresAt,
+        organizations,
+        selectedOrganization
+      });
 
-    // Step 4: keep only non-secret connector status in the shared app state.
+      // Step 4: keep only non-secret connector status in the shared app state.
+      state.sources[source] = {
+        ...(state.sources[source] || {}),
+        connected: true,
+        userId,
+        expiresAt,
+        organizationCount: organizations.length,
+        selectedOrganization,
+        tokenType: token.token_type,
+        connectedAt: new Date().toISOString()
+      };
+      await saveState(env, state);
+      const redirectTarget = env.PAGES_URL ? new URL(env.PAGES_URL) : new URL("/", requestUrl.origin);
+      redirectTarget.searchParams.set("connector", "connected");
+      redirectTarget.searchParams.set("linkedinUserId", userId);
+      return withUserCookie(Response.redirect(redirectTarget.toString(), 302), userId, env);
+    }
+
     state.sources[source] = {
       ...(state.sources[source] || {}),
       connected: true,
-      userId,
-      expiresAt,
-      organizationCount: organizations.length,
-      selectedOrganization,
+      accessToken: token.access_token,
+      refreshToken: token.refresh_token,
+      expiresAt: token.expires_in ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString() : null,
       tokenType: token.token_type,
       connectedAt: new Date().toISOString()
     };
     await saveState(env, state);
-    const redirectTarget = env.PAGES_URL ? new URL(env.PAGES_URL) : new URL("/", requestUrl.origin);
-    redirectTarget.searchParams.set("connector", "connected");
-    redirectTarget.searchParams.set("linkedinUserId", userId);
-    return withUserCookie(Response.redirect(redirectTarget.toString(), 302), userId, env);
+    return Response.redirect(env.PAGES_URL ? `${env.PAGES_URL}/?connector=connected` : `${requestUrl.origin}/?connector=connected`, 302);
+  } catch (error) {
+    return oauthCallbackFailure(error.message || "LinkedIn OAuth callback failed", requestUrl, env);
   }
+}
 
-  state.sources[source] = {
-    ...(state.sources[source] || {}),
-    connected: true,
-    accessToken: token.access_token,
-    refreshToken: token.refresh_token,
-    expiresAt: token.expires_in ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString() : null,
-    tokenType: token.token_type,
-    connectedAt: new Date().toISOString()
-  };
-  await saveState(env, state);
-  return Response.redirect(env.PAGES_URL ? `${env.PAGES_URL}/?connector=connected` : `${requestUrl.origin}/?connector=connected`, 302);
+function oauthCallbackFailure(message, requestUrl, env) {
+  const redirectTarget = env.PAGES_URL ? new URL("/dashboard/onboarding", env.PAGES_URL) : new URL("/dashboard/onboarding", requestUrl.origin);
+  redirectTarget.searchParams.set("connector", "error");
+  redirectTarget.searchParams.set("message", message);
+  return Response.redirect(redirectTarget.toString(), 302);
 }
 
 async function exchangeCodeForToken(tokenUrl, code, redirectUri, clientId, clientSecret) {
@@ -415,9 +426,18 @@ async function exchangeCodeForToken(tokenUrl, code, redirectUri, clientId, clien
       client_secret: clientSecret
     })
   });
-  const payload = await response.json();
+  const text = await response.text();
+  const payload = parseJson(text);
   if (!response.ok) throw new Error(payload.error_description || payload.error || "OAuth token exchange failed");
   return payload;
+}
+
+function parseJson(text) {
+  try {
+    return JSON.parse(text || "{}");
+  } catch {
+    return {};
+  }
 }
 
 async function ingestSource(source, options, env) {
