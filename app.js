@@ -36,6 +36,8 @@ const seedState = {
 
 let state = loadFallbackState();
 let backendOnline = false;
+const linkedInUserStorageKey = "metricflow.linkedinUserId";
+let linkedInUserId = localStorage.getItem(linkedInUserStorageKey) || "";
 
 const numberFormatter = new Intl.NumberFormat("en-US");
 const currencyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -51,9 +53,11 @@ function saveFallbackState() {
 
 async function api(path, options = {}) {
   const baseUrl = window.METRICFLOW_API_BASE_URL || "";
+  const headers = { "content-type": "application/json", ...(options.headers || {}) };
+  if (linkedInUserId) headers["x-metricflow-user-id"] = linkedInUserId;
   const response = await fetch(`${baseUrl}${path}`, {
-    headers: { "content-type": "application/json", ...(options.headers || {}) },
-    ...options
+    ...options,
+    headers
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: "Request failed" }));
@@ -67,10 +71,25 @@ async function loadBackendState() {
   try {
     state = await api("/api/state");
     backendOnline = true;
+    await refreshLinkedInOrganizations();
     document.querySelector("#syncStatus").textContent = "Backend connected";
   } catch {
     backendOnline = false;
     document.querySelector("#syncStatus").textContent = "Browser-only mode";
+  }
+}
+
+async function refreshLinkedInOrganizations() {
+  const linkedin = state.sources?.linkedin || {};
+  if (!linkedinUserId && linkedin.userId) {
+    linkedInUserId = linkedin.userId;
+    localStorage.setItem(linkedInUserStorageKey, linkedInUserId);
+  }
+  if (!linkedin.connected) return;
+  try {
+    state.linkedinOrganizations = await api("/api/linkedin/organizations");
+  } catch {
+    state.linkedinOrganizations = { organizations: [], selectedOrganization: linkedin.selectedOrganization || null };
   }
 }
 
@@ -163,9 +182,27 @@ function renderConnectors() {
         <button class="secondary-button" data-connector="${connector.id}" type="button">${connector.connected ? "Pause" : "Enable"}</button>
         <button class="primary-button" data-sync-connector="${connector.id}" type="button">Sync</button>
       </div>
+      ${renderLinkedInOrganizationPicker(connector)}
       <a class="connector-link" href="${apiBaseUrl}/api/connectors/${connector.id}/connect">OAuth setup</a>
     </article>
   `).join("");
+}
+
+function renderLinkedInOrganizationPicker(connector) {
+  if (connector.id !== "linkedin" || !connector.connected) return "";
+  const details = state.linkedinOrganizations || {};
+  const organizations = details.organizations || [];
+  const selected = details.selectedOrganization || "";
+  if (!organizations.length) return `<p class="connector-note">Reconnect LinkedIn to load administered organizations.</p>`;
+  return `
+    <label class="organization-picker">
+      Organization
+      <select data-linkedin-organization>
+        <option value="">Select organization</option>
+        ${organizations.map((organization) => `<option value="${organization}" ${organization === selected ? "selected" : ""}>${organization}</option>`).join("")}
+      </select>
+    </label>
+  `;
 }
 
 function renderPatterns() {
@@ -284,6 +321,7 @@ async function syncConnector(id) {
   }
   const result = await api(`/api/connectors/${encodeURIComponent(id)}/sync`, { method: "POST" });
   state = result.state;
+  await refreshLinkedInOrganizations();
   renderAll();
   showToast(`${connectorName(id)} ingestion completed`);
 }
@@ -295,6 +333,7 @@ async function runIngestion() {
   }
   const result = await api("/api/ingest/run", { method: "POST" });
   state = result.state;
+  await refreshLinkedInOrganizations();
   renderAll();
   renderReport();
   showToast("OAuth to posts to metrics pipeline completed");
@@ -337,6 +376,27 @@ function wireEvents() {
     const sync = event.target.closest("[data-sync-connector]");
     if (toggle) toggleConnector(toggle.dataset.connector).catch((error) => showToast(error.message));
     if (sync) syncConnector(sync.dataset.syncConnector).catch((error) => showToast(error.message));
+  });
+
+  document.querySelector("#sourceGrid").addEventListener("change", async (event) => {
+    const select = event.target.closest("[data-linkedin-organization]");
+    if (!select) return;
+    if (!select.value) {
+      showToast("Choose a LinkedIn organization");
+      return;
+    }
+    try {
+      const result = await api("/api/linkedin/select-organization", {
+        method: "POST",
+        body: JSON.stringify({ organizationUrn: select.value })
+      });
+      state.linkedinOrganizations = result;
+      state.sources.linkedin = { ...(state.sources.linkedin || {}), selectedOrganization: result.selectedOrganization };
+      renderConnectors();
+      showToast("LinkedIn organization selected");
+    } catch (error) {
+      showToast(error.message);
+    }
   });
 
   document.querySelector("#ruleList").addEventListener("click", async (event) => {
@@ -409,12 +469,17 @@ function wireEvents() {
 }
 
 async function boot() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("linkedinUserId")) {
+    linkedInUserId = params.get("linkedinUserId");
+    localStorage.setItem(linkedInUserStorageKey, linkedInUserId);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
   wireEvents();
   await loadBackendState();
   hydrateControls();
   renderAll();
   renderReport();
-  const params = new URLSearchParams(window.location.search);
   if (params.get("connector") === "connected") showToast("Connector OAuth completed");
   if (params.get("connector") === "error") showToast(params.get("message") || "Connector connection failed");
 }

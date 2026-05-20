@@ -25,16 +25,19 @@ async function exchangeCodeForToken(code, redirectUri, clientId, clientSecret) {
   return payload;
 }
 
-async function fetchPosts(accessToken, options = {}) {
-  if (process.env.LINKEDIN_DEMO_MODE === "true") return demoPosts();
+async function fetchPosts(accessToken, organizationUrn, options = {}) {
+  if (typeof organizationUrn === "object") {
+    options = organizationUrn;
+    organizationUrn = options.organizationUrn;
+  }
+  if (process.env.LINKEDIN_DEMO_MODE === "true") return demoPosts(organizationUrn);
 
   const fetch = await getFetch();
-  const author = options.authorUrn || process.env.LINKEDIN_AUTHOR_URN;
-  if (!author) throw new Error("Missing LINKEDIN_AUTHOR_URN for LinkedIn post ingestion");
+  if (!organizationUrn) throw new Error("LinkedIn organization selection required before post ingestion");
 
   const url = new URL(LINKEDIN_UGC_POSTS_URL);
   url.searchParams.set("q", "authors");
-  url.searchParams.set("authors", `List(${author})`);
+  url.searchParams.set("authors", `List(${organizationUrn})`);
   url.searchParams.set("sortBy", "LAST_MODIFIED");
   url.searchParams.set("count", String(options.count || 25));
 
@@ -49,10 +52,15 @@ async function fetchPosts(accessToken, options = {}) {
   return payload.elements || [];
 }
 
-async function fetchMetrics(accessToken, postIds) {
+async function fetchMetrics(accessToken, organizationUrn, postIds) {
+  if (Array.isArray(organizationUrn)) {
+    postIds = organizationUrn;
+    organizationUrn = null;
+  }
   if (process.env.LINKEDIN_DEMO_MODE === "true") {
     return Object.fromEntries(postIds.map((id, index) => [id, demoMetric(index)]));
   }
+  if (!organizationUrn) throw new Error("LinkedIn organization selection required before metric ingestion");
 
   const fetch = await getFetch();
   const metrics = {};
@@ -60,7 +68,7 @@ async function fetchMetrics(accessToken, postIds) {
   for (const postId of postIds) {
     const [socialActions, analytics] = await Promise.all([
       fetchSocialActions(fetch, accessToken, postId),
-      fetchShareAnalytics(fetch, accessToken, postId)
+      fetchOrganizationAnalytics(accessToken, organizationUrn, postId, fetch)
     ]);
     metrics[postId] = {
       ...analytics,
@@ -86,13 +94,12 @@ async function fetchSocialActions(fetch, accessToken, postId) {
   return payload;
 }
 
-async function fetchShareAnalytics(fetch, accessToken, postId) {
-  const organization = process.env.LINKEDIN_ORGANIZATION_URN;
-  if (!organization) return {};
-
+async function fetchOrganizationAnalytics(accessToken, organizationUrn, postId, fetchImpl) {
+  if (!organizationUrn) throw new Error("LinkedIn organization selection required before analytics ingestion");
+  const fetch = fetchImpl || await getFetch();
   const url = new URL(LINKEDIN_ANALYTICS_URL);
   url.searchParams.set("q", "organizationalEntity");
-  url.searchParams.set("organizationalEntity", organization);
+  url.searchParams.set("organizationalEntity", organizationUrn);
   url.searchParams.set("shares", `List(${postId})`);
 
   const response = await fetch(url, {
@@ -161,11 +168,11 @@ function numberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function demoPosts() {
+function demoPosts(organizationUrn = "urn:li:organization:demo") {
   return [
     {
       id: "urn:li:share:demo-001",
-      author: process.env.LINKEDIN_AUTHOR_URN || "urn:li:organization:demo",
+      author: organizationUrn,
       created: { time: Date.now() - 86400000 },
       text: "Demo LinkedIn post for Metricflow connector ingestion.",
       url: "https://www.linkedin.com/feed/update/urn:li:share:demo-001"
@@ -190,5 +197,6 @@ module.exports = {
   exchangeCodeForToken,
   fetchPosts,
   fetchMetrics,
+  fetchOrganizationAnalytics,
   normalizePosts
 };

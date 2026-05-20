@@ -62,6 +62,7 @@ export default {
       if (route === "GET /api/health") return json({ ok: true, service: "MetricFlow Worker API" }, env);
       if (route === "GET /api/state") return json(statePayload(await loadState(env)), env);
       if (route === "GET /api/connectors") return json({ connectors: connectorStatus(await loadState(env), env, url) }, env);
+      if (route === "GET /api/linkedin/organizations") return json(await linkedinOrganizations(request, env), env);
       if (route === "GET /api/posts") return json({ posts: filterPosts((await loadState(env)).posts || [], url.searchParams) }, env);
       if (route === "GET /api/reports") return json({ reports: (await loadState(env)).reports || [] }, env);
       if (route === "GET /api/export.csv") return csv(await loadState(env), env);
@@ -84,6 +85,10 @@ export default {
       const connectorConnect = url.pathname.match(/^\/api\/connectors\/([^/]+)\/connect$/);
       if (request.method === "GET" && connectorConnect) {
         return Response.redirect(`${url.origin}/oauth/${connectorConnect[1]}/authorize`, 302);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/linkedin/select-organization") {
+        return json(await selectLinkedInOrganization(request, env), env);
       }
 
       const connectorPatch = url.pathname.match(/^\/api\/connectors\/([^/]+)$/);
@@ -165,6 +170,17 @@ async function saveState(env, state) {
   await env.METRICFLOW_STORE.put(STORE_KEY, JSON.stringify(migrateState(state), null, 2));
 }
 
+async function loadUserState(env, userId) {
+  if (!userId) return null;
+  const raw = await env.USER_STATE?.get(userId);
+  return raw ? JSON.parse(raw) : null;
+}
+
+async function saveUserState(env, userId, userState) {
+  if (!env.USER_STATE) throw new Error("Missing USER_STATE KV binding");
+  await env.USER_STATE.put(userId, JSON.stringify(userState, null, 2));
+}
+
 function migrateState(state = {}) {
   return {
     ...defaultState,
@@ -219,6 +235,47 @@ async function callback(source, request, env) {
 
   const token = await exchangeCodeForToken(config.connector.tokenUrl, code, config.redirectUri, config.clientId, config.clientSecret);
   const state = await loadState(env);
+  if (source === "linkedin") {
+    const expiresAt = token.expires_in ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString() : null;
+    // Step 1: identify the LinkedIn member who completed OAuth.
+    const profile = await fetchLinkedInProfile(token.access_token);
+    const userId = profile.id;
+    if (!userId) throw new Error("LinkedIn profile response did not include an id");
+
+    // Step 2: discover every organization this member administers.
+    const organizations = await fetchLinkedInOrganizations(token.access_token);
+    const previousUserState = await loadUserState(env, userId);
+    const selectedOrganization = organizations.includes(previousUserState?.selectedOrganization)
+      ? previousUserState.selectedOrganization
+      : null;
+
+    // Step 3: persist user-scoped credentials and tenant choices in USER_STATE.
+    await saveUserState(env, userId, {
+      accessToken: token.access_token,
+      refreshToken: token.refresh_token || previousUserState?.refreshToken || null,
+      expiresAt,
+      organizations,
+      selectedOrganization
+    });
+
+    // Step 4: keep only non-secret connector status in the shared app state.
+    state.sources[source] = {
+      ...(state.sources[source] || {}),
+      connected: true,
+      userId,
+      expiresAt,
+      organizationCount: organizations.length,
+      selectedOrganization,
+      tokenType: token.token_type,
+      connectedAt: new Date().toISOString()
+    };
+    await saveState(env, state);
+    const redirectTarget = env.PAGES_URL ? new URL(env.PAGES_URL) : new URL("/", requestUrl.origin);
+    redirectTarget.searchParams.set("connector", "connected");
+    redirectTarget.searchParams.set("linkedinUserId", userId);
+    return withUserCookie(Response.redirect(redirectTarget.toString(), 302), userId, env);
+  }
+
   state.sources[source] = {
     ...(state.sources[source] || {}),
     connected: true,
@@ -257,7 +314,7 @@ async function ingestSource(source, options, env) {
     error.status = 404;
     throw error;
   }
-  if (!sourceState?.accessToken && env.LINKEDIN_DEMO_MODE !== "true") {
+  if (source !== "linkedin" && !sourceState?.accessToken && env.LINKEDIN_DEMO_MODE !== "true") {
     const error = new Error(`OAuth token missing for ${source}`);
     error.status = 401;
     throw error;
@@ -268,23 +325,60 @@ async function ingestSource(source, options, env) {
     throw error;
   }
 
-  const rawPosts = env.LINKEDIN_DEMO_MODE === "true" ? demoLinkedInPosts() : await fetchLinkedInPosts(sourceState.accessToken, env, options);
+  // Load the active user's LinkedIn credentials from USER_STATE instead of Worker secrets.
+  const userState = env.LINKEDIN_DEMO_MODE === "true" ? null : await loadUserState(env, options.userId || sourceState?.userId);
+  const accessToken = userState?.accessToken || sourceState?.accessToken;
+  const orgUrn = userState?.selectedOrganization;
+  if (env.LINKEDIN_DEMO_MODE !== "true" && !accessToken) {
+    const error = new Error("OAuth token missing for linkedin");
+    error.status = 401;
+    throw error;
+  }
+  if (env.LINKEDIN_DEMO_MODE !== "true" && !orgUrn) {
+    const error = new Error("LinkedIn organization selection required before ingestion");
+    error.status = 409;
+    throw error;
+  }
+
+  // Use the selected organization as the author and analytics entity for all LinkedIn API calls.
+  const rawPosts = env.LINKEDIN_DEMO_MODE === "true" ? demoLinkedInPosts() : await fetchLinkedInPosts(accessToken, orgUrn, options);
   const postIds = rawPosts.map((post) => post.id || post.urn || post.activity);
-  const rawMetrics = env.LINKEDIN_DEMO_MODE === "true" ? Object.fromEntries(postIds.map((id, index) => [id, demoLinkedInMetric(index)])) : await fetchLinkedInMetrics(sourceState.accessToken, postIds, env);
+  const rawMetrics = env.LINKEDIN_DEMO_MODE === "true" ? Object.fromEntries(postIds.map((id, index) => [id, demoLinkedInMetric(index)])) : await fetchLinkedInMetrics(accessToken, orgUrn, postIds);
   const normalized = normalizeLinkedInPosts(rawPosts, rawMetrics);
 
   state.posts = mergePosts(state.posts || [], normalized);
-  state.sources[source] = { ...(state.sources[source] || {}), connected: true, lastIngestedAt: new Date().toISOString() };
+  state.sources[source] = { ...(state.sources[source] || {}), connected: true, selectedOrganization: orgUrn || state.sources[source]?.selectedOrganization || null, lastIngestedAt: new Date().toISOString() };
   state.history = generateHistory(state.posts);
   await saveState(env, state);
   return { source, fetched: rawPosts.length, saved: normalized.length, posts: normalized };
 }
 
-async function fetchLinkedInPosts(accessToken, env, options = {}) {
-  if (!env.LINKEDIN_AUTHOR_URN) throw new Error("Missing LINKEDIN_AUTHOR_URN");
+async function fetchLinkedInProfile(accessToken) {
+  const response = await fetch("https://api.linkedin.com/v2/me", {
+    headers: { authorization: `Bearer ${accessToken}`, "x-restli-protocol-version": "2.0.0" }
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || "LinkedIn profile API request failed");
+  return payload;
+}
+
+async function fetchLinkedInOrganizations(accessToken) {
+  const url = new URL("https://api.linkedin.com/v2/organizationAcls");
+  url.searchParams.set("q", "roleAssignee");
+  url.searchParams.set("role", "ADMINISTRATOR");
+  const response = await fetch(url, {
+    headers: { authorization: `Bearer ${accessToken}`, "x-restli-protocol-version": "2.0.0" }
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || "LinkedIn organization ACLs API request failed");
+  return [...new Set((payload.elements || []).map((row) => row.organization).filter(Boolean))];
+}
+
+async function fetchLinkedInPosts(accessToken, organizationUrn, options = {}) {
+  if (!organizationUrn) throw new Error("Missing LinkedIn organization URN");
   const url = new URL("https://api.linkedin.com/v2/ugcPosts");
   url.searchParams.set("q", "authors");
-  url.searchParams.set("authors", `List(${env.LINKEDIN_AUTHOR_URN})`);
+  url.searchParams.set("authors", `List(${organizationUrn})`);
   url.searchParams.set("sortBy", "LAST_MODIFIED");
   url.searchParams.set("count", String(options.count || 25));
   const response = await fetch(url, { headers: { authorization: `Bearer ${accessToken}`, "x-restli-protocol-version": "2.0.0" } });
@@ -293,11 +387,11 @@ async function fetchLinkedInPosts(accessToken, env, options = {}) {
   return payload.elements || [];
 }
 
-async function fetchLinkedInMetrics(accessToken, postIds, env) {
+async function fetchLinkedInMetrics(accessToken, organizationUrn, postIds) {
   const metrics = {};
   for (const postId of postIds) {
     const social = await fetchLinkedInSocialActions(accessToken, postId);
-    const analytics = env.LINKEDIN_ORGANIZATION_URN ? await fetchLinkedInAnalytics(accessToken, postId, env.LINKEDIN_ORGANIZATION_URN) : {};
+    const analytics = await fetchOrganizationAnalytics(accessToken, organizationUrn, postId);
     metrics[postId] = {
       ...analytics,
       likes: social.likesSummary?.totalLikes ?? null,
@@ -317,7 +411,8 @@ async function fetchLinkedInSocialActions(accessToken, postId) {
   return payload;
 }
 
-async function fetchLinkedInAnalytics(accessToken, postId, organizationUrn) {
+async function fetchOrganizationAnalytics(accessToken, organizationUrn, postId) {
+  if (!organizationUrn) throw new Error("Missing LinkedIn organization URN");
   const url = new URL("https://api.linkedin.com/v2/organizationalEntityShareStatistics");
   url.searchParams.set("q", "organizationalEntity");
   url.searchParams.set("organizationalEntity", organizationUrn);
@@ -333,6 +428,75 @@ async function fetchLinkedInAnalytics(accessToken, postId, organizationUrn) {
     shares: numberOrNull(row.shareCount),
     clicks: numberOrNull(row.clickCount)
   };
+}
+
+async function linkedinOrganizations(request, env) {
+  const userId = resolveLinkedInUserId(request, await loadState(env));
+  const userState = await loadUserState(env, userId);
+  if (!userState) {
+    const error = new Error("LinkedIn user state not found");
+    error.status = 404;
+    throw error;
+  }
+  return {
+    userId,
+    organizations: userState.organizations || [],
+    selectedOrganization: userState.selectedOrganization || null
+  };
+}
+
+async function selectLinkedInOrganization(request, env) {
+  const body = await readJson(request);
+  const organizationUrn = body.organizationUrn;
+  const state = await loadState(env);
+  const userId = resolveLinkedInUserId(request, state);
+  const userState = await loadUserState(env, userId);
+  if (!userState) {
+    const error = new Error("LinkedIn user state not found");
+    error.status = 404;
+    throw error;
+  }
+  if (!userState.organizations?.includes(organizationUrn)) {
+    const error = new Error("Organization is not available for this LinkedIn user");
+    error.status = 400;
+    throw error;
+  }
+
+  // Persist the tenant choice in USER_STATE and mirror non-secret status into app state
+  // so existing connector cards stay backward compatible.
+  userState.selectedOrganization = organizationUrn;
+  await saveUserState(env, userId, userState);
+  state.sources.linkedin = { ...(state.sources.linkedin || {}), connected: true, userId, selectedOrganization: organizationUrn };
+  await saveState(env, state);
+  return { userId, organizations: userState.organizations || [], selectedOrganization: organizationUrn };
+}
+
+function resolveLinkedInUserId(request, state) {
+  const requestUrl = new URL(request.url);
+  const fromHeader = request.headers.get("x-metricflow-user-id");
+  const fromQuery = requestUrl.searchParams.get("userId");
+  const fromCookie = parseCookie(request.headers.get("cookie") || "").metricflow_linkedin_user;
+  const userId = fromHeader || fromQuery || fromCookie || state.sources?.linkedin?.userId;
+  if (!userId) {
+    const error = new Error("LinkedIn user id is required");
+    error.status = 401;
+    throw error;
+  }
+  return userId;
+}
+
+function parseCookie(value) {
+  return Object.fromEntries(value.split(";").map((part) => part.trim()).filter(Boolean).map((part) => {
+    const index = part.indexOf("=");
+    return index === -1 ? [part, ""] : [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
+  }));
+}
+
+function withUserCookie(response, userId, env) {
+  const headers = new Headers(response.headers);
+  const secure = env.PAGES_URL || env.CORS_ORIGIN ? "; Secure" : "";
+  headers.append("set-cookie", `metricflow_linkedin_user=${encodeURIComponent(userId)}; Path=/; HttpOnly; SameSite=Lax${secure}; Max-Age=31536000`);
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 function normalizeLinkedInPosts(rawPosts, rawMetrics = {}) {
@@ -529,6 +693,6 @@ function cors(response, env) {
   const headers = new Headers(response.headers);
   headers.set("access-control-allow-origin", env.CORS_ORIGIN || "*");
   headers.set("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  headers.set("access-control-allow-headers", "content-type,authorization");
+  headers.set("access-control-allow-headers", "content-type,authorization,x-metricflow-user-id");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }

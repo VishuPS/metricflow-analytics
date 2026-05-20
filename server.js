@@ -112,13 +112,19 @@ async function ingestSource(source, options = {}) {
   }
 
   const accessToken = sourceState?.accessToken || "demo-token";
+  const organizationUrn = source === "linkedin" ? (options.organizationUrn || sourceState?.selectedOrganization) : undefined;
+  if (source === "linkedin" && process.env.LINKEDIN_DEMO_MODE !== "true" && !organizationUrn) {
+    const error = new Error("LinkedIn organization selection required before ingestion");
+    error.status = 409;
+    throw error;
+  }
 
   // 1. Fetch raw platform posts.
-  const rawPosts = await connector.module.fetchPosts(accessToken, options);
+  const rawPosts = await connector.module.fetchPosts(accessToken, organizationUrn, options);
   const postIds = rawPosts.map((post) => String(post.id || post.urn || post.activity || post.post_id));
 
   // 2. Fetch raw platform metrics for each post.
-  const rawMetrics = await connector.module.fetchMetrics(accessToken, postIds, options);
+  const rawMetrics = await connector.module.fetchMetrics(accessToken, organizationUrn, postIds, options);
 
   // 3. Normalize every API shape into Metricflow's internal schema.
   const normalizedPosts = connector.module.normalizePosts(rawPosts, rawMetrics);

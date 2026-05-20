@@ -142,13 +142,15 @@ Create a KV namespace once:
 
 ```powershell
 wrangler kv namespace create METRICFLOW_STORE
+wrangler kv namespace create USER_STATE
 ```
 
 Copy the generated namespace id into `wrangler.worker.toml`:
 
 ```toml
 kv_namespaces = [
-  { binding = "METRICFLOW_STORE", id = "your_namespace_id" }
+  { binding = "METRICFLOW_STORE", id = "your_namespace_id" },
+  { binding = "USER_STATE", id = "your_user_state_namespace_id" }
 ]
 ```
 
@@ -157,17 +159,15 @@ Set Worker secrets for OAuth:
 ```powershell
 wrangler secret put LINKEDIN_CLIENT_ID --config wrangler.worker.toml
 wrangler secret put LINKEDIN_CLIENT_SECRET --config wrangler.worker.toml
-wrangler secret put LINKEDIN_AUTHOR_URN --config wrangler.worker.toml
-wrangler secret put LINKEDIN_ORGANIZATION_URN --config wrangler.worker.toml
 ```
+
+LinkedIn organization URNs are discovered per user after OAuth through `organizationAcls` and stored in `USER_STATE`; they are no longer Worker-level secrets.
 
 For GitHub Actions, add matching repository secrets if you want the workflow environment to carry the same values:
 
 - `LINKEDIN_CLIENT_ID`
 - `LINKEDIN_CLIENT_SECRET`
 - `LINKEDIN_REDIRECT_URI`
-- `LINKEDIN_AUTHOR_URN`
-- `LINKEDIN_ORGANIZATION_URN`
 
 Pages can call the Worker in two ways:
 

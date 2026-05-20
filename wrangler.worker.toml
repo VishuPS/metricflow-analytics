@@ -3,7 +3,8 @@ main = "workers/metricflow-api.js"
 compatibility_date = "2026-05-19"
 
 kv_namespaces = [
-  { binding = "METRICFLOW_STORE", id = "00a2f91175ac4a1c96b5d349aca449cf" }
+  { binding = "METRICFLOW_STORE", id = "00a2f91175ac4a1c96b5d349aca449cf" },
+  { binding = "USER_STATE", id = "7bc55f01f01d49a28774f63eb0ed183e" }
 ]
 
 [vars]
