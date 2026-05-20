@@ -33,7 +33,7 @@ const connectorRegistry = {
     name: "LinkedIn",
     color: "#0a66c2",
     authUrl: "https://www.linkedin.com/oauth/v2/authorization",
-    scopes: ["r_liteprofile", "r_organization_social", "rw_organization_admin"],
+    scopes: ["openid", "profile", "r_organization_admin", "r_organization_social", "r_ads", "r_ads_reporting"],
     envPrefix: "LINKEDIN",
     module: linkedin
   },

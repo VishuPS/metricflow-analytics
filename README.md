@@ -163,6 +163,13 @@ wrangler secret put LINKEDIN_CLIENT_SECRET --config wrangler.worker.toml
 
 LinkedIn organization URNs are discovered per user after OAuth through `organizationAcls` and stored in `USER_STATE`; they are no longer Worker-level secrets.
 
+LinkedIn OAuth now requests read-only advertising scopes in addition to organization analytics scopes:
+
+- `r_ads`
+- `r_ads_reporting`
+
+After adding the LinkedIn Advertising API product to the Developer app, reconnect LinkedIn in MetricFlow so the stored user token includes these scopes.
+
 For GitHub Actions, add matching repository secrets if you want the workflow environment to carry the same values:
 
 - `LINKEDIN_CLIENT_ID`

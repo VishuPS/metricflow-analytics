@@ -7,7 +7,7 @@ const connectors = {
     color: "#0a66c2",
     authUrl: "https://www.linkedin.com/oauth/v2/authorization",
     tokenUrl: "https://www.linkedin.com/oauth/v2/accessToken",
-    scopes: ["openid", "profile", "r_organization_admin", "r_organization_social"]
+    scopes: ["openid", "profile", "r_organization_admin", "r_organization_social", "r_ads", "r_ads_reporting"]
   },
   instagram: {
     id: "instagram",
