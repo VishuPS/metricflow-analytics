@@ -43,7 +43,7 @@ function navigate(path) {
   window.history.pushState({}, "", path);
   render();
   if (shouldScrollTop) {
-    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+    window.requestAnimationFrame(() => window.scrollTo(0, 0));
   }
 }
 
