@@ -24,7 +24,7 @@ function readSession() {
 function saveSession(nextSession) {
   session = { ...session, ...nextSession };
   localStorage.setItem(sessionKey, JSON.stringify(session));
-  if (session.userId) localStorage.setItem(linkedInUserStorageKey, session.userId);
+  if (session.linkedInUserId) localStorage.setItem(linkedInUserStorageKey, session.linkedInUserId);
 }
 
 function clearSession() {
@@ -47,7 +47,7 @@ function navigate(path) {
 function captureOAuthReturn() {
   const params = new URLSearchParams(window.location.search);
   const linkedInUserId = params.get("linkedinUserId");
-  if (linkedInUserId) saveSession({ userId: linkedInUserId });
+  if (linkedInUserId) saveSession({ linkedInUserId });
   if (params.get("connector") === "connected") {
     window.history.replaceState({}, "", "/dashboard/onboarding");
     showToast("LinkedIn connected");
@@ -56,8 +56,8 @@ function captureOAuthReturn() {
 
 async function api(path, options = {}) {
   const headers = { "content-type": "application/json", ...(options.headers || {}) };
-  const userId = session.userId || localStorage.getItem(linkedInUserStorageKey);
-  if (userId) headers["x-metricflow-user-id"] = userId;
+  const linkedInUserId = session.linkedInUserId || localStorage.getItem(linkedInUserStorageKey);
+  if (linkedInUserId) headers["x-metricflow-user-id"] = linkedInUserId;
   if (session.token) headers.authorization = `Bearer ${session.token}`;
 
   const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -81,7 +81,8 @@ async function authenticate(mode, form) {
     name: result.name || payload.name || session.name || "",
     email: result.email || payload.email,
     token: result.token || result.accessToken || session.token || "",
-    userId: result.userId || result.id || result.linkedinUserId || session.userId || ""
+    accountId: result.userId || result.id || session.accountId || "",
+    linkedInUserId: result.linkedinUserId || session.linkedInUserId || localStorage.getItem(linkedInUserStorageKey) || ""
   });
   navigate("/dashboard/onboarding");
 }
@@ -204,7 +205,7 @@ function ConnectLinkedInStep() {
     <p class="eyebrow">Step 1</p>
     <h1>Connect LinkedIn</h1>
     <p class="muted">Connect the LinkedIn account that administers the organizations you want to analyze.</p>
-    <button class="primary-button" data-connect-linkedin>Connect LinkedIn</button>
+    <a class="primary-button link-button" href="${apiBaseUrl}/api/connectors/linkedin/connect" data-connect-linkedin>Connect LinkedIn</a>
   `;
 }
 
@@ -270,7 +271,7 @@ async function hydrateOnboarding() {
     container.innerHTML = SelectOrganizationStep(organizations, details.selectedOrganization);
     return;
   }
-  container.innerHTML = DashboardReadyStep();
+  navigate("/dashboard");
 }
 
 async function hydrateDashboard() {
@@ -310,9 +311,7 @@ async function hydrateDashboard() {
 }
 
 function wirePageEvents() {
-  document.querySelectorAll("[data-route]").forEach((element) => {
-    element.addEventListener("click", () => navigate(element.dataset.route));
-  });
+  app.onclick = handleAppClick;
 
   document.querySelectorAll("[data-auth]").forEach((form) => {
     form.addEventListener("submit", async (event) => {
@@ -325,31 +324,28 @@ function wirePageEvents() {
     });
   });
 
-  document.querySelector("[data-logout]")?.addEventListener("click", () => {
+}
+
+async function handleAppClick(event) {
+  const routeTarget = event.target.closest("[data-route]");
+  if (routeTarget) {
+    navigate(routeTarget.dataset.route);
+    return;
+  }
+
+  if (event.target.closest("[data-logout]")) {
     clearSession();
     navigate("/");
-  });
+    return;
+  }
 
-  document.querySelector("[data-connect-linkedin]")?.addEventListener("click", () => {
+  if (event.target.closest("[data-connect-linkedin]")) {
+    event.preventDefault();
     window.location.href = `${apiBaseUrl}/api/connectors/linkedin/connect`;
-  });
+    return;
+  }
 
-  document.querySelectorAll("[data-organization]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      try {
-        const result = await api("/api/linkedin/select-organization", {
-          method: "POST",
-          body: JSON.stringify({ organizationUrn: button.dataset.organization })
-        });
-        linkedInState = result;
-        navigate("/dashboard");
-      } catch (error) {
-        showToast(error.message);
-      }
-    });
-  });
-
-  document.querySelector("[data-sync-linkedin]")?.addEventListener("click", async () => {
+  if (event.target.closest("[data-sync-linkedin]")) {
     try {
       await api("/api/connectors/linkedin/sync", { method: "POST" });
       await hydrateDashboard();
@@ -357,7 +353,21 @@ function wirePageEvents() {
     } catch (error) {
       showToast(error.message);
     }
-  });
+  }
+
+  const organizationTarget = event.target.closest("[data-organization]");
+  if (organizationTarget) {
+    try {
+      const result = await api("/api/linkedin/select-organization", {
+        method: "POST",
+        body: JSON.stringify({ organizationUrn: organizationTarget.dataset.organization })
+      });
+      linkedInState = result;
+      navigate("/dashboard");
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
 }
 
 async function render() {
@@ -365,7 +375,7 @@ async function render() {
   const route = routes[path] ? path : "/";
   const isPrivate = route.startsWith("/dashboard");
 
-  if (isPrivate && !session.email && !session.userId && !localStorage.getItem(linkedInUserStorageKey)) {
+  if (isPrivate && !session.email && !session.accountId && !session.linkedInUserId && !localStorage.getItem(linkedInUserStorageKey)) {
     window.history.replaceState({}, "", "/login");
     app.innerHTML = LoginPage();
     wirePageEvents();
