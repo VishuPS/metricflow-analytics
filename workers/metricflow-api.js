@@ -60,6 +60,8 @@ export default {
       const route = `${request.method} ${url.pathname}`;
 
       if (route === "GET /api/health") return json({ ok: true, service: "MetricFlow Worker API" }, env);
+      if (route === "POST /api/signup" || route === "POST /api/auth/signup") return json(await signup(request, env), env, 201);
+      if (route === "POST /api/login" || route === "POST /api/auth/login") return json(await login(request, env), env);
       if (route === "GET /api/state") return json(statePayload(await loadState(env)), env);
       if (route === "GET /api/connectors") return json({ connectors: connectorStatus(await loadState(env), env, url) }, env);
       if (route === "GET /api/linkedin/organizations") return json(await linkedinOrganizations(request, env), env);
@@ -179,6 +181,85 @@ async function loadUserState(env, userId) {
 async function saveUserState(env, userId, userState) {
   if (!env.USER_STATE) throw new Error("Missing USER_STATE KV binding");
   await env.USER_STATE.put(userId, JSON.stringify(userState, null, 2));
+}
+
+async function signup(request, env) {
+  const body = await readJson(request);
+  const name = String(body.name || "").trim();
+  const email = normalizeEmail(body.email);
+  const password = String(body.password || "");
+  if (!name || !email || !password) {
+    const error = new Error("Name, email, and password are required");
+    error.status = 400;
+    throw error;
+  }
+  if (password.length < 8) {
+    const error = new Error("Password must be at least 8 characters");
+    error.status = 400;
+    throw error;
+  }
+
+  const accountKey = authAccountKey(email);
+  const existing = await env.USER_STATE?.get(accountKey);
+  if (existing) {
+    const error = new Error("An account already exists for this email");
+    error.status = 409;
+    throw error;
+  }
+
+  const id = `acct_${crypto.randomUUID()}`;
+  const salt = crypto.randomUUID();
+  const passwordHash = await hashPassword(password, salt);
+  const account = {
+    id,
+    name,
+    email,
+    salt,
+    passwordHash,
+    createdAt: new Date().toISOString()
+  };
+  await saveUserState(env, accountKey, account);
+  await saveUserState(env, `auth:id:${id}`, { email });
+  return authPayload(account);
+}
+
+async function login(request, env) {
+  const body = await readJson(request);
+  const email = normalizeEmail(body.email);
+  const password = String(body.password || "");
+  const raw = await env.USER_STATE?.get(authAccountKey(email));
+  const account = raw ? JSON.parse(raw) : null;
+  const passwordHash = account ? await hashPassword(password, account.salt) : "";
+  if (!account || passwordHash !== account.passwordHash) {
+    const error = new Error("Invalid email or password");
+    error.status = 401;
+    throw error;
+  }
+  return authPayload(account);
+}
+
+function authPayload(account) {
+  return {
+    id: account.id,
+    userId: account.id,
+    name: account.name,
+    email: account.email,
+    token: `session_${crypto.randomUUID()}`
+  };
+}
+
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function authAccountKey(email) {
+  return `auth:account:${email}`;
+}
+
+async function hashPassword(password, salt) {
+  const data = new TextEncoder().encode(`${salt}:${password}`);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function migrateState(state = {}) {
