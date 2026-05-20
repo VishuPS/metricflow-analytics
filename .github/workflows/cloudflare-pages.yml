@@ -33,6 +33,24 @@ jobs:
       - name: Validate JavaScript
         run: npm run check
 
+      - name: Configure Worker OAuth secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          LINKEDIN_CLIENT_ID: ${{ secrets.LINKEDIN_CLIENT_ID }}
+          LINKEDIN_CLIENT_SECRET: ${{ secrets.LINKEDIN_CLIENT_SECRET }}
+          LINKEDIN_REDIRECT_URI: ${{ secrets.LINKEDIN_REDIRECT_URI }}
+        run: |
+          if [ -n "$LINKEDIN_CLIENT_ID" ]; then
+            printf "%s" "$LINKEDIN_CLIENT_ID" | npx wrangler@latest secret put LINKEDIN_CLIENT_ID --config wrangler.worker.toml
+          fi
+          if [ -n "$LINKEDIN_CLIENT_SECRET" ]; then
+            printf "%s" "$LINKEDIN_CLIENT_SECRET" | npx wrangler@latest secret put LINKEDIN_CLIENT_SECRET --config wrangler.worker.toml
+          fi
+          if [ -n "$LINKEDIN_REDIRECT_URI" ]; then
+            printf "%s" "$LINKEDIN_REDIRECT_URI" | npx wrangler@latest secret put LINKEDIN_REDIRECT_URI --config wrangler.worker.toml
+          fi
+
       - name: Deploy Worker API
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
