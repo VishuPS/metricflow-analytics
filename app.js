@@ -13,6 +13,8 @@ const routes = {
   "/": WelcomePage,
   "/signup": SignupPage,
   "/login": LoginPage,
+  "/forgot-password": ForgotPasswordPage,
+  "/reset-password": ResetPasswordPage,
   "/dashboard/onboarding": OnboardingPage,
   "/dashboard": Dashboard
 };
@@ -87,6 +89,27 @@ async function authenticate(mode, form) {
     accountId: result.userId || result.id || session.accountId || ""
   });
   navigate("/dashboard/onboarding");
+}
+
+async function requestPasswordReset(form) {
+  const payload = Object.fromEntries(new FormData(form).entries());
+  await api("/api/password/forgot", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  showToast("If an account exists, reset instructions will be sent.");
+  navigate("/login");
+}
+
+async function submitPasswordReset(form) {
+  const payload = Object.fromEntries(new FormData(form).entries());
+  if (payload.password !== payload.confirmPassword) throw new Error("Passwords do not match");
+  await api("/api/password/reset", {
+    method: "POST",
+    body: JSON.stringify({ token: payload.token, password: payload.password })
+  });
+  showToast("Password updated. Log in with your new password.");
+  navigate("/login");
 }
 
 async function postFirstAvailable(endpoints, payload) {
@@ -253,7 +276,47 @@ function LoginPage() {
           <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
           <button class="primary-button full" type="submit">Log in</button>
         </form>
+        <p class="muted"><button class="inline-link" data-route="/forgot-password">Forgot your password?</button></p>
         <p class="muted">New to MetricFlow? <button class="inline-link" data-route="/signup">Create an account</button></p>
+      </section>
+    </main>
+  `;
+}
+
+function ForgotPasswordPage() {
+  return `
+    ${TopNav()}
+    <main class="page-shell auth-shell">
+      <section class="auth-card">
+        <p class="eyebrow">Password reset</p>
+        <h1>Reset your password</h1>
+        <p class="muted">Enter your account email and we’ll send a secure reset link if the account exists.</p>
+        <form data-password-forgot>
+          <label>Email<input name="email" type="email" autocomplete="email" required></label>
+          <button class="primary-button full" type="submit">Send reset link</button>
+        </form>
+        <p class="muted"><button class="inline-link" data-route="/login">Back to log in</button></p>
+      </section>
+    </main>
+  `;
+}
+
+function ResetPasswordPage() {
+  const token = new URLSearchParams(window.location.search).get("token") || "";
+  return `
+    ${TopNav()}
+    <main class="page-shell auth-shell">
+      <section class="auth-card">
+        <p class="eyebrow">New password</p>
+        <h1>Choose a new password</h1>
+        <p class="muted">Use at least 8 characters. Your old password cannot be recovered.</p>
+        <form data-password-reset>
+          <input name="token" type="hidden" value="${escapeAttribute(token)}">
+          <label>New password<input name="password" type="password" autocomplete="new-password" required minlength="8"></label>
+          <label>Confirm password<input name="confirmPassword" type="password" autocomplete="new-password" required minlength="8"></label>
+          <button class="primary-button full" type="submit">Update password</button>
+        </form>
+        <p class="muted"><button class="inline-link" data-route="/login">Back to log in</button></p>
       </section>
     </main>
   `;
@@ -401,6 +464,38 @@ function wirePageEvents() {
     });
   });
 
+  document.querySelectorAll("[data-password-forgot]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await requestPasswordReset(form);
+      } catch (error) {
+        showToast(error.message);
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-password-reset]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await submitPasswordReset(form);
+      } catch (error) {
+        showToast(error.message);
+      }
+    });
+  });
+
+}
+
+function escapeAttribute(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  }[char]));
 }
 
 async function handleAppClick(event) {

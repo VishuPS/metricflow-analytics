@@ -60,6 +60,8 @@ export default {
       if (route === "GET /api/health") return json({ ok: true, service: "MetricFlow Worker API" }, env);
       if (route === "POST /api/signup" || route === "POST /api/auth/signup") return json(await signup(request, env), env, 201);
       if (route === "POST /api/login" || route === "POST /api/auth/login") return json(await login(request, env), env);
+      if (route === "POST /api/password/forgot" || route === "POST /api/auth/password/forgot") return json(await requestPasswordReset(request, env), env);
+      if (route === "POST /api/password/reset" || route === "POST /api/auth/password/reset") return json(await resetPassword(request, env), env);
       if (route === "GET /api/state") {
         const account = await requireAccount(request, env);
         return json(await userStatePayload(env, account.id), env);
@@ -209,6 +211,10 @@ function sessionKey(token) {
   return `session:${token}`;
 }
 
+function passwordResetKey(token) {
+  return `password-reset:${token}`;
+}
+
 function oauthStateKey(token) {
   return `oauth:state:${token}`;
 }
@@ -350,6 +356,99 @@ async function login(request, env) {
     throw error;
   }
   return authPayload(account, await createSession(env, account));
+}
+
+async function requestPasswordReset(request, env) {
+  const body = await readJson(request);
+  const email = normalizeEmail(body.email);
+  const generic = {
+    message: "If an account exists for that email, password reset instructions will be sent."
+  };
+  if (!email) return generic;
+
+  const raw = await env.USER_STATE?.get(authAccountKey(email));
+  const account = raw ? JSON.parse(raw) : null;
+  if (!account) return generic;
+
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 30).toISOString();
+  await saveUserJson(env, passwordResetKey(token), {
+    accountId: account.id,
+    email: account.email,
+    createdAt: new Date().toISOString(),
+    expiresAt
+  });
+
+  const appUrl = env.PAGES_URL || new URL(request.url).origin;
+  const resetUrl = `${appUrl}/reset-password?token=${encodeURIComponent(token)}`;
+  const emailSent = await sendPasswordResetEmail(env, account, resetUrl);
+  return {
+    ...generic,
+    emailSent,
+    resetUrl: env.PASSWORD_RESET_DEBUG_LINK === "true" ? resetUrl : undefined
+  };
+}
+
+async function resetPassword(request, env) {
+  const body = await readJson(request);
+  const token = String(body.token || "").trim();
+  const password = String(body.password || "");
+  if (!token || !password) {
+    const error = new Error("Reset token and new password are required");
+    error.status = 400;
+    throw error;
+  }
+  if (password.length < 8) {
+    const error = new Error("Password must be at least 8 characters");
+    error.status = 400;
+    throw error;
+  }
+
+  const reset = await loadUserJson(env, passwordResetKey(token), null);
+  if (!reset || new Date(reset.expiresAt).getTime() <= Date.now()) {
+    const error = new Error("Invalid or expired password reset link");
+    error.status = 400;
+    throw error;
+  }
+
+  const raw = await env.USER_STATE?.get(authAccountKey(reset.email));
+  const account = raw ? JSON.parse(raw) : null;
+  if (!account || account.id !== reset.accountId) {
+    const error = new Error("Invalid or expired password reset link");
+    error.status = 400;
+    throw error;
+  }
+
+  account.salt = crypto.randomUUID();
+  account.passwordHash = await hashPassword(password, account.salt);
+  account.passwordUpdatedAt = new Date().toISOString();
+  await saveUserState(env, authAccountKey(account.email), account);
+  await env.USER_STATE?.delete(passwordResetKey(token));
+  return { message: "Password updated. You can now log in with your new password." };
+}
+
+async function sendPasswordResetEmail(env, account, resetUrl) {
+  if (!env.PASSWORD_RESET_WEBHOOK_URL) return false;
+  const response = await fetch(env.PASSWORD_RESET_WEBHOOK_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(env.PASSWORD_RESET_WEBHOOK_SECRET ? { authorization: `Bearer ${env.PASSWORD_RESET_WEBHOOK_SECRET}` } : {})
+    },
+    body: JSON.stringify({
+      type: "password_reset",
+      to: account.email,
+      name: account.name,
+      resetUrl,
+      subject: "Reset your Metrillix password"
+    })
+  });
+  if (!response.ok) {
+    const error = new Error("Password reset email could not be sent");
+    error.status = 502;
+    throw error;
+  }
+  return true;
 }
 
 function authPayload(account, token) {
