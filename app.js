@@ -3,6 +3,7 @@ const toast = document.querySelector("#toast");
 const apiBaseUrl = window.METRICFLOW_API_BASE_URL || "";
 const appUrl = window.METRICFLOW_CLOUDFLARE_APP_URL || window.location.origin;
 const sessionKey = "metricflow.session";
+const cookieConsentKey = "metrillix.cookieConsent";
 
 let session = readSession();
 let dashboardState = null;
@@ -15,6 +16,7 @@ const routes = {
   "/login": LoginPage,
   "/forgot-password": ForgotPasswordPage,
   "/reset-password": ResetPasswordPage,
+  "/cookie-policy": CookiePolicyPage,
   "/dashboard/onboarding": OnboardingPage,
   "/dashboard": Dashboard
 };
@@ -67,7 +69,8 @@ async function api(path, options = {}) {
 
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...options,
-    headers
+    headers,
+    credentials: "include"
   });
   const type = response.headers.get("content-type") || "";
   const payload = type.includes("application/json") ? await response.json().catch(() => ({})) : await response.text();
@@ -160,6 +163,7 @@ function TopNav({ right = "login" } = {}) {
       <a class="nav-link" href="#about">About</a>
       <a class="nav-link" href="#privacy">Privacy Policy</a>
       <a class="nav-link" href="#terms">Terms</a>
+      <button class="nav-link" data-route="/cookie-policy">Cookies</button>
       <button class="nav-link" data-route="/login">Log In</button>
       <button class="nav-signup" data-route="/signup">Sign Up</button>
     `;
@@ -238,10 +242,37 @@ function WelcomePage() {
         <a href="#about">About Us</a>
         <a href="#privacy">Privacy Policy</a>
         <a href="#terms">Terms of Service</a>
+        <button class="footer-link" data-route="/cookie-policy">Cookie Policy</button>
         <a href="mailto:hello@metrillix.com">Contact</a>
       </nav>
       <p>© 2026 Metrillix — LinkedIn Analytics for Professionals</p>
     </footer>
+  `;
+}
+
+function CookiePolicyPage() {
+  return `
+    ${TopNav()}
+    <main class="page-shell policy-page">
+      <section>
+        <p class="eyebrow">Cookie Policy</p>
+        <h1>How Metrillix uses cookies</h1>
+        <p class="muted">Metrillix uses essential cookies to keep your account secure, remember your session, and protect authenticated dashboard requests. These cookies are needed for the product to work.</p>
+      </section>
+      <section class="policy-block">
+        <h2>Essential cookies</h2>
+        <p>We set a secure session cookie after signup or login. It helps verify that dashboard and API requests belong to your Metrillix account. The cookie is HttpOnly, Secure, SameSite=Lax, and expires automatically.</p>
+      </section>
+      <section class="policy-block">
+        <h2>Preference cookies</h2>
+        <p>We store your cookie notice choice in your browser so the notice does not keep appearing. This preference does not contain account analytics or LinkedIn data.</p>
+      </section>
+      <section class="policy-block">
+        <h2>LinkedIn cookies</h2>
+        <p>When you connect LinkedIn, LinkedIn may use its own cookies on linkedin.com to authenticate your LinkedIn account. Metrillix does not control LinkedIn cookies.</p>
+      </section>
+    </main>
+    ${CookieBanner()}
   `;
 }
 
@@ -561,6 +592,12 @@ function escapeAttribute(value) {
 }
 
 async function handleAppClick(event) {
+  if (event.target.closest("[data-accept-cookies]")) {
+    localStorage.setItem(cookieConsentKey, "accepted");
+    renderCookieBanner();
+    return;
+  }
+
   const routeTarget = event.target.closest("[data-route]");
   if (routeTarget) {
     event.preventDefault();
@@ -569,6 +606,7 @@ async function handleAppClick(event) {
   }
 
   if (event.target.closest("[data-logout]")) {
+    await api("/api/logout", { method: "POST" }).catch(() => {});
     clearSession();
     navigate("/");
     return;
@@ -643,8 +681,30 @@ async function render() {
   } catch (error) {
     showToast(error.message);
   }
+  renderCookieBanner();
 }
 
 window.addEventListener("popstate", render);
 captureOAuthReturn();
 render();
+
+function CookieBanner() {
+  return `
+    <aside class="cookie-banner" id="cookieBanner" hidden>
+      <p>Metrillix uses essential cookies for secure login and dashboard sessions. We also remember this notice choice.</p>
+      <div class="button-row">
+        <button class="primary-button" data-accept-cookies>Accept</button>
+        <button class="secondary-button" data-route="/cookie-policy">Cookie Policy</button>
+      </div>
+    </aside>
+  `;
+}
+
+function renderCookieBanner() {
+  let banner = document.querySelector("#cookieBanner");
+  if (!banner) {
+    document.body.insertAdjacentHTML("beforeend", CookieBanner());
+    banner = document.querySelector("#cookieBanner");
+  }
+  banner.hidden = localStorage.getItem(cookieConsentKey) === "accepted";
+}

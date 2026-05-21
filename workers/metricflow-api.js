@@ -58,8 +58,9 @@ export default {
       const route = `${request.method} ${url.pathname}`;
 
       if (route === "GET /api/health") return json({ ok: true, service: "MetricFlow Worker API" }, env);
-      if (route === "POST /api/signup" || route === "POST /api/auth/signup") return json(await signup(request, env), env, 201);
-      if (route === "POST /api/login" || route === "POST /api/auth/login") return json(await login(request, env), env);
+      if (route === "POST /api/signup" || route === "POST /api/auth/signup") return authJson(await signup(request, env), request, env, 201);
+      if (route === "POST /api/login" || route === "POST /api/auth/login") return authJson(await login(request, env), request, env);
+      if (route === "POST /api/logout" || route === "POST /api/auth/logout") return authJson({ message: "Logged out" }, request, env, 200, { clear: true });
       if (route === "POST /api/password/forgot" || route === "POST /api/auth/password/forgot") return json(await requestPasswordReset(request, env), env);
       if (route === "POST /api/password/reset" || route === "POST /api/auth/password/reset") return json(await resetPassword(request, env), env);
       if (route === "GET /api/state") {
@@ -231,6 +232,14 @@ function bearerToken(request) {
   return match ? match[1].trim() : "";
 }
 
+function cookieToken(request) {
+  const cookies = Object.fromEntries((request.headers.get("cookie") || "").split(";").map((part) => {
+    const [key, ...value] = part.trim().split("=");
+    return [key, decodeURIComponent(value.join("=") || "")];
+  }).filter(([key]) => key));
+  return cookies.metrillix_session || "";
+}
+
 async function createSession(env, account) {
   const token = `session_${crypto.randomUUID()}`;
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString();
@@ -246,7 +255,7 @@ async function createSession(env, account) {
 
 async function requireAccount(request, env) {
   const requestUrl = new URL(request.url);
-  const token = bearerToken(request) || requestUrl.searchParams.get("session") || "";
+  const token = bearerToken(request) || cookieToken(request) || requestUrl.searchParams.get("session") || "";
   if (!token) {
     const error = new Error("Authentication required");
     error.status = 401;
@@ -1166,10 +1175,25 @@ function json(payload, env, status = 200) {
   return cors(new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } }), env);
 }
 
+function authJson(payload, request, env, status = 200, options = {}) {
+  const response = json(payload, env, status);
+  const headers = new Headers(response.headers);
+  headers.append("set-cookie", options.clear ? sessionCookie("", request, 0) : sessionCookie(payload.token, request, 1000 * 60 * 60 * 24 * 14));
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+function sessionCookie(token, request, maxAgeMs) {
+  const hostname = new URL(request.url).hostname;
+  const domain = hostname === "metrillix.com" || hostname.endsWith(".metrillix.com") ? "; Domain=.metrillix.com" : "";
+  const maxAge = Math.floor(maxAgeMs / 1000);
+  return `metrillix_session=${encodeURIComponent(token || "")}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax${domain}`;
+}
+
 function cors(response, env) {
   const headers = new Headers(response.headers);
   headers.set("access-control-allow-origin", env.CORS_ORIGIN || "*");
   headers.set("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   headers.set("access-control-allow-headers", "content-type,authorization");
+  headers.set("access-control-allow-credentials", "true");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }

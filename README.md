@@ -180,6 +180,8 @@ wrangler secret put SIGNUP_WELCOME_WEBHOOK_SECRET --config wrangler.worker.toml
 
 The Worker posts `{ type, to, name, resetUrl, subject }` for password resets and `{ type, to, name, appUrl, subject }` for welcome emails. For local/debug-only testing, set `PASSWORD_RESET_DEBUG_LINK=true` to include the reset URL in the API response; do not enable that in production.
 
+Signup and login responses also set an HttpOnly `metrillix_session` cookie for secure dashboard sessions. The frontend still accepts bearer-token sessions for backwards compatibility, but browser requests send cookies with `credentials: "include"` and logout clears the cookie. `metrillix.com` includes a cookie notice and `/cookie-policy` page covering essential session cookies, notice preferences, and LinkedIn cookies shown during OAuth.
+
 MetricFlow production storage is multi-tenant and account-scoped in `USER_STATE`. The Worker no longer reads or writes the old global `metricflow:state` analytics document.
 
 Current KV layout:

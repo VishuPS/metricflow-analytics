@@ -513,10 +513,40 @@ h2 {
   text-decoration: none;
 }
 
+.footer-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--blue-dark);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .front-footer p {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+.policy-page {
+  display: grid;
+  gap: 28px;
+  max-width: 840px;
+}
+
+.policy-page h1 {
+  font-size: clamp(38px, 6vw, 58px);
+}
+
+.policy-block {
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+}
+
+.policy-block p {
+  margin-bottom: 12px;
+  color: var(--muted);
+  line-height: 1.8;
 }
 
 .hero-actions {
@@ -799,6 +829,34 @@ input:focus {
   opacity: 1;
 }
 
+.cookie-banner {
+  position: fixed;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--white);
+  box-shadow: var(--shadow);
+}
+
+.cookie-banner[hidden] {
+  display: none;
+}
+
+.cookie-banner p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 @media (max-width: 760px) {
   .top-nav {
     min-height: auto;
@@ -915,5 +973,17 @@ input:focus {
 
   .sync-panel p {
     text-align: left;
+  }
+
+  .cookie-banner {
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cookie-banner .button-row {
+    justify-content: flex-start;
   }
 }
