@@ -99,8 +99,8 @@ export default {
       const connectorSync = url.pathname.match(/^\/api\/connectors\/([^/]+)\/sync$/);
       if (request.method === "POST" && connectorSync) {
         const account = await requireAccount(request, env);
-        const result = await ingestSource(connectorSync[1], await readJson(request), env, account.id);
-        return json({ ...result, state: await userStatePayload(env, account.id) }, env);
+        const result = await syncConnector(connectorSync[1], await readJson(request), env, account.id);
+        return json({ ...result, state: await userStatePayload(env, account.id) }, env, result.error ? (result.statusCode || 500) : 200);
       }
 
       const connectorDisconnect = url.pathname.match(/^\/api\/connectors\/([^/]+)\/disconnect$/);
@@ -346,7 +346,8 @@ async function signup(request, env) {
   };
   await saveUserState(env, accountKey, account);
   await saveUserState(env, `auth:id:${id}`, { email });
-  return authPayload(account, await createSession(env, account));
+  const emailSent = await sendWelcomeEmail(env, account, `${env.PAGES_URL || new URL(request.url).origin}/dashboard/onboarding`);
+  return { ...authPayload(account, await createSession(env, account)), emailSent };
 }
 
 async function login(request, env) {
@@ -455,6 +456,30 @@ async function sendPasswordResetEmail(env, account, resetUrl) {
     throw error;
   }
   return true;
+}
+
+async function sendWelcomeEmail(env, account, appUrl) {
+  const webhookUrl = env.SIGNUP_WELCOME_WEBHOOK_URL || env.WELCOME_EMAIL_WEBHOOK_URL;
+  if (!webhookUrl) return false;
+  try {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(env.SIGNUP_WELCOME_WEBHOOK_SECRET ? { authorization: `Bearer ${env.SIGNUP_WELCOME_WEBHOOK_SECRET}` } : {})
+      },
+      body: JSON.stringify({
+        type: "signup_welcome",
+        to: account.email,
+        name: account.name,
+        subject: "Welcome to Metrillix",
+        appUrl
+      })
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 function authPayload(account, token) {
@@ -716,6 +741,43 @@ async function ingestSource(source, options, env, accountId) {
   return { source, fetched: rawPosts.length, saved: normalized.length, diagnostics, posts: normalized };
 }
 
+async function syncConnector(source, options, env, accountId) {
+  const attemptedAt = new Date().toISOString();
+  try {
+    const result = await ingestSource(source, options, env, accountId);
+    if (source === "linkedin") {
+      const sync = await loadUserJson(env, userLinkedInKey(accountId, "sync"), {});
+      await saveUserJson(env, userLinkedInKey(accountId, "sync"), {
+        ...sync,
+        status: "success",
+        lastAttemptedAt: attemptedAt,
+        lastError: null
+      });
+    }
+    return result;
+  } catch (error) {
+    if (source === "linkedin") {
+      await saveLinkedInSyncFailure(env, accountId, error, attemptedAt);
+    }
+    return {
+      source,
+      error: true,
+      statusCode: error.status || 500,
+      message: error.message || "LinkedIn sync failed"
+    };
+  }
+}
+
+async function saveLinkedInSyncFailure(env, accountId, error, attemptedAt) {
+  const existing = await loadUserJson(env, userLinkedInKey(accountId, "sync"), {});
+  await saveUserJson(env, userLinkedInKey(accountId, "sync"), {
+    ...existing,
+    status: "failed",
+    lastAttemptedAt: attemptedAt,
+    lastError: error.message || "LinkedIn sync failed"
+  });
+}
+
 async function fetchLinkedInProfile(accessToken) {
   const response = await fetch("https://api.linkedin.com/v2/userinfo", {
     headers: { authorization: `Bearer ${accessToken}`, "x-restli-protocol-version": "2.0.0" }
@@ -746,7 +808,7 @@ async function fetchLinkedInPosts(accessToken, organizationUrn, options = {}) {
   url.searchParams.set("count", String(options.count || 25));
   const response = await fetch(url, { headers: { authorization: `Bearer ${accessToken}`, "x-restli-protocol-version": "2.0.0" } });
   const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || "LinkedIn UGC Posts API request failed");
+  if (!response.ok) throw httpError(payload.message || "LinkedIn UGC Posts API request failed", response.status);
   return payload.elements || [];
 }
 
@@ -770,7 +832,7 @@ async function fetchLinkedInSocialActions(accessToken, postId) {
     headers: { authorization: `Bearer ${accessToken}`, "x-restli-protocol-version": "2.0.0" }
   });
   const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || `LinkedIn Social Actions API failed for ${postId}`);
+  if (!response.ok) throw httpError(payload.message || `LinkedIn Social Actions API failed for ${postId}`, response.status);
   return payload;
 }
 
@@ -782,7 +844,7 @@ async function fetchOrganizationAnalytics(accessToken, organizationUrn, postId) 
   url.searchParams.set("shares", `List(${postId})`);
   const response = await fetch(url, { headers: { authorization: `Bearer ${accessToken}`, "x-restli-protocol-version": "2.0.0" } });
   const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || `LinkedIn Analytics API failed for ${postId}`);
+  if (!response.ok) throw httpError(payload.message || `LinkedIn Analytics API failed for ${postId}`, response.status);
   const row = payload.elements?.[0] || {};
   const stats = row.totalShareStatistics || row;
   return {
@@ -1013,6 +1075,12 @@ function numberOrNull(value) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function httpError(message, status) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
 }
 
 async function readJson(request) {

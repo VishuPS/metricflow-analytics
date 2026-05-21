@@ -465,10 +465,20 @@ async function hydrateDashboard() {
 }
 
 function SyncStatusPanel(sync, summary = {}) {
+  if (sync?.status === "failed") {
+    return `
+      <div>
+        <span>Connection health</span>
+        <strong>Sync failed</strong>
+      </div>
+      <p>${sync.lastError || "LinkedIn sync failed."} ${sync.lastAttemptedAt ? `Last attempted ${formatDateTime(sync.lastAttemptedAt)}.` : ""} Reconnect LinkedIn or confirm the selected company page has analytics permissions.</p>
+    `;
+  }
+
   if (!sync?.lastIngestedAt) {
     return `
       <div>
-        <span>Sync status</span>
+        <span>Connection health</span>
         <strong>Not synced yet</strong>
       </div>
       <p>LinkedIn is connected. Run sync to fetch company page posts and analytics.</p>
@@ -484,7 +494,7 @@ function SyncStatusPanel(sync, summary = {}) {
 
   return `
     <div>
-      <span>Last sync</span>
+      <span>Connection health</span>
       <strong>${formatDateTime(sync.lastIngestedAt)}</strong>
     </div>
     <p>${sync.fetched || 0} fetched, ${sync.saved || 0} saved, ${summary.trackedPosts || 0} tracked posts. Metric coverage: ${metricCoverage}.</p>
@@ -578,6 +588,7 @@ async function handleAppClick(event) {
       await hydrateDashboard();
       showToast(`LinkedIn synced: ${result.saved || 0} posts saved`);
     } catch (error) {
+      await hydrateDashboard().catch(() => {});
       showToast(error.message);
     }
   }
