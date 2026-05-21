@@ -5,10 +5,10 @@
   "description": "Local MVP backend and dashboard for automated social media analytics reporting.",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check app.js && node --check workers/metricflow-api.js && node --check storage.js && node --check rollups.js && node --check scheduler.js && node --check connectors/linkedin.js && node --check connectors/instagram.js && node --check connectors/youtube.js && node --check connectors/ga4.js && node --check scripts/migrate-to-d1.js && node --check scripts/build-cloudflare.js && node --check tests/worker-oauth-regression.mjs",
+    "check": "node --check server.js && node --check app.js && node --check workers/metricflow-api.js && node --check storage.js && node --check rollups.js && node --check scheduler.js && node --check connectors/linkedin.js && node --check connectors/instagram.js && node --check connectors/youtube.js && node --check connectors/ga4.js && node --check scripts/migrate-to-d1.js && node --check scripts/build-cloudflare.js && node --check tests/worker-oauth-regression.mjs && node --check tests/worker-linkedin-sync-regression.mjs",
     "test:smoke": "node tests/production-regression.js",
     "test:smoke:headed": "node tests/production-regression.js --headed",
-    "test:worker": "node tests/worker-oauth-regression.mjs",
+    "test:worker": "node tests/worker-oauth-regression.mjs && node tests/worker-linkedin-sync-regression.mjs",
     "migrate:d1": "node scripts/migrate-to-d1.js",
     "build:cloudflare": "node scripts/build-cloudflare.js",
     "deploy:worker": "wrangler deploy --config wrangler.worker.toml",

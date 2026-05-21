@@ -666,6 +666,40 @@ input:focus {
   gap: 16px;
 }
 
+.sync-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px 20px;
+  background: var(--surface);
+}
+
+.sync-panel div {
+  display: grid;
+  gap: 6px;
+}
+
+.sync-panel span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sync-panel strong {
+  font-size: 18px;
+}
+
+.sync-panel p {
+  max-width: 620px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+  text-align: right;
+}
+
 .metric-card,
 .table-section,
 .post-row {
@@ -847,9 +881,14 @@ input:focus {
   }
 
   .dashboard-hero,
+  .sync-panel,
   .section-heading,
   .post-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .sync-panel p {
+    text-align: left;
   }
 }

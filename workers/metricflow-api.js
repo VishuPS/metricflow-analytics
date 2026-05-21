@@ -688,6 +688,7 @@ async function ingestSource(source, options, env, accountId) {
   const postIds = rawPosts.map((post) => post.id || post.urn || post.activity);
   const rawMetrics = env.LINKEDIN_DEMO_MODE === "true" ? Object.fromEntries(postIds.map((id, index) => [id, demoLinkedInMetric(index)])) : await fetchLinkedInMetrics(accessToken, orgUrn, postIds);
   const normalized = normalizeLinkedInPosts(rawPosts, rawMetrics);
+  const diagnostics = linkedinSyncDiagnostics(rawPosts, normalized, rawMetrics);
 
   const existingPosts = await loadUserJson(env, userLinkedInKey(accountId, "posts"), []);
   const posts = mergePosts(existingPosts, normalized);
@@ -703,9 +704,10 @@ async function ingestSource(source, options, env, accountId) {
     lastIngestedAt: syncedAt,
     fetched: rawPosts.length,
     saved: normalized.length,
-    organization: orgUrn
+    organization: orgUrn,
+    diagnostics
   });
-  return { source, fetched: rawPosts.length, saved: normalized.length, posts: normalized };
+  return { source, fetched: rawPosts.length, saved: normalized.length, diagnostics, posts: normalized };
 }
 
 async function fetchLinkedInProfile(accessToken) {
@@ -776,12 +778,27 @@ async function fetchOrganizationAnalytics(accessToken, organizationUrn, postId) 
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || `LinkedIn Analytics API failed for ${postId}`);
   const row = payload.elements?.[0] || {};
+  const stats = row.totalShareStatistics || row;
   return {
-    reach: numberOrNull(row.uniqueImpressionsCount),
-    impressions: numberOrNull(row.impressionCount),
-    engagements: numberOrNull(row.engagement),
-    shares: numberOrNull(row.shareCount),
-    clicks: numberOrNull(row.clickCount)
+    reach: numberOrNull(stats.uniqueImpressionsCount),
+    impressions: numberOrNull(stats.impressionCount),
+    engagements: numberOrNull(stats.engagement),
+    shares: numberOrNull(stats.shareCount),
+    clicks: numberOrNull(stats.clickCount)
+  };
+}
+
+function linkedinSyncDiagnostics(rawPosts, normalizedPosts, rawMetrics) {
+  const withValue = (key) => normalizedPosts.filter((post) => post[key] !== null && post[key] !== undefined).length;
+  return {
+    fetchedPosts: rawPosts.length,
+    normalizedPosts: normalizedPosts.length,
+    metricsFetched: Object.keys(rawMetrics || {}).length,
+    postsWithReach: withValue("reach"),
+    postsWithImpressions: withValue("impressions"),
+    postsWithEngagements: withValue("engagements"),
+    postsWithClicks: withValue("clicks"),
+    postsWithSocialActions: normalizedPosts.filter((post) => post.likes !== null || post.comments !== null).length
   };
 }
 

@@ -385,6 +385,7 @@ function Dashboard() {
         </div>
         <button class="primary-button" data-sync-linkedin>Sync LinkedIn</button>
       </section>
+      <section class="sync-panel" id="syncStatusPanel"></section>
       <section class="metrics-grid" id="metricsGrid"></section>
       <section class="table-section">
         <div class="section-heading">
@@ -424,6 +425,7 @@ async function hydrateDashboard() {
 
   const state = await loadDashboardState();
   const summary = state.summary || {};
+  document.querySelector("#syncStatusPanel").innerHTML = SyncStatusPanel(state.linkedin?.sync, summary);
   const cards = [
     ["Tracked posts", summary.trackedPosts || 0],
     ["Reach", summary.totalReach || 0],
@@ -448,6 +450,44 @@ async function hydrateDashboard() {
       <small>${Number(post.metrics?.engagements || 0).toLocaleString()} engagements</small>
     </article>
   `).join("") : `<p class="empty-state">No posts yet. Sync LinkedIn to fetch analytics for the selected organization.</p>`;
+}
+
+function SyncStatusPanel(sync, summary = {}) {
+  if (!sync?.lastIngestedAt) {
+    return `
+      <div>
+        <span>Sync status</span>
+        <strong>Not synced yet</strong>
+      </div>
+      <p>LinkedIn is connected. Run sync to fetch company page posts and analytics.</p>
+    `;
+  }
+
+  const diagnostics = sync.diagnostics || {};
+  const metricCoverage = [
+    `${diagnostics.postsWithReach || 0} reach`,
+    `${diagnostics.postsWithEngagements || 0} engagement`,
+    `${diagnostics.postsWithClicks || 0} clicks`
+  ].join(" / ");
+
+  return `
+    <div>
+      <span>Last sync</span>
+      <strong>${formatDateTime(sync.lastIngestedAt)}</strong>
+    </div>
+    <p>${sync.fetched || 0} fetched, ${sync.saved || 0} saved, ${summary.trackedPosts || 0} tracked posts. Metric coverage: ${metricCoverage}.</p>
+  `;
+}
+
+function formatDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 
 function wirePageEvents() {
@@ -522,9 +562,9 @@ async function handleAppClick(event) {
 
   if (event.target.closest("[data-sync-linkedin]")) {
     try {
-      await api("/api/connectors/linkedin/sync", { method: "POST" });
+      const result = await api("/api/connectors/linkedin/sync", { method: "POST" });
       await hydrateDashboard();
-      showToast("LinkedIn synced");
+      showToast(`LinkedIn synced: ${result.saved || 0} posts saved`);
     } catch (error) {
       showToast(error.message);
     }
