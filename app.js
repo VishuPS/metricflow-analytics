@@ -544,8 +544,6 @@ function formatDateTime(value) {
 }
 
 function wirePageEvents() {
-  app.onclick = handleAppClick;
-
   document.querySelectorAll("[data-auth]").forEach((form) => {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -685,6 +683,7 @@ async function render() {
 }
 
 window.addEventListener("popstate", render);
+document.addEventListener("click", handleAppClick);
 captureOAuthReturn();
 render();
 
