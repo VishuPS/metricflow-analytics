@@ -103,6 +103,12 @@ export default {
         return json({ ...result, state: await userStatePayload(env, account.id) }, env);
       }
 
+      const connectorDisconnect = url.pathname.match(/^\/api\/connectors\/([^/]+)\/disconnect$/);
+      if (request.method === "POST" && connectorDisconnect) {
+        const account = await requireAccount(request, env);
+        return json(await disconnectConnector(connectorDisconnect[1], env, account.id), env);
+      }
+
       const connectorConnect = url.pathname.match(/^\/api\/connectors\/([^/]+)\/connect$/);
       if (request.method === "GET" && connectorConnect) {
         const session = url.searchParams.get("session") ? `?session=${encodeURIComponent(url.searchParams.get("session"))}` : "";
@@ -799,6 +805,22 @@ function linkedinSyncDiagnostics(rawPosts, normalizedPosts, rawMetrics) {
     postsWithEngagements: withValue("engagements"),
     postsWithClicks: withValue("clicks"),
     postsWithSocialActions: normalizedPosts.filter((post) => post.likes !== null || post.comments !== null).length
+  };
+}
+
+async function disconnectConnector(source, env, accountId) {
+  if (source !== "linkedin") {
+    const error = new Error(`${connectors[source]?.name || source} disconnect is not implemented yet`);
+    error.status = connectors[source] ? 501 : 404;
+    throw error;
+  }
+  const keys = ["token", "profile", "organizations", "organization", "posts", "analytics", "sync"];
+  await Promise.all(keys.map((key) => env.USER_STATE?.delete(userLinkedInKey(accountId, key))));
+  return {
+    source,
+    connected: false,
+    cleared: keys,
+    state: await userStatePayload(env, accountId)
   };
 }
 

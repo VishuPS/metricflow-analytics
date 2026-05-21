@@ -340,11 +340,17 @@ function ConnectLinkedInStep() {
     ? "Connect through the MetricFlow backend. If OAuth setup is still missing, the backend will show the required app configuration without storing any user tokens in the frontend."
     : "Connect the LinkedIn account that administers the organizations you want to analyze.";
   const connectUrl = `${apiBaseUrl}/api/connectors/linkedin/connect?session=${encodeURIComponent(session.token || "")}`;
+  const disconnectButton = linkedInState?.connected
+    ? `<button class="secondary-button" data-disconnect-linkedin>Disconnect LinkedIn</button>`
+    : "";
   return `
     <p class="eyebrow">Step 1</p>
     <h1>Connect LinkedIn</h1>
     <p class="muted">${helper}</p>
-    <a class="primary-button link-button" href="${connectUrl}" data-connect-linkedin>Connect LinkedIn</a>
+    <div class="button-row">
+      <a class="primary-button link-button" href="${connectUrl}" data-connect-linkedin>${linkedInState?.connected ? "Reconnect LinkedIn" : "Connect LinkedIn"}</a>
+      ${disconnectButton}
+    </div>
   `;
 }
 
@@ -361,6 +367,9 @@ function SelectOrganizationStep(organizations, selectedOrganization) {
     <h1>Select organization</h1>
     <p class="muted">Choose the LinkedIn organization MetricFlow should use for post ingestion and analytics.</p>
     <div class="org-list">${items}</div>
+    <div class="button-row">
+      <button class="secondary-button" data-disconnect-linkedin>Disconnect LinkedIn</button>
+    </div>
   `;
 }
 
@@ -383,7 +392,10 @@ function Dashboard() {
           <h1>LinkedIn analytics</h1>
           <p class="muted" id="dashboardOrg">Loading selected organization.</p>
         </div>
-        <button class="primary-button" data-sync-linkedin>Sync LinkedIn</button>
+        <div class="button-row">
+          <button class="primary-button" data-sync-linkedin>Sync LinkedIn</button>
+          <button class="secondary-button" data-disconnect-linkedin>Disconnect LinkedIn</button>
+        </div>
       </section>
       <section class="sync-panel" id="syncStatusPanel"></section>
       <section class="metrics-grid" id="metricsGrid"></section>
@@ -568,6 +580,19 @@ async function handleAppClick(event) {
     } catch (error) {
       showToast(error.message);
     }
+  }
+
+  if (event.target.closest("[data-disconnect-linkedin]")) {
+    try {
+      await api("/api/connectors/linkedin/disconnect", { method: "POST" });
+      linkedInState = { connected: false, organizations: [], selectedOrganization: null };
+      dashboardState = null;
+      showToast("LinkedIn disconnected");
+      navigate("/dashboard/onboarding");
+    } catch (error) {
+      showToast(error.message);
+    }
+    return;
   }
 
   const organizationTarget = event.target.closest("[data-organization]");

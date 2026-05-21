@@ -527,6 +527,13 @@ h2 {
   flex-wrap: wrap;
 }
 
+.button-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .primary-button {
   display: inline-flex;
   align-items: center;
@@ -542,8 +549,26 @@ h2 {
   text-decoration: none;
 }
 
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 18px;
+  background: var(--white);
+  color: var(--ink);
+  font-weight: 800;
+}
+
 .primary-button:hover {
   background: var(--blue-dark);
+}
+
+.secondary-button:hover {
+  border-color: var(--blue);
+  color: var(--blue-dark);
 }
 
 .primary-button:disabled {
@@ -609,7 +634,7 @@ input:focus {
 .org-list {
   display: grid;
   gap: 12px;
-  margin-top: 22px;
+  margin: 22px 0;
 }
 
 .org-option {
