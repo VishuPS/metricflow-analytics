@@ -435,6 +435,23 @@ async function resetPassword(request, env) {
 }
 
 async function sendPasswordResetEmail(env, account, resetUrl) {
+  if (env.RESEND_API_KEY && env.EMAIL_FROM) {
+    const html = `
+      <p>Hi ${escapeHtml(account.name)},</p>
+      <p>Use the secure link below to reset your Metrillix password.</p>
+      <p><a href="${escapeHtml(resetUrl)}">Reset your password</a></p>
+      <p>If you did not request this, you can ignore this email.</p>
+    `;
+    const text = `Hi ${account.name},\n\nUse this secure link to reset your Metrillix password:\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`;
+    return sendResendEmail(env, {
+      to: account.email,
+      subject: "Reset your Metrillix password",
+      html,
+      text,
+      idempotencyKey: `password-reset:${account.id}:${resetUrl}`
+    });
+  }
+
   if (!env.PASSWORD_RESET_WEBHOOK_URL) return false;
   const response = await fetch(env.PASSWORD_RESET_WEBHOOK_URL, {
     method: "POST",
@@ -459,6 +476,23 @@ async function sendPasswordResetEmail(env, account, resetUrl) {
 }
 
 async function sendWelcomeEmail(env, account, appUrl) {
+  if (env.RESEND_API_KEY && env.EMAIL_FROM) {
+    const html = `
+      <p>Hi ${escapeHtml(account.name)},</p>
+      <p>Welcome to Metrillix. Your workspace is ready for LinkedIn company page analytics.</p>
+      <p><a href="${escapeHtml(appUrl)}">Connect LinkedIn</a></p>
+      <p>You can disconnect and reconnect LinkedIn any time from your dashboard.</p>
+    `;
+    const text = `Hi ${account.name},\n\nWelcome to Metrillix. Your workspace is ready for LinkedIn company page analytics.\n\nConnect LinkedIn: ${appUrl}\n\nYou can disconnect and reconnect LinkedIn any time from your dashboard.`;
+    return sendResendEmail(env, {
+      to: account.email,
+      subject: "Welcome to Metrillix",
+      html,
+      text,
+      idempotencyKey: `signup-welcome:${account.id}`
+    });
+  }
+
   const webhookUrl = env.SIGNUP_WELCOME_WEBHOOK_URL || env.WELCOME_EMAIL_WEBHOOK_URL;
   if (!webhookUrl) return false;
   try {
@@ -480,6 +514,40 @@ async function sendWelcomeEmail(env, account, appUrl) {
   } catch {
     return false;
   }
+}
+
+async function sendResendEmail(env, message) {
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "content-type": "application/json",
+        "idempotency-key": message.idempotencyKey
+      },
+      body: JSON.stringify({
+        from: env.EMAIL_FROM,
+        to: [message.to],
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+        ...(env.EMAIL_REPLY_TO ? { reply_to: env.EMAIL_REPLY_TO } : {})
+      })
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+function escapeHtml(value) {
+  return String(value || "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  }[char]));
 }
 
 function authPayload(account, token) {

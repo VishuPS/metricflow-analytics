@@ -51,6 +51,24 @@ jobs:
             printf "%s" "$LINKEDIN_REDIRECT_URI" | npx wrangler@latest secret put LINKEDIN_REDIRECT_URI --config wrangler.worker.toml
           fi
 
+      - name: Configure Worker email secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_REPLY_TO: ${{ secrets.EMAIL_REPLY_TO }}
+        run: |
+          if [ -n "$RESEND_API_KEY" ]; then
+            printf "%s" "$RESEND_API_KEY" | npx wrangler@latest secret put RESEND_API_KEY --config wrangler.worker.toml
+          fi
+          if [ -n "$EMAIL_FROM" ]; then
+            printf "%s" "$EMAIL_FROM" | npx wrangler@latest secret put EMAIL_FROM --config wrangler.worker.toml
+          fi
+          if [ -n "$EMAIL_REPLY_TO" ]; then
+            printf "%s" "$EMAIL_REPLY_TO" | npx wrangler@latest secret put EMAIL_REPLY_TO --config wrangler.worker.toml
+          fi
+
       - name: Deploy Worker API
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
