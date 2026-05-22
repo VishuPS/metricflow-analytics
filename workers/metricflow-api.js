@@ -308,7 +308,8 @@ async function buildUserState(env, accountId) {
     schedule,
     reports,
     linkedin: {
-      organizations: linkedinOrganizationOptions(organizations, organizationLabels, selectedOrganization),
+      organizations: linkedinOrganizationDisplayNames(organizations, organizationLabels),
+      organizationOptions: linkedinOrganizationOptions(organizations, organizationLabels, selectedOrganization),
       selectedOrganization,
       selectedOrganizationName: linkedinOrganizationName(selectedOrganization, organizationLabels),
       sync,
@@ -1003,7 +1004,8 @@ async function linkedinOrganizations(request, env) {
   return {
     userId: account.id,
     connected: Boolean(token?.accessToken),
-    organizations: linkedinOrganizationOptions(organizations, organizationLabels, selectedOrganization),
+    organizations: linkedinOrganizationDisplayNames(organizations, organizationLabels),
+    organizationOptions: linkedinOrganizationOptions(organizations, organizationLabels, selectedOrganization),
     selectedOrganization,
     selectedOrganizationName: linkedinOrganizationName(selectedOrganization, organizationLabels)
   };
@@ -1011,10 +1013,13 @@ async function linkedinOrganizations(request, env) {
 
 async function selectLinkedInOrganization(request, env) {
   const body = await readJson(request);
-  const organizationUrn = linkedinOrganizationUrn(body.organizationUrn);
+  const submittedOrganization = body.organizationUrn;
   const organizationName = String(body.organizationName || "").trim();
   const account = await requireAccount(request, env);
   const organizations = await loadUserJson(env, userLinkedInKey(account.id, "organizations"), []);
+  const existingLabels = await loadUserJson(env, userLinkedInKey(account.id, "organizationLabels"), {});
+  const fallbackLabels = linkedinOrganizationLabels(organizations, existingLabels);
+  const organizationUrn = resolveLinkedInOrganizationUrn(submittedOrganization, organizations, fallbackLabels);
   const organizationUrns = organizations.map(linkedinOrganizationUrn);
   if (!organizationUrns.includes(organizationUrn)) {
     const error = new Error("Organization is not available for this LinkedIn user");
@@ -1022,16 +1027,16 @@ async function selectLinkedInOrganization(request, env) {
     throw error;
   }
 
-  const existingLabels = await loadUserJson(env, userLinkedInKey(account.id, "organizationLabels"), {});
   const organizationLabels = {
-    ...linkedinOrganizationLabels(organizations, existingLabels),
+    ...fallbackLabels,
     [organizationUrn]: organizationName || linkedinOrganizationName(organizationUrn, existingLabels)
   };
   await saveUserJson(env, userLinkedInKey(account.id, "organizationLabels"), organizationLabels);
   await saveUserJson(env, userLinkedInKey(account.id, "organization"), organizationUrn);
   return {
     userId: account.id,
-    organizations: linkedinOrganizationOptions(organizations, organizationLabels, organizationUrn),
+    organizations: linkedinOrganizationDisplayNames(organizations, organizationLabels),
+    organizationOptions: linkedinOrganizationOptions(organizations, organizationLabels, organizationUrn),
     selectedOrganization: organizationUrn,
     selectedOrganizationName: linkedinOrganizationName(organizationUrn, organizationLabels)
   };
@@ -1068,9 +1073,20 @@ function linkedinOrganizationOptions(organizations, labels = {}, selectedOrganiz
   }).filter((organization) => organization.urn);
 }
 
+function linkedinOrganizationDisplayNames(organizations, labels = {}) {
+  return linkedinOrganizationOptions(organizations, labels).map((organization) => organization.name);
+}
+
 function linkedinOrganizationName(organizationUrn, labels = {}) {
   const urn = linkedinOrganizationUrn(organizationUrn);
   return String(labels[urn] || linkedinDefaultOrganizationName(urn)).trim();
+}
+
+function resolveLinkedInOrganizationUrn(value, organizations, labels = {}) {
+  const raw = typeof value === "string" ? value.trim() : linkedinOrganizationUrn(value);
+  if (raw.startsWith("urn:li:organization:")) return raw;
+  const options = linkedinOrganizationOptions(organizations, labels);
+  return options.find((organization) => organization.name === raw)?.urn || raw;
 }
 
 function linkedinDefaultOrganizationName(organizationUrn) {

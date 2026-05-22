@@ -458,7 +458,7 @@ async function hydrateOnboarding() {
   if (!container) return;
   await loadLinkedInOAuthStatus();
   const details = await loadLinkedInState();
-  const organizations = details.organizations || [];
+  const organizations = details.organizationOptions || details.organizations || [];
   if (!organizations.length) {
     container.innerHTML = ConnectLinkedInStep();
     return;

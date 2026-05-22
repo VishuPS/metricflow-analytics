@@ -39,7 +39,8 @@ const listResponse = await worker.fetch(new Request("https://api.example.test/ap
 }), env);
 const listBody = await listResponse.json();
 assert.equal(listResponse.status, 200);
-assert.deepEqual(listBody.organizations, [{
+assert.deepEqual(listBody.organizations, ["Old Page Name"]);
+assert.deepEqual(listBody.organizationOptions, [{
   urn: organizationUrn,
   name: "Old Page Name",
   selected: false
@@ -60,8 +61,9 @@ const selectBody = await selectResponse.json();
 assert.equal(selectResponse.status, 200);
 assert.equal(selectBody.selectedOrganization, organizationUrn);
 assert.equal(selectBody.selectedOrganizationName, "Client A");
-assert.equal(selectBody.organizations[0].name, "Client A");
-assert.equal(selectBody.organizations[0].selected, true);
+assert.equal(selectBody.organizations[0], "Client A");
+assert.equal(selectBody.organizationOptions[0].name, "Client A");
+assert.equal(selectBody.organizationOptions[0].selected, true);
 
 const labels = JSON.parse(await kv.get(`${prefix}:organizationLabels`));
 assert.equal(labels[organizationUrn], "Client A");
@@ -72,6 +74,20 @@ const stateResponse = await worker.fetch(new Request("https://api.example.test/a
 const stateBody = await stateResponse.json();
 assert.equal(stateResponse.status, 200);
 assert.equal(stateBody.linkedin.selectedOrganizationName, "Client A");
-assert.equal(stateBody.linkedin.organizations[0].name, "Client A");
+assert.equal(stateBody.linkedin.organizations[0], "Client A");
+assert.equal(stateBody.linkedin.organizationOptions[0].name, "Client A");
+
+const legacySelectResponse = await worker.fetch(new Request("https://api.example.test/api/linkedin/select-organization", {
+  method: "POST",
+  headers: {
+    authorization: `Bearer ${sessionToken}`,
+    "content-type": "application/json"
+  },
+  body: JSON.stringify({
+    organizationUrn: "Client A",
+    organizationName: "Client A"
+  })
+}), env);
+assert.equal(legacySelectResponse.status, 200);
 
 console.log("PASS worker LinkedIn organization display names");

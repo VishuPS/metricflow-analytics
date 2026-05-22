@@ -92,7 +92,8 @@ try {
   }), env);
   const organizationsBody = await organizationsResponse.json();
   assert.equal(organizationsResponse.status, 200);
-  assert.equal(organizationsBody.organizations[0].name, "Metrillix Company Page");
+  assert.equal(organizationsBody.organizations[0], "Metrillix Company Page");
+  assert.equal(organizationsBody.organizationOptions[0].name, "Metrillix Company Page");
 
   console.log("PASS worker LinkedIn organization lookup names");
 } finally {
