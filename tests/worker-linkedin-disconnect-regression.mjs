@@ -31,6 +31,7 @@ const kv = createKv({
   [`${prefix}:profile`]: { id: "linkedin-user" },
   [`${prefix}:organizations`]: ["urn:li:organization:123"],
   [`${prefix}:organization`]: "urn:li:organization:123",
+  [`${prefix}:organizationLabels`]: { "urn:li:organization:123": "Client Page" },
   [`${prefix}:posts`]: [{ source: "linkedin", post_id: "urn:li:share:111", reach: 100 }],
   [`${prefix}:analytics`]: { updatedAt: new Date().toISOString() },
   [`${prefix}:sync`]: { lastIngestedAt: new Date().toISOString() }
@@ -54,7 +55,7 @@ assert.equal(body.state.linkedin.organizations.length, 0);
 assert.equal(body.state.linkedin.selectedOrganization, null);
 assert.equal(body.state.summary.trackedPosts, 0);
 
-for (const key of ["token", "profile", "organizations", "organization", "posts", "analytics", "sync"]) {
+for (const key of ["token", "profile", "organizations", "organization", "organizationLabels", "posts", "analytics", "sync"]) {
   assert.equal(await kv.get(`${prefix}:${key}`), null, `${key} is cleared`);
 }
 

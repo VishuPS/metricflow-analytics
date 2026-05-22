@@ -668,9 +668,9 @@ input:focus {
 }
 
 .org-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.9fr) auto;
+  align-items: end;
   gap: 16px;
   width: 100%;
   border: 1px solid var(--line);
@@ -687,14 +687,24 @@ input:focus {
   background: var(--blue-soft);
 }
 
-.org-option span {
+.org-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.org-copy span {
   overflow-wrap: anywhere;
   font-weight: 800;
 }
 
-.org-option small {
+.org-copy small {
   color: var(--blue-dark);
   font-weight: 800;
+}
+
+.org-name-field {
+  gap: 6px;
+  font-size: 13px;
 }
 
 .dashboard-shell {
@@ -969,6 +979,11 @@ input:focus {
   .post-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .org-option {
+    align-items: stretch;
+    grid-template-columns: 1fr;
   }
 
   .sync-panel p {

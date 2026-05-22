@@ -386,12 +386,23 @@ function ConnectLinkedInStep() {
 }
 
 function SelectOrganizationStep(organizations, selectedOrganization) {
-  const items = organizations.map((organization) => `
-    <button class="org-option ${organization === selectedOrganization ? "selected" : ""}" data-organization="${organization}">
-      <span>${organization}</span>
-      <small>${organization === selectedOrganization ? "Selected" : "Choose"}</small>
-    </button>
-  `).join("");
+  const items = organizations.map((organization) => {
+    const urn = organizationUrn(organization);
+    const name = organizationName(organization);
+    const selected = urn === selectedOrganization;
+    return `
+      <article class="org-option ${selected ? "selected" : ""}" data-organization="${escapeAttribute(urn)}">
+        <div class="org-copy">
+          <span>${escapeHtml(name)}</span>
+          <small>${selected ? "Selected page" : "LinkedIn company page"}</small>
+        </div>
+        <label class="org-name-field">Page name
+          <input data-organization-name value="${escapeAttribute(name)}" placeholder="Company or client name">
+        </label>
+        <button class="secondary-button" data-select-organization>${selected ? "Update name" : "Use page"}</button>
+      </article>
+    `;
+  }).join("");
 
   return `
     <p class="eyebrow">Step 2</p>
@@ -425,6 +436,7 @@ function Dashboard() {
         </div>
         <div class="button-row">
           <button class="primary-button" data-sync-linkedin>Sync LinkedIn</button>
+          <button class="secondary-button" data-route="/dashboard/onboarding">Manage pages</button>
           <button class="secondary-button" data-disconnect-linkedin>Disconnect LinkedIn</button>
         </div>
       </section>
@@ -451,11 +463,7 @@ async function hydrateOnboarding() {
     container.innerHTML = ConnectLinkedInStep();
     return;
   }
-  if (!details.selectedOrganization) {
-    container.innerHTML = SelectOrganizationStep(organizations, details.selectedOrganization);
-    return;
-  }
-  navigate("/dashboard");
+  container.innerHTML = SelectOrganizationStep(organizations, details.selectedOrganization);
 }
 
 async function hydrateDashboard() {
@@ -464,7 +472,7 @@ async function hydrateDashboard() {
     navigate("/dashboard/onboarding");
     return;
   }
-  document.querySelector("#dashboardOrg").textContent = details.selectedOrganization;
+  document.querySelector("#dashboardOrg").textContent = details.selectedOrganizationName || organizationName(details.selectedOrganization);
 
   const state = await loadDashboardState();
   const summary = state.summary || {};
@@ -579,6 +587,14 @@ function wirePageEvents() {
 
 }
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>]/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;"
+  }[char]));
+}
+
 function escapeAttribute(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
@@ -643,11 +659,15 @@ async function handleAppClick(event) {
   }
 
   const organizationTarget = event.target.closest("[data-organization]");
-  if (organizationTarget) {
+  if (event.target.closest("[data-select-organization]") && organizationTarget) {
     try {
+      const nameInput = organizationTarget.querySelector("[data-organization-name]");
       const result = await api("/api/linkedin/select-organization", {
         method: "POST",
-        body: JSON.stringify({ organizationUrn: organizationTarget.dataset.organization })
+        body: JSON.stringify({
+          organizationUrn: organizationTarget.dataset.organization,
+          organizationName: nameInput?.value || ""
+        })
       });
       linkedInState = result;
       navigate("/dashboard");
@@ -655,6 +675,21 @@ async function handleAppClick(event) {
       showToast(error.message);
     }
   }
+}
+
+function organizationUrn(organization) {
+  if (!organization) return "";
+  if (typeof organization === "string") return organization;
+  return organization.urn || organization.organizationUrn || organization.organization || organization.id || "";
+}
+
+function organizationName(organization) {
+  if (!organization) return "LinkedIn page";
+  if (typeof organization === "string") {
+    const id = organization.split(":").pop();
+    return id ? `LinkedIn page ${id}` : "LinkedIn page";
+  }
+  return organization.name || organization.label || organization.displayName || organizationName(organizationUrn(organization));
 }
 
 async function render() {

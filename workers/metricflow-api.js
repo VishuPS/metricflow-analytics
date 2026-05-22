@@ -278,7 +278,8 @@ async function requireAccount(request, env) {
 async function buildUserState(env, accountId) {
   const token = await loadUserJson(env, userLinkedInKey(accountId, "token"), null);
   const organizations = await loadUserJson(env, userLinkedInKey(accountId, "organizations"), []);
-  const selectedOrganization = await loadUserJson(env, userLinkedInKey(accountId, "organization"), null);
+  const organizationLabels = await loadUserJson(env, userLinkedInKey(accountId, "organizationLabels"), {});
+  const selectedOrganization = linkedinOrganizationUrn(await loadUserJson(env, userLinkedInKey(accountId, "organization"), null)) || null;
   const posts = await loadUserJson(env, userLinkedInKey(accountId, "posts"), []);
   const analytics = await loadUserJson(env, userLinkedInKey(accountId, "analytics"), null);
   const sync = await loadUserJson(env, userLinkedInKey(accountId, "sync"), null);
@@ -295,6 +296,7 @@ async function buildUserState(env, accountId) {
       linkedin: {
         connected: Boolean(token?.accessToken),
         selectedOrganization,
+        selectedOrganizationName: linkedinOrganizationName(selectedOrganization, organizationLabels),
         organizationCount: organizations.length,
         lastIngestedAt: sync?.lastIngestedAt || null
       }
@@ -306,8 +308,9 @@ async function buildUserState(env, accountId) {
     schedule,
     reports,
     linkedin: {
-      organizations,
+      organizations: linkedinOrganizationOptions(organizations, organizationLabels, selectedOrganization),
       selectedOrganization,
+      selectedOrganizationName: linkedinOrganizationName(selectedOrganization, organizationLabels),
       sync,
       connected: Boolean(token?.accessToken)
     }
@@ -682,7 +685,9 @@ async function callback(source, request, env) {
 
       // Step 2: discover every organization this member administers.
       const organizations = await fetchLinkedInOrganizations(token.access_token);
-      const previousOrganization = await loadUserJson(env, userLinkedInKey(oauthState.accountId, "organization"), null);
+      const existingLabels = await loadUserJson(env, userLinkedInKey(oauthState.accountId, "organizationLabels"), {});
+      const organizationLabels = linkedinOrganizationLabels(organizations, existingLabels);
+      const previousOrganization = linkedinOrganizationUrn(await loadUserJson(env, userLinkedInKey(oauthState.accountId, "organization"), null));
       const selectedOrganization = organizations.includes(previousOrganization)
         ? previousOrganization
         : null;
@@ -698,6 +703,7 @@ async function callback(source, request, env) {
       });
       await saveUserJson(env, userLinkedInKey(oauthState.accountId, "profile"), profile);
       await saveUserJson(env, userLinkedInKey(oauthState.accountId, "organizations"), organizations);
+      await saveUserJson(env, userLinkedInKey(oauthState.accountId, "organizationLabels"), organizationLabels);
       await saveUserJson(env, userLinkedInKey(oauthState.accountId, "organization"), selectedOrganization);
       const redirectTarget = env.PAGES_URL ? new URL(env.PAGES_URL) : new URL("/", requestUrl.origin);
       redirectTarget.searchParams.set("connector", "connected");
@@ -952,7 +958,7 @@ async function disconnectConnector(source, env, accountId) {
     error.status = connectors[source] ? 501 : 404;
     throw error;
   }
-  const keys = ["token", "profile", "organizations", "organization", "posts", "analytics", "sync"];
+  const keys = ["token", "profile", "organizations", "organization", "organizationLabels", "posts", "analytics", "sync"];
   await Promise.all(keys.map((key) => env.USER_STATE?.delete(userLinkedInKey(accountId, key))));
   return {
     source,
@@ -965,29 +971,44 @@ async function disconnectConnector(source, env, accountId) {
 async function linkedinOrganizations(request, env) {
   const account = await requireAccount(request, env);
   const organizations = await loadUserJson(env, userLinkedInKey(account.id, "organizations"), []);
-  const selectedOrganization = await loadUserJson(env, userLinkedInKey(account.id, "organization"), null);
+  const organizationLabels = await loadUserJson(env, userLinkedInKey(account.id, "organizationLabels"), {});
+  const selectedOrganization = linkedinOrganizationUrn(await loadUserJson(env, userLinkedInKey(account.id, "organization"), null)) || null;
   const token = await loadUserJson(env, userLinkedInKey(account.id, "token"), null);
   return {
     userId: account.id,
     connected: Boolean(token?.accessToken),
-    organizations,
-    selectedOrganization
+    organizations: linkedinOrganizationOptions(organizations, organizationLabels, selectedOrganization),
+    selectedOrganization,
+    selectedOrganizationName: linkedinOrganizationName(selectedOrganization, organizationLabels)
   };
 }
 
 async function selectLinkedInOrganization(request, env) {
   const body = await readJson(request);
   const organizationUrn = linkedinOrganizationUrn(body.organizationUrn);
+  const organizationName = String(body.organizationName || "").trim();
   const account = await requireAccount(request, env);
   const organizations = await loadUserJson(env, userLinkedInKey(account.id, "organizations"), []);
-  if (!organizations.includes(organizationUrn)) {
+  const organizationUrns = organizations.map(linkedinOrganizationUrn);
+  if (!organizationUrns.includes(organizationUrn)) {
     const error = new Error("Organization is not available for this LinkedIn user");
     error.status = 400;
     throw error;
   }
 
+  const existingLabels = await loadUserJson(env, userLinkedInKey(account.id, "organizationLabels"), {});
+  const organizationLabels = {
+    ...linkedinOrganizationLabels(organizations, existingLabels),
+    [organizationUrn]: organizationName || linkedinOrganizationName(organizationUrn, existingLabels)
+  };
+  await saveUserJson(env, userLinkedInKey(account.id, "organizationLabels"), organizationLabels);
   await saveUserJson(env, userLinkedInKey(account.id, "organization"), organizationUrn);
-  return { userId: account.id, organizations, selectedOrganization: organizationUrn };
+  return {
+    userId: account.id,
+    organizations: linkedinOrganizationOptions(organizations, organizationLabels, organizationUrn),
+    selectedOrganization: organizationUrn,
+    selectedOrganizationName: linkedinOrganizationName(organizationUrn, organizationLabels)
+  };
 }
 
 function linkedinOrganizationUrn(value) {
@@ -997,6 +1018,34 @@ function linkedinOrganizationUrn(value) {
     return String(value.organizationUrn || value.organization || value.urn || value.id || "").trim();
   }
   return String(value).trim();
+}
+
+function linkedinOrganizationLabels(organizations, existingLabels = {}) {
+  return Object.fromEntries(organizations.map((organization) => {
+    const urn = linkedinOrganizationUrn(organization);
+    return [urn, String(existingLabels[urn] || linkedinDefaultOrganizationName(urn)).trim()];
+  }).filter(([urn]) => urn));
+}
+
+function linkedinOrganizationOptions(organizations, labels = {}, selectedOrganization = null) {
+  return organizations.map((organization) => {
+    const urn = linkedinOrganizationUrn(organization);
+    return {
+      urn,
+      name: linkedinOrganizationName(urn, labels),
+      selected: urn === selectedOrganization
+    };
+  }).filter((organization) => organization.urn);
+}
+
+function linkedinOrganizationName(organizationUrn, labels = {}) {
+  const urn = linkedinOrganizationUrn(organizationUrn);
+  return String(labels[urn] || linkedinDefaultOrganizationName(urn)).trim();
+}
+
+function linkedinDefaultOrganizationName(organizationUrn) {
+  const id = String(organizationUrn || "").split(":").pop();
+  return id ? `LinkedIn page ${id}` : "LinkedIn page";
 }
 
 function restliList(values) {
