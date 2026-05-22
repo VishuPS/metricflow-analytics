@@ -18,6 +18,7 @@ const routes = {
   "/reset-password": ResetPasswordPage,
   "/cookie-policy": CookiePolicyPage,
   "/dashboard/onboarding": OnboardingPage,
+  "/create-post": CreatePostPage,
   "/dashboard": Dashboard
 };
 
@@ -436,6 +437,7 @@ function Dashboard() {
         </div>
         <div class="button-row">
           <button class="primary-button" data-sync-linkedin>Sync LinkedIn</button>
+          <button class="secondary-button" data-route="/create-post">Create post</button>
           <button class="secondary-button" data-route="/dashboard/onboarding">Manage pages</button>
           <button class="secondary-button" data-disconnect-linkedin>Disconnect LinkedIn</button>
         </div>
@@ -450,6 +452,58 @@ function Dashboard() {
         <div class="post-list" id="postList"></div>
       </section>
     </main>
+  `;
+}
+
+function CreatePostPage() {
+  return `
+    ${TopNav({ right: "dashboard" })}
+    <main class="page-shell create-post-shell">
+      <section class="composer-panel">
+        <p class="eyebrow">Create Post</p>
+        <h1>Draft a LinkedIn post</h1>
+        <p class="muted">Use the inspiration panel to scan live LinkedIn Ad Library examples before writing. Inspiration is fetched live and not stored.</p>
+        <form class="composer-form">
+          <label>Post idea
+            <input name="topic" placeholder="What should this post be about?">
+          </label>
+          <label>Draft
+            <textarea rows="12" placeholder="Write your LinkedIn post draft here."></textarea>
+          </label>
+          <div class="button-row">
+            <button class="primary-button" type="button">Save draft</button>
+            <button class="secondary-button" type="button" data-route="/dashboard">Back to dashboard</button>
+          </div>
+        </form>
+      </section>
+      ${AdInspirationPanel()}
+    </main>
+  `;
+}
+
+function AdInspirationPanel() {
+  return `
+    <aside class="ad-inspiration-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Inspiration</p>
+          <h2>Trending ads on LinkedIn</h2>
+        </div>
+      </div>
+      <p class="muted">For inspiration only. Ad Library data is fetched live and discarded.</p>
+      <form class="ad-search-form" data-ad-inspiration-form>
+        <label>Keyword
+          <input name="keyword" value="marketing automation" placeholder="marketing automation">
+        </label>
+        <label>Countries
+          <input name="countries" value="US,GB" placeholder="US,GB">
+        </label>
+        <button class="primary-button full" type="submit">Refresh</button>
+      </form>
+      <div class="ad-inspiration-list" id="adInspirationList">
+        <p class="empty-state">Loading LinkedIn ad inspiration.</p>
+      </div>
+    </aside>
   `;
 }
 
@@ -537,6 +591,50 @@ function PostMetric(label, value) {
   return `<span><b>${display}</b>${label}</span>`;
 }
 
+async function hydrateCreatePost() {
+  const form = document.querySelector("[data-ad-inspiration-form]");
+  if (!form) return;
+  await loadAdInspiration(form);
+}
+
+async function loadAdInspiration(form) {
+  const list = document.querySelector("#adInspirationList");
+  if (!list) return;
+  const data = new FormData(form);
+  const keyword = String(data.get("keyword") || "").trim() || "marketing automation";
+  const countries = String(data.get("countries") || "US,GB").split(",").map((country) => country.trim().toUpperCase()).filter(Boolean).join(",");
+  list.innerHTML = `<p class="empty-state">Loading LinkedIn ad inspiration.</p>`;
+  try {
+    const result = await api(`/api/linkedin/ad-library?keyword=${encodeURIComponent(keyword)}&countries=${encodeURIComponent(countries)}&count=6`);
+    const ads = result.ads || [];
+    list.innerHTML = ads.length ? ads.slice(0, 6).map(AdInspirationCard).join("") : `<p class="empty-state">No trending ads found for this keyword.</p>`;
+  } catch (error) {
+    list.innerHTML = `<p class="empty-state">${escapeHtml(error.message || "LinkedIn Ad Library unavailable.")}</p>`;
+  }
+}
+
+function AdInspirationCard(ad) {
+  return `
+    <article class="ad-card">
+      <div>
+        <span>${escapeHtml(ad.adType || "Sponsored update")}</span>
+        <strong>${escapeHtml(ad.advertiserName || "LinkedIn advertiser")}</strong>
+      </div>
+      <p>${escapeHtml(impressionRange(ad))}</p>
+      <small>${escapeHtml(formatDateTime(ad.firstImpressionDate))} - ${escapeHtml(formatDateTime(ad.latestImpressionDate))}</small>
+      ${ad.adUrl ? `<a class="inline-link" href="${escapeAttribute(ad.adUrl)}" target="_blank" rel="noreferrer">Open ad on LinkedIn</a>` : ""}
+    </article>
+  `;
+}
+
+function impressionRange(ad) {
+  const from = ad.impressionsFrom === null || ad.impressionsFrom === undefined ? null : Number(ad.impressionsFrom).toLocaleString();
+  const to = ad.impressionsTo === null || ad.impressionsTo === undefined ? null : Number(ad.impressionsTo).toLocaleString();
+  if (from && to) return `${from} - ${to} impressions`;
+  if (from) return `${from}+ impressions`;
+  return "Impression range unavailable";
+}
+
 function SyncStatusPanel(sync, summary = {}) {
   if (sync?.status === "failed") {
     return `
@@ -616,6 +714,13 @@ function wirePageEvents() {
       } catch (error) {
         showToast(error.message);
       }
+    });
+  });
+
+  document.querySelectorAll("[data-ad-inspiration-form]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await loadAdInspiration(form);
     });
   });
 
@@ -735,7 +840,7 @@ function organizationName(organization) {
 async function render() {
   const path = window.location.pathname;
   const route = routes[path] ? path : "/";
-  const isPrivate = route.startsWith("/dashboard");
+  const isPrivate = route.startsWith("/dashboard") || route === "/create-post";
 
   if (isPrivate && !session.email && !session.accountId) {
     window.history.replaceState({}, "", "/login");
@@ -751,6 +856,7 @@ async function render() {
   try {
     if (route === "/dashboard/onboarding") await hydrateOnboarding();
     if (route === "/dashboard") await hydrateDashboard();
+    if (route === "/create-post") await hydrateCreatePost();
   } catch (error) {
     showToast(error.message);
   }

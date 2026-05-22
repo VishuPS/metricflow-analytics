@@ -72,6 +72,10 @@ export default {
         return json({ connectors: connectorStatus(await buildUserState(env, account.id), env, url) }, env);
       }
       if (route === "GET /api/linkedin/organizations") return json(await linkedinOrganizations(request, env), env);
+      if (route === "GET /api/linkedin/ad-library") {
+        const account = await requireAccount(request, env);
+        return json(await fetchAdLibraryInspiration(request, env, account.id), env);
+      }
       if (route === "GET /api/posts") {
         const account = await requireAccount(request, env);
         return json({ posts: filterPosts(await loadUserJson(env, userLinkedInKey(account.id, "posts"), []), url.searchParams) }, env);
@@ -910,6 +914,82 @@ async function fetchLinkedInOrganizationName(accessToken, organizationUrn, env) 
   return String(payload.localizedName || payload.name?.localized?.en_US || payload.vanityName || "").trim();
 }
 
+const linkedinAdLibraryService = {
+  async fetchTrendingAds({ accessToken, keyword, countries = [], count = 6, start = 0, advertiser = "", dateRange = null, env }) {
+    if (!accessToken) throw httpError("Reconnect LinkedIn", 401);
+    const cleanKeyword = String(keyword || "").trim();
+    const cleanCountries = countries.map((country) => String(country || "").trim().toUpperCase()).filter(Boolean).slice(0, 8);
+    const safeCount = Math.min(Math.max(Number(count) || 6, 1), 24);
+    const safeStart = Math.max(Number(start) || 0, 0);
+    const url = new URL("https://api.linkedin.com/rest/adLibrary");
+    url.searchParams.set("q", "criteria");
+    if (cleanKeyword) url.searchParams.set("keyword", cleanKeyword);
+    if (advertiser) url.searchParams.set("advertiser", String(advertiser).trim());
+    cleanCountries.forEach((country, index) => url.searchParams.set(`countries[${index}]`, country));
+    if (dateRange?.start) url.searchParams.set("dateRange.start", String(dateRange.start));
+    if (dateRange?.end) url.searchParams.set("dateRange.end", String(dateRange.end));
+    url.searchParams.set("start", String(safeStart));
+    url.searchParams.set("count", String(safeCount));
+
+    const response = await fetch(url, {
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "x-restli-protocol-version": "2.0.0",
+        "linkedin-version": env.LINKEDIN_AD_LIBRARY_VERSION || "202408"
+      }
+    });
+    const payload = await response.json();
+    if (response.status === 401) throw httpError("Reconnect LinkedIn", 401);
+    if (response.status === 403) throw httpError("Ad Library access unavailable", 403);
+    if (!response.ok) throw httpError(payload.message || "LinkedIn Ad Library request failed", response.status);
+    return {
+      paging: payload.paging || { start: safeStart, count: safeCount, total: 0 },
+      ads: (payload.elements || []).map(cleanLinkedInAdLibraryElement)
+    };
+  }
+};
+
+async function fetchAdLibraryInspiration(request, env, accountId) {
+  const requestUrl = new URL(request.url);
+  const token = await loadUserJson(env, userLinkedInKey(accountId, "token"), null);
+  const countries = (requestUrl.searchParams.get("countries") || "US,GB").split(",");
+  const dateRange = {
+    start: requestUrl.searchParams.get("dateRange.start"),
+    end: requestUrl.searchParams.get("dateRange.end")
+  };
+  const result = await linkedinAdLibraryService.fetchTrendingAds({
+    accessToken: token?.accessToken,
+    keyword: requestUrl.searchParams.get("keyword") || "marketing automation",
+    advertiser: requestUrl.searchParams.get("advertiser") || "",
+    countries,
+    count: requestUrl.searchParams.get("count") || 6,
+    start: requestUrl.searchParams.get("start") || 0,
+    dateRange,
+    env
+  });
+  return {
+    keyword: requestUrl.searchParams.get("keyword") || "marketing automation",
+    countries: countries.map((country) => country.trim().toUpperCase()).filter(Boolean),
+    ...result
+  };
+}
+
+function cleanLinkedInAdLibraryElement(element) {
+  const details = element.details || {};
+  const advertiser = details.advertiser || {};
+  const statistics = details.statistics || {};
+  return {
+    adUrl: element.adUrl || "",
+    adType: details.adType || "Sponsored update",
+    advertiserName: advertiser.localizedName || advertiser.name || advertiser.vanityName || advertiser.id || "LinkedIn advertiser",
+    impressionsFrom: numberOrNull(statistics.impressionsFrom),
+    impressionsTo: numberOrNull(statistics.impressionsTo),
+    firstImpressionDate: linkedInDateOrNull(statistics.firstImpressionDate),
+    latestImpressionDate: linkedInDateOrNull(statistics.latestImpressionDate),
+    isRestricted: Boolean(element.isRestricted)
+  };
+}
+
 async function fetchLinkedInPosts(accessToken, organizationUrn, options = {}) {
   if (!organizationUrn) throw new Error("Missing LinkedIn organization URN");
   const url = new URL("https://api.linkedin.com/v2/ugcPosts");
@@ -1168,6 +1248,12 @@ function linkedInDate(value) {
   if (!value) return new Date().toISOString();
   if (Number.isFinite(Number(value))) return new Date(Number(value)).toISOString();
   return new Date(value).toISOString();
+}
+
+function linkedInDateOrNull(value) {
+  if (!value) return null;
+  const date = Number.isFinite(Number(value)) ? new Date(Number(value)) : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function demoLinkedInPosts() {
