@@ -466,7 +466,7 @@ async function hydrateOnboarding() {
   container.innerHTML = SelectOrganizationStep(organizations, details.selectedOrganization);
 }
 
-async function hydrateDashboard() {
+async function hydrateDashboard(stateOverride = null) {
   const details = await loadLinkedInState();
   if (!details.selectedOrganization) {
     navigate("/dashboard/onboarding");
@@ -474,7 +474,8 @@ async function hydrateDashboard() {
   }
   document.querySelector("#dashboardOrg").textContent = details.selectedOrganizationName || organizationName(details.selectedOrganization);
 
-  const state = await loadDashboardState();
+  const state = stateOverride || await loadDashboardState();
+  if (stateOverride) dashboardState = stateOverride;
   const summary = state.summary || {};
   document.querySelector("#syncStatusPanel").innerHTML = SyncStatusPanel(state.linkedin?.sync, summary);
   const cards = [
@@ -507,7 +508,7 @@ async function hydrateDashboard() {
       ${PostThumbnail(post)}
       <div class="post-main">
         <strong>${escapeHtml(post.title || post.text || post.post_id)}</strong>
-        <span>${escapeHtml(formatDateTime(post.published_at || post.publishedAt))} · ${escapeHtml(post.mediaType || post.media_type || "post")}</span>
+        <span>${escapeHtml(formatDateTime(post.published_at || post.publishedAt))} - ${escapeHtml(post.mediaType || post.media_type || "post")}</span>
         <div class="post-metrics">
           ${PostMetric("Reach", metrics.reach)}
           ${PostMetric("Impressions", metrics.impressions)}
@@ -532,7 +533,7 @@ function PostThumbnail(post) {
 }
 
 function PostMetric(label, value) {
-  const display = value === null || value === undefined ? "—" : Number(value || 0).toLocaleString();
+  const display = value === null || value === undefined ? "--" : Number(value || 0).toLocaleString();
   return `<span><b>${display}</b>${label}</span>`;
 }
 
@@ -670,7 +671,13 @@ async function handleAppClick(event) {
   if (event.target.closest("[data-sync-linkedin]")) {
     try {
       const result = await api("/api/connectors/linkedin/sync", { method: "POST" });
-      await hydrateDashboard();
+      if (result.state) {
+        dashboardState = result.state;
+        linkedInState = { ...(linkedInState || {}), ...(result.state.linkedin || {}) };
+        await hydrateDashboard(result.state);
+      } else {
+        await hydrateDashboard();
+      }
       showToast(`LinkedIn synced: ${result.saved || 0} posts saved`);
     } catch (error) {
       await hydrateDashboard().catch(() => {});
