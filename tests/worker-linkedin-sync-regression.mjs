@@ -100,7 +100,9 @@ try {
   assert.equal(body.diagnostics.postsWithReach, 1);
   assert.equal(body.diagnostics.postsWithEngagements, 1);
   assert.equal(body.state.linkedin.sync.diagnostics.postsWithClicks, 1);
+  assert.ok(calls.some((href) => href.includes("authors=List(urn%3Ali%3Aorganization%3A123)")));
   assert.ok(calls.some((href) => href.includes("organizationalEntityShareStatistics")));
+  assert.ok(calls.some((href) => href.includes("shares=List(urn%3Ali%3Ashare%3A111)")));
   console.log("PASS worker LinkedIn sync metrics parsing");
 } finally {
   globalThis.fetch = originalFetch;

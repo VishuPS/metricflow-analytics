@@ -779,7 +779,8 @@ async function ingestSource(source, options, env, accountId) {
 
   const token = env.LINKEDIN_DEMO_MODE === "true" ? null : await loadUserJson(env, userLinkedInKey(accountId, "token"), null);
   const accessToken = token?.accessToken;
-  const orgUrn = env.LINKEDIN_DEMO_MODE === "true" ? "urn:li:organization:demo" : await loadUserJson(env, userLinkedInKey(accountId, "organization"), null);
+  const selectedOrganization = env.LINKEDIN_DEMO_MODE === "true" ? "urn:li:organization:demo" : await loadUserJson(env, userLinkedInKey(accountId, "organization"), null);
+  const orgUrn = linkedinOrganizationUrn(selectedOrganization);
   if (env.LINKEDIN_DEMO_MODE !== "true" && !accessToken) {
     const error = new Error("OAuth token missing for linkedin");
     error.status = 401;
@@ -880,10 +881,9 @@ async function fetchLinkedInPosts(accessToken, organizationUrn, options = {}) {
   if (!organizationUrn) throw new Error("Missing LinkedIn organization URN");
   const url = new URL("https://api.linkedin.com/v2/ugcPosts");
   url.searchParams.set("q", "authors");
-  url.searchParams.set("authors", `List(${organizationUrn})`);
   url.searchParams.set("sortBy", "LAST_MODIFIED");
   url.searchParams.set("count", String(options.count || 25));
-  const response = await fetch(url, { headers: { authorization: `Bearer ${accessToken}`, "x-restli-protocol-version": "2.0.0" } });
+  const response = await fetch(withRawRestliQuery(url, "authors", restliList([organizationUrn])), { headers: { authorization: `Bearer ${accessToken}`, "x-restli-protocol-version": "2.0.0" } });
   const payload = await response.json();
   if (!response.ok) throw httpError(payload.message || "LinkedIn UGC Posts API request failed", response.status);
   return payload.elements || [];
@@ -918,8 +918,7 @@ async function fetchOrganizationAnalytics(accessToken, organizationUrn, postId) 
   const url = new URL("https://api.linkedin.com/v2/organizationalEntityShareStatistics");
   url.searchParams.set("q", "organizationalEntity");
   url.searchParams.set("organizationalEntity", organizationUrn);
-  url.searchParams.set("shares", `List(${postId})`);
-  const response = await fetch(url, { headers: { authorization: `Bearer ${accessToken}`, "x-restli-protocol-version": "2.0.0" } });
+  const response = await fetch(withRawRestliQuery(url, "shares", restliList([postId])), { headers: { authorization: `Bearer ${accessToken}`, "x-restli-protocol-version": "2.0.0" } });
   const payload = await response.json();
   if (!response.ok) throw httpError(payload.message || `LinkedIn Analytics API failed for ${postId}`, response.status);
   const row = payload.elements?.[0] || {};
@@ -978,7 +977,7 @@ async function linkedinOrganizations(request, env) {
 
 async function selectLinkedInOrganization(request, env) {
   const body = await readJson(request);
-  const organizationUrn = body.organizationUrn;
+  const organizationUrn = linkedinOrganizationUrn(body.organizationUrn);
   const account = await requireAccount(request, env);
   const organizations = await loadUserJson(env, userLinkedInKey(account.id, "organizations"), []);
   if (!organizations.includes(organizationUrn)) {
@@ -989,6 +988,24 @@ async function selectLinkedInOrganization(request, env) {
 
   await saveUserJson(env, userLinkedInKey(account.id, "organization"), organizationUrn);
   return { userId: account.id, organizations, selectedOrganization: organizationUrn };
+}
+
+function linkedinOrganizationUrn(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "object") {
+    return String(value.organizationUrn || value.organization || value.urn || value.id || "").trim();
+  }
+  return String(value).trim();
+}
+
+function restliList(values) {
+  return `List(${values.map((value) => encodeURIComponent(String(value))).join(",")})`;
+}
+
+function withRawRestliQuery(url, key, value) {
+  const href = url.toString();
+  return `${href}${href.includes("?") ? "&" : "?"}${key}=${value}`;
 }
 
 function normalizeLinkedInPosts(rawPosts, rawMetrics = {}) {
