@@ -686,7 +686,8 @@ async function callback(source, request, env) {
       // Step 2: discover every organization this member administers.
       const organizations = await fetchLinkedInOrganizations(token.access_token);
       const existingLabels = await loadUserJson(env, userLinkedInKey(oauthState.accountId, "organizationLabels"), {});
-      const organizationLabels = linkedinOrganizationLabels(organizations, existingLabels);
+      const linkedInNames = await fetchLinkedInOrganizationNames(token.access_token, organizations, env);
+      const organizationLabels = linkedinOrganizationLabels(organizations, existingLabels, linkedInNames);
       const previousOrganization = linkedinOrganizationUrn(await loadUserJson(env, userLinkedInKey(oauthState.accountId, "organization"), null));
       const selectedOrganization = organizations.includes(previousOrganization)
         ? previousOrganization
@@ -883,6 +884,31 @@ async function fetchLinkedInOrganizations(accessToken) {
   return [...new Set((payload.elements || []).map((row) => row.organization).filter(Boolean))];
 }
 
+async function fetchLinkedInOrganizationNames(accessToken, organizations, env) {
+  const entries = [];
+  for (const organization of organizations) {
+    const urn = linkedinOrganizationUrn(organization);
+    const name = await fetchLinkedInOrganizationName(accessToken, urn, env).catch(() => "");
+    if (urn && name) entries.push([urn, name]);
+  }
+  return Object.fromEntries(entries);
+}
+
+async function fetchLinkedInOrganizationName(accessToken, organizationUrn, env) {
+  const id = linkedinOrganizationId(organizationUrn);
+  if (!id) return "";
+  const response = await fetch(`https://api.linkedin.com/rest/organizations/${encodeURIComponent(id)}`, {
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      "linkedin-version": env.LINKEDIN_VERSION || "202605",
+      "x-restli-protocol-version": "2.0.0"
+    }
+  });
+  const payload = await response.json();
+  if (!response.ok) throw httpError(payload.message || `LinkedIn Organization Lookup failed for ${organizationUrn}`, response.status);
+  return String(payload.localizedName || payload.name?.localized?.en_US || payload.vanityName || "").trim();
+}
+
 async function fetchLinkedInPosts(accessToken, organizationUrn, options = {}) {
   if (!organizationUrn) throw new Error("Missing LinkedIn organization URN");
   const url = new URL("https://api.linkedin.com/v2/ugcPosts");
@@ -1020,10 +1046,14 @@ function linkedinOrganizationUrn(value) {
   return String(value).trim();
 }
 
-function linkedinOrganizationLabels(organizations, existingLabels = {}) {
+function linkedinOrganizationLabels(organizations, existingLabels = {}, linkedInNames = {}) {
   return Object.fromEntries(organizations.map((organization) => {
     const urn = linkedinOrganizationUrn(organization);
-    return [urn, String(existingLabels[urn] || linkedinDefaultOrganizationName(urn)).trim()];
+    const fallback = linkedinDefaultOrganizationName(urn);
+    const existing = String(existingLabels[urn] || "").trim();
+    const linkedInName = String(linkedInNames[urn] || "").trim();
+    const name = existing && existing !== fallback ? existing : linkedInName || existing || fallback;
+    return [urn, name];
   }).filter(([urn]) => urn));
 }
 
@@ -1046,6 +1076,11 @@ function linkedinOrganizationName(organizationUrn, labels = {}) {
 function linkedinDefaultOrganizationName(organizationUrn) {
   const id = String(organizationUrn || "").split(":").pop();
   return id ? `LinkedIn page ${id}` : "LinkedIn page";
+}
+
+function linkedinOrganizationId(organizationUrn) {
+  const urn = linkedinOrganizationUrn(organizationUrn);
+  return urn.startsWith("urn:li:organization:") ? urn.split(":").pop() : "";
 }
 
 function restliList(values) {
