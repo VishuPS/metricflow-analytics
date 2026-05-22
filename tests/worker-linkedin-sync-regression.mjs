@@ -48,7 +48,10 @@ globalThis.fetch = async (url) => {
         specificContent: {
           "com.linkedin.ugc.ShareContent": {
             shareCommentary: { text: "Documented LinkedIn metrics shape" },
-            media: []
+            media: [{
+              originalUrl: "https://media.example.test/linkedin-post.jpg",
+              media: "urn:li:digitalmediaAsset:image-asset"
+            }]
           }
         }
       }]
@@ -95,6 +98,8 @@ try {
   assert.equal(body.posts[0].clicks, 9);
   assert.equal(body.posts[0].likes, 7);
   assert.equal(body.posts[0].comments, 3);
+  assert.equal(body.posts[0].media_type, "image");
+  assert.equal(body.posts[0].thumbnail_url, "https://media.example.test/linkedin-post.jpg");
   assert.equal(body.state.summary.totalReach, 100);
   assert.equal(body.state.summary.totalEngagement, 12);
   assert.equal(body.diagnostics.postsWithReach, 1);

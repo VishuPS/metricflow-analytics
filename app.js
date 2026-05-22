@@ -492,15 +492,48 @@ async function hydrateDashboard() {
   `).join("");
 
   const posts = state.postRankings || [];
-  document.querySelector("#postList").innerHTML = posts.length ? posts.slice(0, 8).map((post) => `
+  document.querySelector("#postList").innerHTML = posts.length ? posts.slice(0, 8).map((post) => {
+    const metrics = {
+      reach: post.reach ?? post.metrics?.reach,
+      impressions: post.impressions,
+      engagements: post.engagements ?? post.metrics?.engagements,
+      clicks: post.clicks,
+      likes: post.likes,
+      comments: post.comments,
+      shares: post.shares
+    };
+    return `
     <article class="post-row">
-      <div>
-        <strong>${post.title || post.post_id}</strong>
-        <span>${post.mediaType || "post"}</span>
+      ${PostThumbnail(post)}
+      <div class="post-main">
+        <strong>${escapeHtml(post.title || post.text || post.post_id)}</strong>
+        <span>${escapeHtml(formatDateTime(post.published_at || post.publishedAt))} · ${escapeHtml(post.mediaType || post.media_type || "post")}</span>
+        <div class="post-metrics">
+          ${PostMetric("Reach", metrics.reach)}
+          ${PostMetric("Impressions", metrics.impressions)}
+          ${PostMetric("Engagements", metrics.engagements)}
+          ${PostMetric("Clicks", metrics.clicks)}
+          ${PostMetric("Likes", metrics.likes)}
+          ${PostMetric("Comments", metrics.comments)}
+          ${PostMetric("Shares", metrics.shares)}
+        </div>
       </div>
-      <small>${Number(post.metrics?.engagements || 0).toLocaleString()} engagements</small>
     </article>
-  `).join("") : `<p class="empty-state">No posts yet. Sync LinkedIn to fetch analytics for the selected organization.</p>`;
+  `;
+  }).join("") : `<p class="empty-state">No posts yet. Sync LinkedIn to fetch analytics for the selected organization.</p>`;
+}
+
+function PostThumbnail(post) {
+  const thumbnail = post.thumbnail_url || post.thumbnailUrl || post.imageUrl || "";
+  if (thumbnail) {
+    return `<a class="post-thumb" href="${escapeAttribute(post.url || "#")}" target="_blank" rel="noreferrer" aria-label="Open LinkedIn post"><img src="${escapeAttribute(thumbnail)}" alt=""></a>`;
+  }
+  return `<a class="post-thumb post-thumb-empty" href="${escapeAttribute(post.url || "#")}" target="_blank" rel="noreferrer" aria-label="Open LinkedIn post"><span>${escapeHtml(post.mediaType || post.media_type || "post")}</span></a>`;
+}
+
+function PostMetric(label, value) {
+  const display = value === null || value === undefined ? "—" : Number(value || 0).toLocaleString();
+  return `<span><b>${display}</b>${label}</span>`;
 }
 
 function SyncStatusPanel(sync, summary = {}) {

@@ -1121,6 +1121,7 @@ function normalizeLinkedInPosts(rawPosts, rawMetrics = {}) {
       url: post.permalink || post.url || `https://www.linkedin.com/feed/update/${postId}`,
       text,
       media_type: inferLinkedInMediaType(post),
+      thumbnail_url: linkedInThumbnailUrl(post),
       reach: numberOrNull(metrics.reach),
       impressions: numberOrNull(metrics.impressions),
       engagements: numberOrNull(metrics.engagements),
@@ -1141,6 +1142,26 @@ function inferLinkedInMediaType(post) {
   if (media.length > 1) return "carousel";
   const category = String(media[0].media || media[0].status || media[0].type || "").toLowerCase();
   return category.includes("video") ? "video" : "image";
+}
+
+function linkedInThumbnailUrl(post) {
+  const media = post.specificContent?.["com.linkedin.ugc.ShareContent"]?.media || [];
+  for (const item of media) {
+    const candidate = [
+      item.originalUrl,
+      item.url,
+      item.thumbnail,
+      item.thumbnailUrl,
+      item.thumbnails?.[0]?.url,
+      item.thumbnails?.[0]?.resolvedUrl,
+      item.image?.downloadUrl,
+      item.image?.downloadUrlExpiresAt ? item.image?.downloadUrl : "",
+      item.media?.downloadUrl,
+      item.media?.originalUrl
+    ].find(Boolean);
+    if (candidate && /^https?:\/\//i.test(String(candidate))) return String(candidate);
+  }
+  return "";
 }
 
 function linkedInDate(value) {
@@ -1222,7 +1243,7 @@ function statePayload(state) {
     insights: [{ type: "ranking", title: ranked[0] ? `${ranked[0].text || ranked[0].post_id} leads normalized posts` : "No normalized posts yet", detail: ranked[0] ? "This post has the strongest combined engagement, click, and conversion score." : "Connect LinkedIn and run ingestion." }],
     patterns: patterns(state.posts || []),
     contentIntelligence: { winningFormats: patterns(state.posts || []), recommendations: [ranked[0] ? `Create a follow-up to ${ranked[0].text || ranked[0].post_id}.` : "Run LinkedIn ingestion to generate recommendations."], nextBrief: { contentPillar: "normalized", format: ranked[0]?.media_type || "text", angle: "Use normalized post metrics to choose the next creative test." } },
-    normalizedSchema: { post: ["source", "post_id", "author_id", "published_at", "url", "text", "media_type", "reach", "impressions", "engagements", "likes", "comments", "shares", "saves", "clicks", "conversions", "platform_raw"] }
+    normalizedSchema: { post: ["source", "post_id", "author_id", "published_at", "url", "text", "media_type", "thumbnail_url", "reach", "impressions", "engagements", "likes", "comments", "shares", "saves", "clicks", "conversions", "platform_raw"] }
   };
 }
 
