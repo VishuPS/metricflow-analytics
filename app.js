@@ -667,7 +667,7 @@ async function fetchAdInspirationResults(keyword, countries) {
   return api(`/api/linkedin/ad-library?${params.toString()}`);
 }
 
-function AdInspirationResults(ads, restrictedCount, keyword, countries, broadened = false) {
+function AdInspirationResults(ads, restrictedCount, keyword, countries) {
   const searchUrl = linkedInAdLibrarySearchUrl(keyword, countries);
   const insights = buildAdInspirationInsights(ads, keyword);
   const sourceAds = adSourceLinks(ads);
@@ -687,7 +687,7 @@ function AdInspirationResults(ads, restrictedCount, keyword, countries, broadene
     <div class="ad-insight-panel">
       <div class="ad-insight-header">
         <strong>Language signals from ${insights.sourceCount} public result${insights.sourceCount === 1 ? "" : "s"}</strong>
-        <span>${[broadened ? "Broadened beyond country filter" : "", restrictedCount ? `${restrictedCount} restricted skipped` : "No full ad copy shown"].filter(Boolean).join(" · ")}</span>
+        <span>${restrictedCount ? `${restrictedCount} restricted skipped` : "No full ad copy shown"}</span>
       </div>
       ${InsightGroup("Key phrases", insights.phrases, "phrase")}
       ${InsightGroup("Trending hashtags", insights.hashtags, "hashtag")}
