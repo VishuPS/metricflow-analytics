@@ -660,15 +660,17 @@ async function fetchAdInspirationResults(keyword, countries) {
 function AdInspirationResults(ads, restrictedCount, keyword, countries, broadened = false) {
   const searchUrl = linkedInAdLibrarySearchUrl(keyword, countries);
   const insights = buildAdInspirationInsights(ads, keyword);
+  const sourceAds = adSourceLinks(ads);
   if (!insights.phrases.length && !insights.hashtags.length) {
     return `
       <div class="ad-library-empty">
         <strong>No phrases or hashtags found</strong>
         <p>LinkedIn returned ad records but did not include public text fields for this search, so Metrillix cannot safely summarize phrases or hashtags.</p>
-        <p>Try a broader keyword, or leave country codes blank. Some LinkedIn Ad Library results expose only metadata through the API.</p>
+        <p>${sourceAds.length ? "Use the source links below to inspect the ads in LinkedIn." : "Try a broader keyword, or leave country codes blank. Some LinkedIn Ad Library results expose only metadata through the API."}</p>
         ${restrictedCount ? `<small>${restrictedCount} restricted result${restrictedCount === 1 ? "" : "s"} skipped.</small>` : ""}
         <a class="primary-button ad-view-button" href="${escapeAttribute(searchUrl)}" target="_blank" rel="noreferrer">Open LinkedIn Ad Library</a>
       </div>
+      ${sourceAds.length ? AdSourceLinks(sourceAds) : ""}
     `;
   }
   return `
@@ -680,7 +682,26 @@ function AdInspirationResults(ads, restrictedCount, keyword, countries, broadene
       ${InsightGroup("Key phrases", insights.phrases, "phrase")}
       ${InsightGroup("Trending hashtags", insights.hashtags, "hashtag")}
       <a class="secondary-button ad-library-search-link" href="${escapeAttribute(searchUrl)}" target="_blank" rel="noreferrer">Open LinkedIn Ad Library source search</a>
+      ${sourceAds.length ? AdSourceLinks(sourceAds.slice(0, 4)) : ""}
     </div>
+  `;
+}
+
+function adSourceLinks(ads) {
+  return (ads || []).filter((ad) => ad.adUrl).slice(0, 8);
+}
+
+function AdSourceLinks(ads) {
+  return `
+    <section class="ad-source-list">
+      <h3>LinkedIn source links</h3>
+      ${ads.map((ad, index) => `
+        <a class="ad-source-link" href="${escapeAttribute(ad.adUrl)}" target="_blank" rel="noreferrer">
+          <span>${escapeHtml(ad.advertiserName && ad.advertiserName !== "LinkedIn advertiser" ? ad.advertiserName : `Ad result ${index + 1}`)}</span>
+          <small>${escapeHtml([ad.adType || "Sponsored update", dateRangeLabel(ad)].filter(Boolean).join(" / "))}</small>
+        </a>
+      `).join("")}
+    </section>
   `;
 }
 

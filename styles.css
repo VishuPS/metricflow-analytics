@@ -850,6 +850,42 @@ textarea:focus {
   font-weight: 700;
 }
 
+.ad-source-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ad-source-list h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.ad-source-link {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--white);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.ad-source-link:hover {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.ad-source-link span {
+  font-weight: 800;
+}
+
+.ad-source-link small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .ad-insight-panel {
   display: grid;
   gap: 18px;
