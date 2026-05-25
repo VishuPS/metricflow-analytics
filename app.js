@@ -500,6 +500,7 @@ function AdInspirationPanel() {
         </label>
         <button class="primary-button full" type="submit">Refresh</button>
       </form>
+      <a class="secondary-button ad-library-search-link" href="https://www.linkedin.com/ad-library/search" target="_blank" rel="noreferrer" data-ad-library-search-link>Open LinkedIn Ad Library search</a>
       <div class="ad-inspiration-list" id="adInspirationList">
         <p class="empty-state">Loading LinkedIn ad inspiration.</p>
       </div>
@@ -594,6 +595,7 @@ function PostMetric(label, value) {
 async function hydrateCreatePost() {
   const form = document.querySelector("[data-ad-inspiration-form]");
   if (!form) return;
+  updateAdLibrarySearchLink(form);
   await loadAdInspiration(form);
 }
 
@@ -602,17 +604,44 @@ async function loadAdInspiration(form) {
   if (!list) return;
   const data = new FormData(form);
   const keyword = String(data.get("keyword") || "").trim() || "marketing automation";
-  const countries = String(data.get("countries") || "").split(",").map((country) => country.trim().toUpperCase()).filter(Boolean).join(",");
+  const countries = normalizeCountryInput(data.get("countries"));
+  updateAdLibrarySearchLink(form, keyword, countries);
   list.innerHTML = `<p class="empty-state">Loading LinkedIn ad inspiration.</p>`;
   try {
-    const params = new URLSearchParams({ keyword, count: "6" });
+    const params = new URLSearchParams({ keyword, count: "12" });
     if (countries) params.set("countries", countries);
     const result = await api(`/api/linkedin/ad-library?${params.toString()}`);
     const ads = result.ads || [];
-    list.innerHTML = ads.length ? ads.slice(0, 6).map(AdInspirationCard).join("") : `<p class="empty-state">No trending ads found for this keyword.</p>`;
+    const viewableAds = ads.filter(isViewableAd);
+    const restrictedCount = ads.length - viewableAds.length;
+    list.innerHTML = AdInspirationResults(viewableAds, restrictedCount, keyword, countries);
   } catch (error) {
     list.innerHTML = `<p class="empty-state">${escapeHtml(error.message || "LinkedIn Ad Library unavailable.")}</p>`;
   }
+}
+
+function AdInspirationResults(ads, restrictedCount, keyword, countries) {
+  const searchUrl = linkedInAdLibrarySearchUrl(keyword, countries);
+  if (!ads.length) {
+    return `
+      <div class="ad-library-empty">
+        <strong>No viewable ad previews returned</strong>
+        <p>LinkedIn may have returned restricted records, or only metadata for this search. Open the same search in LinkedIn to inspect the actual ad previews.</p>
+        ${restrictedCount ? `<small>${restrictedCount} restricted result${restrictedCount === 1 ? "" : "s"} hidden from this panel.</small>` : ""}
+        <a class="primary-button ad-view-button" href="${escapeAttribute(searchUrl)}" target="_blank" rel="noreferrer">View ads on LinkedIn</a>
+      </div>
+    `;
+  }
+  return `
+    ${restrictedCount ? `<p class="ad-result-note">${restrictedCount} restricted result${restrictedCount === 1 ? "" : "s"} hidden because LinkedIn does not expose a preview for them.</p>` : ""}
+    ${ads.slice(0, 6).map(AdInspirationCard).join("")}
+  `;
+}
+
+function isViewableAd(ad) {
+  if (!ad?.adUrl) return false;
+  if (ad.isRestricted) return false;
+  return Boolean(ad.imageUrl || ad.headline || ad.description || ad.advertiserName !== "LinkedIn advertiser");
 }
 
 function AdInspirationCard(ad) {
@@ -632,6 +661,27 @@ function AdInspirationCard(ad) {
       </div>
     </article>
   `;
+}
+
+function updateAdLibrarySearchLink(form, keyword = null, countries = null) {
+  const link = document.querySelector("[data-ad-library-search-link]");
+  if (!link) return;
+  const data = new FormData(form);
+  const searchKeyword = keyword || String(data.get("keyword") || "").trim() || "marketing automation";
+  const searchCountries = countries ?? normalizeCountryInput(data.get("countries"));
+  link.href = linkedInAdLibrarySearchUrl(searchKeyword, searchCountries);
+}
+
+function linkedInAdLibrarySearchUrl(keyword, countries = "") {
+  const params = new URLSearchParams();
+  if (keyword) params.set("keyword", keyword);
+  if (countries) params.set("countries", countries);
+  const query = params.toString();
+  return `https://www.linkedin.com/ad-library/search${query ? `?${query}` : ""}`;
+}
+
+function normalizeCountryInput(value) {
+  return String(value || "").split(",").map((country) => country.trim().toUpperCase()).filter(Boolean).join(",");
 }
 
 function dateRangeLabel(ad) {
@@ -732,6 +782,7 @@ function wirePageEvents() {
   });
 
   document.querySelectorAll("[data-ad-inspiration-form]").forEach((form) => {
+    form.addEventListener("input", () => updateAdLibrarySearchLink(form));
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       await loadAdInspiration(form);
