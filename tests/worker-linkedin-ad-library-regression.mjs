@@ -32,7 +32,7 @@ const kv = createKv({
     accessToken: "linkedin-ad-library-token"
   }
 });
-const env = { USER_STATE: kv };
+const env = { USER_STATE: kv, LINKEDIN_VERSION: "202605" };
 const originalFetch = globalThis.fetch;
 let adLibraryUrl = "";
 
@@ -40,7 +40,7 @@ globalThis.fetch = async (url, options = {}) => {
   adLibraryUrl = String(url);
   assert.equal(options.headers.authorization, "Bearer linkedin-ad-library-token");
   assert.equal(options.headers["x-restli-protocol-version"], "2.0.0");
-  assert.equal(options.headers["linkedin-version"], "202408");
+  assert.equal(options.headers["linkedin-version"], "202605");
   return jsonResponse({
     paging: { start: 0, count: 6, total: 1 },
     elements: [{

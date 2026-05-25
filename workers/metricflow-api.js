@@ -914,6 +914,14 @@ async function fetchLinkedInOrganizationName(accessToken, organizationUrn, env) 
   return String(payload.localizedName || payload.name?.localized?.en_US || payload.vanityName || "").trim();
 }
 
+function linkedInMarketingVersion(env) {
+  return env.LINKEDIN_VERSION || "202605";
+}
+
+function linkedInAdLibraryVersion(env) {
+  return env.LINKEDIN_AD_LIBRARY_VERSION || linkedInMarketingVersion(env);
+}
+
 const linkedinAdLibraryService = {
   async fetchTrendingAds({ accessToken, keyword, countries = [], count = 6, start = 0, advertiser = "", dateRange = null, env }) {
     if (!accessToken) throw httpError("Reconnect LinkedIn", 401);
@@ -935,7 +943,7 @@ const linkedinAdLibraryService = {
       headers: {
         authorization: `Bearer ${accessToken}`,
         "x-restli-protocol-version": "2.0.0",
-        "linkedin-version": env.LINKEDIN_AD_LIBRARY_VERSION || "202408"
+        "linkedin-version": linkedInAdLibraryVersion(env)
       }
     });
     const payload = await response.json();
