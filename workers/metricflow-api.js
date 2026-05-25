@@ -929,33 +929,50 @@ const linkedinAdLibraryService = {
     const cleanCountries = countries.map((country) => String(country || "").trim().toUpperCase()).filter(Boolean).slice(0, 8);
     const safeCount = Math.min(Math.max(Number(count) || 6, 1), 24);
     const safeStart = Math.max(Number(start) || 0, 0);
-    const url = new URL("https://api.linkedin.com/rest/adLibrary");
-    url.searchParams.set("q", "criteria");
-    if (cleanKeyword) url.searchParams.set("keyword", cleanKeyword);
-    if (advertiser) url.searchParams.set("advertiser", String(advertiser).trim());
-    cleanCountries.forEach((country, index) => url.searchParams.set(`countries[${index}]`, country));
-    if (dateRange?.start) url.searchParams.set("dateRange.start", String(dateRange.start));
-    if (dateRange?.end) url.searchParams.set("dateRange.end", String(dateRange.end));
-    url.searchParams.set("start", String(safeStart));
-    url.searchParams.set("count", String(safeCount));
+    const buildUrl = (includeCountries = true) => {
+      const url = new URL("https://api.linkedin.com/rest/adLibrary");
+      url.searchParams.set("q", "criteria");
+      if (cleanKeyword) url.searchParams.set("keyword", cleanKeyword);
+      if (advertiser) url.searchParams.set("advertiser", String(advertiser).trim());
+      if (dateRange?.start) url.searchParams.set("dateRange.start", String(dateRange.start));
+      if (dateRange?.end) url.searchParams.set("dateRange.end", String(dateRange.end));
+      url.searchParams.set("start", String(safeStart));
+      url.searchParams.set("count", String(safeCount));
+      return includeCountries && cleanCountries.length ? withRawRestliQuery(url, "countries", restliList(cleanCountries)) : url;
+    };
+    const headers = {
+      authorization: `Bearer ${accessToken}`,
+      "x-restli-protocol-version": "2.0.0",
+      "linkedin-version": linkedInAdLibraryVersion(env)
+    };
+    const fetchAds = async (includeCountries = true) => {
+      const response = await fetch(buildUrl(includeCountries), { headers });
+      const payload = await response.json();
+      return { response, payload };
+    };
 
-    const response = await fetch(url, {
-      headers: {
-        authorization: `Bearer ${accessToken}`,
-        "x-restli-protocol-version": "2.0.0",
-        "linkedin-version": linkedInAdLibraryVersion(env)
-      }
-    });
-    const payload = await response.json();
+    let { response, payload } = await fetchAds(true);
+    if (response.status === 400 && cleanCountries.length && isLinkedInParamValidationError(payload)) {
+      ({ response, payload } = await fetchAds(false));
+    }
     if (response.status === 401) throw httpError("Reconnect LinkedIn", 401);
     if (response.status === 403) throw httpError("Ad Library access unavailable", 403);
-    if (!response.ok) throw httpError(payload.message || "LinkedIn Ad Library request failed", response.status);
+    if (!response.ok) throw httpError(adLibraryErrorMessage(payload), response.status);
     return {
       paging: payload.paging || { start: safeStart, count: safeCount, total: 0 },
       ads: (payload.elements || []).map(cleanLinkedInAdLibraryElement)
     };
   }
 };
+
+function isLinkedInParamValidationError(payload) {
+  return /param validation|input validation/i.test(String(payload?.message || ""));
+}
+
+function adLibraryErrorMessage(payload) {
+  if (isLinkedInParamValidationError(payload)) return "LinkedIn rejected these filters. Try a keyword-only search.";
+  return payload?.message || "LinkedIn Ad Library request failed";
+}
 
 async function fetchAdLibraryInspiration(request, env, accountId) {
   const requestUrl = new URL(request.url);

@@ -496,7 +496,7 @@ function AdInspirationPanel() {
           <input name="keyword" value="marketing automation" placeholder="marketing automation">
         </label>
         <label>Countries
-          <input name="countries" value="US,GB" placeholder="US,GB">
+          <input name="countries" value="" placeholder="Optional, e.g. US,GB">
         </label>
         <button class="primary-button full" type="submit">Refresh</button>
       </form>
@@ -602,10 +602,12 @@ async function loadAdInspiration(form) {
   if (!list) return;
   const data = new FormData(form);
   const keyword = String(data.get("keyword") || "").trim() || "marketing automation";
-  const countries = String(data.get("countries") || "US,GB").split(",").map((country) => country.trim().toUpperCase()).filter(Boolean).join(",");
+  const countries = String(data.get("countries") || "").split(",").map((country) => country.trim().toUpperCase()).filter(Boolean).join(",");
   list.innerHTML = `<p class="empty-state">Loading LinkedIn ad inspiration.</p>`;
   try {
-    const result = await api(`/api/linkedin/ad-library?keyword=${encodeURIComponent(keyword)}&countries=${encodeURIComponent(countries)}&count=6`);
+    const params = new URLSearchParams({ keyword, count: "6" });
+    if (countries) params.set("countries", countries);
+    const result = await api(`/api/linkedin/ad-library?${params.toString()}`);
     const ads = result.ads || [];
     list.innerHTML = ads.length ? ads.slice(0, 6).map(AdInspirationCard).join("") : `<p class="empty-state">No trending ads found for this keyword.</p>`;
   } catch (error) {
