@@ -1028,6 +1028,8 @@ function cleanLinkedInAdLibraryElement(element) {
   const advertiser = details.advertiser || {};
   const statistics = details.statistics || {};
   const content = details.content || details.creative || element.content || {};
+  const headline = firstString(content.title, content.headline, content.name, details.headline, element.headline);
+  const description = firstString(content.text, content.commentary, content.description, content.body, details.text, element.text);
   const imageUrl = firstString(
     content.imageUrl,
     content.image?.url,
@@ -1040,8 +1042,9 @@ function cleanLinkedInAdLibraryElement(element) {
     adUrl: element.adUrl || "",
     adType: details.adType || "Sponsored update",
     advertiserName: firstString(advertiser.localizedName, advertiser.name, advertiser.name?.localized?.en_US, advertiser.vanityName, advertiser.id, "LinkedIn advertiser"),
-    headline: firstString(content.title, content.headline, content.name, details.headline, element.headline),
-    description: firstString(content.text, content.commentary, content.description, content.body, details.text, element.text),
+    headline,
+    description,
+    publicText: adLibraryPublicText(element, [headline, description]),
     imageUrl,
     impressionsFrom: numberOrNull(statistics.impressionsFrom),
     impressionsTo: numberOrNull(statistics.impressionsTo),
@@ -1049,6 +1052,58 @@ function cleanLinkedInAdLibraryElement(element) {
     latestImpressionDate: linkedInDateOrNull(statistics.latestImpressionDate),
     isRestricted: Boolean(element.isRestricted)
   };
+}
+
+function adLibraryPublicText(element, preferred = []) {
+  const labels = new Set([
+    "body",
+    "commentary",
+    "copy",
+    "description",
+    "headline",
+    "introductoryText",
+    "message",
+    "name",
+    "primaryText",
+    "subtitle",
+    "text",
+    "title"
+  ]);
+  const blocked = new Set([
+    "adUrl",
+    "clickUrl",
+    "createdAt",
+    "firstImpressionDate",
+    "id",
+    "imageUrl",
+    "impressionsFrom",
+    "impressionsTo",
+    "latestImpressionDate",
+    "thumbnailUrl",
+    "url",
+    "urn",
+    "vanityName"
+  ]);
+  const values = [];
+  const visit = (value, key = "", depth = 0) => {
+    if (depth > 8 || value === null || value === undefined) return;
+    if (typeof value === "string") {
+      const clean = value.trim();
+      if (clean && labels.has(key) && !/^https?:\/\//i.test(clean) && !/^urn:/i.test(clean)) values.push(clean);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, key, depth + 1));
+      return;
+    }
+    if (typeof value === "object") {
+      Object.entries(value).forEach(([childKey, childValue]) => {
+        if (!blocked.has(childKey)) visit(childValue, childKey, depth + 1);
+      });
+    }
+  };
+  visit(element);
+  return Array.from(new Set([...preferred, ...values].map((value) => String(value || "").trim()).filter(Boolean))).join(" ");
 }
 
 async function fetchLinkedInPosts(accessToken, organizationUrn, options = {}) {

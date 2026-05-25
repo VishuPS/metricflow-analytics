@@ -51,7 +51,10 @@ globalThis.fetch = async (url, options = {}) => {
         content: {
           headline: "Example ad headline",
           description: "Example ad description",
-          imageUrl: "https://example.test/ad.jpg"
+          imageUrl: "https://example.test/ad.jpg",
+          creative: {
+            primaryText: "Scale your #B2B pipeline with quantum-safe automation"
+          }
         },
         statistics: {
           firstImpressionDate: 1704067200000,
@@ -83,6 +86,7 @@ try {
     advertiserName: "Example Advertiser",
     headline: "Example ad headline",
     description: "Example ad description",
+    publicText: "Example ad headline Example ad description Scale your #B2B pipeline with quantum-safe automation",
     imageUrl: "https://example.test/ad.jpg",
     impressionsFrom: 1000,
     impressionsTo: 5000,

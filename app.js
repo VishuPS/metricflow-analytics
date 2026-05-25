@@ -612,25 +612,36 @@ async function loadAdInspiration(form) {
   updateAdLibrarySearchLink(form, keyword, countries);
   list.innerHTML = `<p class="empty-state">Loading LinkedIn ad inspiration.</p>`;
   try {
-    const params = new URLSearchParams({ keyword, count: "24" });
-    if (countries) params.set("countries", countries);
-    const result = await api(`/api/linkedin/ad-library?${params.toString()}`);
-    const ads = result.ads || [];
+    let result = await fetchAdInspirationResults(keyword, countries);
+    let ads = result.ads || [];
+    let broadened = false;
+    if (countries && !buildAdInspirationInsights(ads, keyword).sourceCount) {
+      result = await fetchAdInspirationResults(keyword, "");
+      ads = result.ads || [];
+      broadened = true;
+    }
     const restrictedCount = ads.filter((ad) => ad.isRestricted).length;
-    list.innerHTML = AdInspirationResults(ads, restrictedCount, keyword, countries);
+    list.innerHTML = AdInspirationResults(ads, restrictedCount, keyword, broadened ? "" : countries, broadened);
   } catch (error) {
     list.innerHTML = `<p class="empty-state">${escapeHtml(error.message || "LinkedIn Ad Library unavailable.")}</p>`;
   }
 }
 
-function AdInspirationResults(ads, restrictedCount, keyword, countries) {
+async function fetchAdInspirationResults(keyword, countries) {
+  const params = new URLSearchParams({ keyword, count: "24" });
+  if (countries) params.set("countries", countries);
+  return api(`/api/linkedin/ad-library?${params.toString()}`);
+}
+
+function AdInspirationResults(ads, restrictedCount, keyword, countries, broadened = false) {
   const searchUrl = linkedInAdLibrarySearchUrl(keyword, countries);
   const insights = buildAdInspirationInsights(ads, keyword);
   if (!insights.phrases.length && !insights.hashtags.length) {
     return `
       <div class="ad-library-empty">
         <strong>No phrases or hashtags found</strong>
-        <p>LinkedIn returned limited metadata for this search, so Metrillix did not have enough public text to summarize.</p>
+        <p>LinkedIn returned ad records but did not include public text fields for this search, so Metrillix cannot safely summarize phrases or hashtags.</p>
+        <p>Try a broader keyword, or leave country codes blank. Some LinkedIn Ad Library results expose only metadata through the API.</p>
         ${restrictedCount ? `<small>${restrictedCount} restricted result${restrictedCount === 1 ? "" : "s"} skipped.</small>` : ""}
         <a class="primary-button ad-view-button" href="${escapeAttribute(searchUrl)}" target="_blank" rel="noreferrer">Open LinkedIn Ad Library</a>
       </div>
@@ -640,7 +651,7 @@ function AdInspirationResults(ads, restrictedCount, keyword, countries) {
     <div class="ad-insight-panel">
       <div class="ad-insight-header">
         <strong>Language signals from ${insights.sourceCount} public result${insights.sourceCount === 1 ? "" : "s"}</strong>
-        <span>${restrictedCount ? `${restrictedCount} restricted skipped` : "No full ad copy shown"}</span>
+        <span>${[broadened ? "Broadened beyond country filter" : "", restrictedCount ? `${restrictedCount} restricted skipped` : "No full ad copy shown"].filter(Boolean).join(" · ")}</span>
       </div>
       ${InsightGroup("Key phrases", insights.phrases, "phrase")}
       ${InsightGroup("Trending hashtags", insights.hashtags, "hashtag")}
@@ -663,7 +674,7 @@ function InsightGroup(title, items, type) {
 function buildAdInspirationInsights(ads, keyword) {
   const visibleTexts = (ads || [])
     .filter((ad) => !ad.isRestricted)
-    .map((ad) => [ad.headline, ad.description].filter(Boolean).join(" "))
+    .map((ad) => [ad.headline, ad.description, ad.publicText].filter(Boolean).join(" "))
     .map((text) => text.trim())
     .filter(Boolean);
   const phraseCounts = new Map();
