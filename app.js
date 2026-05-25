@@ -490,7 +490,7 @@ function AdInspirationPanel() {
           <h2>Trending ads on LinkedIn</h2>
         </div>
       </div>
-      <p class="muted">For inspiration only. Ad Library data is fetched live and discarded.</p>
+      <p class="muted">For inspiration only. We summarize live Ad Library language into phrases and hashtags, without showing full ad copy.</p>
       <form class="ad-search-form" data-ad-inspiration-form>
         <label>Keyword
           <input name="keyword" value="marketing automation" placeholder="marketing automation">
@@ -608,13 +608,12 @@ async function loadAdInspiration(form) {
   updateAdLibrarySearchLink(form, keyword, countries);
   list.innerHTML = `<p class="empty-state">Loading LinkedIn ad inspiration.</p>`;
   try {
-    const params = new URLSearchParams({ keyword, count: "12" });
+    const params = new URLSearchParams({ keyword, count: "24" });
     if (countries) params.set("countries", countries);
     const result = await api(`/api/linkedin/ad-library?${params.toString()}`);
     const ads = result.ads || [];
-    const viewableAds = ads.filter(isViewableAd);
-    const restrictedCount = ads.length - viewableAds.length;
-    list.innerHTML = AdInspirationResults(viewableAds, restrictedCount, keyword, countries);
+    const restrictedCount = ads.filter((ad) => ad.isRestricted).length;
+    list.innerHTML = AdInspirationResults(ads, restrictedCount, keyword, countries);
   } catch (error) {
     list.innerHTML = `<p class="empty-state">${escapeHtml(error.message || "LinkedIn Ad Library unavailable.")}</p>`;
   }
@@ -622,45 +621,94 @@ async function loadAdInspiration(form) {
 
 function AdInspirationResults(ads, restrictedCount, keyword, countries) {
   const searchUrl = linkedInAdLibrarySearchUrl(keyword, countries);
-  if (!ads.length) {
+  const insights = buildAdInspirationInsights(ads, keyword);
+  if (!insights.phrases.length && !insights.hashtags.length) {
     return `
       <div class="ad-library-empty">
-        <strong>No viewable ad previews returned</strong>
-        <p>LinkedIn may have returned restricted records, or only metadata for this search. Open the same search in LinkedIn to inspect the actual ad previews.</p>
-        ${restrictedCount ? `<small>${restrictedCount} restricted result${restrictedCount === 1 ? "" : "s"} hidden from this panel.</small>` : ""}
-        <a class="primary-button ad-view-button" href="${escapeAttribute(searchUrl)}" target="_blank" rel="noreferrer">View ads on LinkedIn</a>
+        <strong>No phrases or hashtags found</strong>
+        <p>LinkedIn returned limited metadata for this search, so Metrillix did not have enough public text to summarize.</p>
+        ${restrictedCount ? `<small>${restrictedCount} restricted result${restrictedCount === 1 ? "" : "s"} skipped.</small>` : ""}
+        <a class="primary-button ad-view-button" href="${escapeAttribute(searchUrl)}" target="_blank" rel="noreferrer">Open LinkedIn Ad Library</a>
       </div>
     `;
   }
   return `
-    ${restrictedCount ? `<p class="ad-result-note">${restrictedCount} restricted result${restrictedCount === 1 ? "" : "s"} hidden because LinkedIn does not expose a preview for them.</p>` : ""}
-    ${ads.slice(0, 6).map(AdInspirationCard).join("")}
-  `;
-}
-
-function isViewableAd(ad) {
-  if (!ad?.adUrl) return false;
-  if (ad.isRestricted) return false;
-  return Boolean(ad.imageUrl || ad.headline || ad.description || ad.advertiserName !== "LinkedIn advertiser");
-}
-
-function AdInspirationCard(ad) {
-  const headline = ad.headline || ad.description || "";
-  return `
-    <article class="ad-card ${ad.imageUrl ? "" : "ad-card-no-media"}">
-      ${ad.imageUrl ? `<a class="ad-card-media" href="${escapeAttribute(ad.adUrl || "#")}" target="_blank" rel="noreferrer"><img src="${escapeAttribute(ad.imageUrl)}" alt=""></a>` : ""}
-      <div class="ad-card-body">
-        <div>
-          <span>${escapeHtml(ad.adType || "Sponsored update")}</span>
-          <strong>${escapeHtml(ad.advertiserName || "LinkedIn advertiser")}</strong>
-        </div>
-        ${headline ? `<p class="ad-card-copy">${escapeHtml(headline)}</p>` : ""}
-        <p>${escapeHtml(impressionRange(ad))}</p>
-        <small>${escapeHtml(dateRangeLabel(ad))}</small>
-        ${ad.adUrl ? `<a class="primary-button ad-view-button" href="${escapeAttribute(ad.adUrl)}" target="_blank" rel="noreferrer">View full ad preview</a>` : ""}
+    <div class="ad-insight-panel">
+      <div class="ad-insight-header">
+        <strong>Language signals from ${insights.sourceCount} public result${insights.sourceCount === 1 ? "" : "s"}</strong>
+        <span>${restrictedCount ? `${restrictedCount} restricted skipped` : "No full ad copy shown"}</span>
       </div>
-    </article>
+      ${InsightGroup("Key phrases", insights.phrases, "phrase")}
+      ${InsightGroup("Trending hashtags", insights.hashtags, "hashtag")}
+      <a class="secondary-button ad-library-search-link" href="${escapeAttribute(searchUrl)}" target="_blank" rel="noreferrer">Open LinkedIn Ad Library source search</a>
+    </div>
   `;
+}
+
+function InsightGroup(title, items, type) {
+  return `
+    <section class="ad-insight-group">
+      <h3>${escapeHtml(title)}</h3>
+      <div class="ad-chip-list">
+        ${items.length ? items.map((item) => `<span class="ad-chip ${type === "hashtag" ? "ad-chip-hashtag" : ""}">${escapeHtml(item.label)}<small>${item.count}</small></span>`).join("") : `<p class="empty-state">No ${escapeHtml(title.toLowerCase())} found.</p>`}
+      </div>
+    </section>
+  `;
+}
+
+function buildAdInspirationInsights(ads, keyword) {
+  const visibleTexts = (ads || [])
+    .filter((ad) => !ad.isRestricted)
+    .map((ad) => [ad.headline, ad.description].filter(Boolean).join(" "))
+    .map((text) => text.trim())
+    .filter(Boolean);
+  const phraseCounts = new Map();
+  const hashtagCounts = new Map();
+  visibleTexts.forEach((text) => {
+    extractHashtags(text).forEach((tag) => incrementCount(hashtagCounts, tag));
+    extractKeyPhrases(text, keyword).forEach((phrase) => incrementCount(phraseCounts, phrase));
+  });
+  return {
+    sourceCount: visibleTexts.length,
+    phrases: rankedCounts(phraseCounts, 10),
+    hashtags: rankedCounts(hashtagCounts, 10)
+  };
+}
+
+function extractHashtags(text) {
+  return Array.from(String(text || "").matchAll(/#[a-z0-9][a-z0-9_]{1,48}/gi)).map((match) => match[0].toLowerCase());
+}
+
+function extractKeyPhrases(text, keyword) {
+  const stopWords = new Set("about after again against all also and are because been before being between business but can company could digital does drive each from grow growth have help here into just learn linkedin make marketing more most need only platform results should social than that their these they this through today using with your".split(" "));
+  const keywordWords = new Set(String(keyword || "").toLowerCase().split(/\s+/).filter(Boolean));
+  const words = String(text || "")
+    .replace(/#[a-z0-9_]+/gi, " ")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .map((word) => word.replace(/^-+|-+$/g, ""))
+    .filter((word) => word.length > 2 && !stopWords.has(word));
+  const phrases = [];
+  for (let size = 2; size <= 4; size += 1) {
+    for (let index = 0; index <= words.length - size; index += 1) {
+      const slice = words.slice(index, index + size);
+      if (!slice.some((word) => !keywordWords.has(word))) continue;
+      phrases.push(slice.join(" "));
+    }
+  }
+  return phrases;
+}
+
+function incrementCount(counts, label) {
+  counts.set(label, (counts.get(label) || 0) + 1);
+}
+
+function rankedCounts(counts, limit) {
+  return Array.from(counts.entries())
+    .sort(([aLabel, aCount], [bLabel, bCount]) => bCount - aCount || bLabel.length - aLabel.length || aLabel.localeCompare(bLabel))
+    .slice(0, limit)
+    .map(([label, count]) => ({ label, count }));
 }
 
 function updateAdLibrarySearchLink(form, keyword = null, countries = null) {

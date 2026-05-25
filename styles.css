@@ -797,6 +797,73 @@ textarea:focus {
   font-weight: 700;
 }
 
+.ad-insight-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.ad-insight-header {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--surface);
+}
+
+.ad-insight-header span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ad-insight-group {
+  display: grid;
+  gap: 10px;
+}
+
+.ad-insight-group h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.ad-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ad-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 10px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.ad-chip small {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ad-chip-hashtag {
+  border-color: rgba(59, 175, 218, 0.3);
+  background: var(--blue-soft);
+  color: var(--blue-dark);
+}
+
 .ad-card {
   display: grid;
   grid-template-columns: 128px minmax(0, 1fr);
