@@ -466,7 +466,7 @@ function CreatePostPage() {
       <section class="composer-panel">
         <p class="eyebrow">Create Post</p>
         <h1>Draft a LinkedIn post</h1>
-        <p class="muted">Use the inspiration panel to scan live LinkedIn Ad Library examples before writing. Inspiration is fetched live and not stored.</p>
+        <p class="muted">Use your page signals first, then check market signals when LinkedIn exposes enough public ad text.</p>
         <form class="composer-form">
           <label>Post idea
             <input name="topic" placeholder="What should this post be about?">
@@ -491,22 +491,33 @@ function AdInspirationPanel() {
       <div class="section-heading">
         <div>
           <p class="eyebrow">Inspiration</p>
-          <h2>Trending ads on LinkedIn</h2>
+          <h2>Post inspiration</h2>
         </div>
       </div>
-      <p class="muted">For inspiration only. We summarize live Ad Library language into phrases and hashtags, without showing full ad copy.</p>
-      <form class="ad-search-form" data-ad-inspiration-form>
-        <label>Keyword
-          <input name="keyword" value="marketing automation" placeholder="marketing automation">
-        </label>
-        <label>Country codes
-          <input name="countries" value="" placeholder="Optional, e.g. LK,US">
-        </label>
-        <button class="primary-button full" type="submit">Refresh</button>
-      </form>
-      <a class="secondary-button ad-library-search-link" href="https://www.linkedin.com/ad-library/search" target="_blank" rel="noreferrer" data-ad-library-search-link>Open LinkedIn Ad Library search</a>
-      <div class="ad-inspiration-list" id="adInspirationList">
-        <p class="empty-state">Loading LinkedIn ad inspiration.</p>
+      <p class="muted">Use synced page performance for reliable signals. Market signals are shown only when LinkedIn exposes public ad text.</p>
+      <div class="inspiration-tabs" role="tablist">
+        <button class="active" type="button" data-inspiration-tab="page">Your page</button>
+        <button type="button" data-inspiration-tab="market">Market</button>
+      </div>
+      <div class="inspiration-tab-panel active" data-inspiration-panel="page">
+        <div class="ad-inspiration-list" id="pageInspirationList">
+          <p class="empty-state">Loading your page signals.</p>
+        </div>
+      </div>
+      <div class="inspiration-tab-panel" data-inspiration-panel="market">
+        <form class="ad-search-form" data-ad-inspiration-form>
+          <label>Keyword
+            <input name="keyword" value="marketing automation" placeholder="marketing automation">
+          </label>
+          <label>Country codes
+            <input name="countries" value="" placeholder="Optional, e.g. LK,US">
+          </label>
+          <button class="primary-button full" type="submit">Refresh market signals</button>
+        </form>
+        <a class="secondary-button ad-library-search-link" href="https://www.linkedin.com/ad-library/search" target="_blank" rel="noreferrer" data-ad-library-search-link>Open LinkedIn Ad Library search</a>
+        <div class="ad-inspiration-list" id="adInspirationList">
+          <p class="empty-state">Market signals load when you open this tab.</p>
+        </div>
       </div>
     </aside>
   `;
@@ -598,9 +609,21 @@ function PostMetric(label, value) {
 
 async function hydrateCreatePost() {
   const form = document.querySelector("[data-ad-inspiration-form]");
-  if (!form) return;
-  updateAdLibrarySearchLink(form);
-  await loadAdInspiration(form);
+  if (form) updateAdLibrarySearchLink(form);
+  await loadPageInspiration();
+}
+
+async function loadPageInspiration() {
+  const list = document.querySelector("#pageInspirationList");
+  if (!list) return;
+  list.innerHTML = `<p class="empty-state">Loading your page signals.</p>`;
+  try {
+    const state = dashboardState || await loadDashboardState();
+    const posts = state.postRankings || state.posts || [];
+    list.innerHTML = PageInspirationResults(posts);
+  } catch (error) {
+    list.innerHTML = `<p class="empty-state">${escapeHtml(error.message || "Unable to load page signals.")}</p>`;
+  }
 }
 
 async function loadAdInspiration(form) {
@@ -622,6 +645,7 @@ async function loadAdInspiration(form) {
     }
     const restrictedCount = ads.filter((ad) => ad.isRestricted).length;
     list.innerHTML = AdInspirationResults(ads, restrictedCount, keyword, broadened ? "" : countries, broadened);
+    list.dataset.loaded = "true";
   } catch (error) {
     list.innerHTML = `<p class="empty-state">${escapeHtml(error.message || "LinkedIn Ad Library unavailable.")}</p>`;
   }
@@ -658,6 +682,77 @@ function AdInspirationResults(ads, restrictedCount, keyword, countries, broadene
       <a class="secondary-button ad-library-search-link" href="${escapeAttribute(searchUrl)}" target="_blank" rel="noreferrer">Open LinkedIn Ad Library source search</a>
     </div>
   `;
+}
+
+function PageInspirationResults(posts) {
+  const insights = buildPageInspirationInsights(posts);
+  if (!posts.length) {
+    return `
+      <div class="ad-library-empty">
+        <strong>No synced posts yet</strong>
+        <p>Run LinkedIn sync from the dashboard first. Then Metrillix can summarize phrases, hashtags, and themes from your own page posts.</p>
+        <button class="primary-button ad-view-button" type="button" data-route="/dashboard">Go to dashboard</button>
+      </div>
+    `;
+  }
+  if (!insights.phrases.length && !insights.hashtags.length && !insights.themes.length) {
+    return `
+      <div class="ad-library-empty">
+        <strong>No text signals found</strong>
+        <p>Your synced posts did not include enough post text to extract phrases or hashtags.</p>
+      </div>
+    `;
+  }
+  return `
+    <div class="ad-insight-panel">
+      <div class="ad-insight-header">
+        <strong>Your page signals from ${insights.sourceCount} synced post${insights.sourceCount === 1 ? "" : "s"}</strong>
+        <span>Weighted by post performance where available</span>
+      </div>
+      ${InsightGroup("Key phrases", insights.phrases, "phrase")}
+      ${InsightGroup("Trending hashtags", insights.hashtags, "hashtag")}
+      ${InsightGroup("Best-performing themes", insights.themes, "phrase")}
+    </div>
+  `;
+}
+
+function buildPageInspirationInsights(posts) {
+  const validPosts = (posts || []).filter((post) => postText(post));
+  const phraseCounts = new Map();
+  const hashtagCounts = new Map();
+  const themeCounts = new Map();
+  validPosts.forEach((post) => {
+    const text = postText(post);
+    const weight = postWeight(post);
+    extractHashtags(text).forEach((tag) => incrementCount(hashtagCounts, tag, weight));
+    extractKeyPhrases(text, "").forEach((phrase) => incrementCount(phraseCounts, phrase, weight));
+  });
+  validPosts
+    .slice()
+    .sort((a, b) => postWeight(b) - postWeight(a))
+    .slice(0, 6)
+    .forEach((post) => {
+      extractKeyPhrases(postText(post), "").slice(0, 8).forEach((phrase) => incrementCount(themeCounts, phrase, postWeight(post)));
+    });
+  return {
+    sourceCount: validPosts.length,
+    phrases: rankedCounts(phraseCounts, 10),
+    hashtags: rankedCounts(hashtagCounts, 10),
+    themes: rankedCounts(themeCounts, 8)
+  };
+}
+
+function postText(post) {
+  return String(post?.text || post?.title || post?.commentary || post?.caption || "").trim();
+}
+
+function postWeight(post) {
+  const score = Number(post?.score || 0);
+  const engagements = Number(post?.engagements ?? post?.metrics?.engagements ?? 0);
+  const clicks = Number(post?.clicks || 0);
+  const impressions = Number(post?.impressions || 0);
+  const reach = Number(post?.reach ?? post?.metrics?.reach ?? 0);
+  return Math.max(1, Math.round(score || engagements * 2 + clicks * 2 + impressions / 100 + reach / 100));
 }
 
 function InsightGroup(title, items, type) {
@@ -715,8 +810,8 @@ function extractKeyPhrases(text, keyword) {
   return phrases;
 }
 
-function incrementCount(counts, label) {
-  counts.set(label, (counts.get(label) || 0) + 1);
+function incrementCount(counts, label, amount = 1) {
+  counts.set(label, (counts.get(label) || 0) + amount);
 }
 
 function rankedCounts(counts, limit) {
@@ -852,6 +947,29 @@ function wirePageEvents() {
     });
   });
 
+  document.querySelectorAll("[data-inspiration-tab]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await setInspirationTab(button.dataset.inspirationTab);
+    });
+  });
+}
+
+async function setInspirationTab(tab) {
+  document.querySelectorAll("[data-inspiration-tab]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.inspirationTab === tab);
+  });
+  document.querySelectorAll("[data-inspiration-panel]").forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.inspirationPanel === tab);
+  });
+  if (tab === "page") await loadPageInspiration();
+  if (tab === "market") {
+    const form = document.querySelector("[data-ad-inspiration-form]");
+    const list = document.querySelector("#adInspirationList");
+    if (form && list && !list.dataset.loaded) {
+      await loadAdInspiration(form);
+      list.dataset.loaded = "true";
+    }
+  }
 }
 
 function escapeHtml(value) {

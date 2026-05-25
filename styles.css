@@ -779,6 +779,40 @@ textarea:focus {
   gap: 14px;
 }
 
+.inspiration-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px;
+  background: var(--surface);
+}
+
+.inspiration-tabs button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.inspiration-tabs button.active {
+  background: var(--white);
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(20, 23, 26, 0.08);
+}
+
+.inspiration-tab-panel {
+  display: none;
+}
+
+.inspiration-tab-panel.active {
+  display: grid;
+  gap: 14px;
+}
+
 .ad-library-search-link {
   justify-content: center;
   min-height: 42px;
