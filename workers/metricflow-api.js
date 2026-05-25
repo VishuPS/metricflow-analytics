@@ -926,7 +926,7 @@ const linkedinAdLibraryService = {
   async fetchTrendingAds({ accessToken, keyword, countries = [], count = 6, start = 0, advertiser = "", dateRange = null, env }) {
     if (!accessToken) throw httpError("Reconnect LinkedIn", 401);
     const cleanKeyword = String(keyword || "").trim();
-    const cleanCountries = countries.map((country) => String(country || "").trim().toUpperCase()).filter(Boolean).slice(0, 8);
+    const cleanCountries = countries.map(normalizeAdLibraryCountry).filter(Boolean).slice(0, 8);
     const safeCount = Math.min(Math.max(Number(count) || 6, 1), 24);
     const safeStart = Math.max(Number(start) || 0, 0);
     const buildUrl = (includeCountries = true) => {
@@ -977,7 +977,7 @@ function adLibraryErrorMessage(payload) {
 async function fetchAdLibraryInspiration(request, env, accountId) {
   const requestUrl = new URL(request.url);
   const token = await loadUserJson(env, userLinkedInKey(accountId, "token"), null);
-  const countries = (requestUrl.searchParams.get("countries") || "US,GB").split(",");
+  const countries = (requestUrl.searchParams.get("countries") || "").split(",");
   const dateRange = {
     start: requestUrl.searchParams.get("dateRange.start"),
     end: requestUrl.searchParams.get("dateRange.end")
@@ -994,19 +994,52 @@ async function fetchAdLibraryInspiration(request, env, accountId) {
   });
   return {
     keyword: requestUrl.searchParams.get("keyword") || "marketing automation",
-    countries: countries.map((country) => country.trim().toUpperCase()).filter(Boolean),
+    countries: countries.map(normalizeAdLibraryCountry).filter(Boolean),
     ...result
   };
+}
+
+function normalizeAdLibraryCountry(country) {
+  const value = String(country || "").trim();
+  if (!value) return "";
+  const aliases = {
+    "SRI LANKA": "LK",
+    SRILANKA: "LK",
+    CEYLON: "LK",
+    "UNITED STATES": "US",
+    "UNITED STATES OF AMERICA": "US",
+    USA: "US",
+    AMERICA: "US",
+    "UNITED KINGDOM": "GB",
+    UK: "GB",
+    "GREAT BRITAIN": "GB",
+    ENGLAND: "GB"
+  };
+  const normalized = value.toUpperCase().replace(/\./g, "").replace(/\s+/g, " ");
+  if (aliases[normalized]) return aliases[normalized];
+  return /^[A-Z]{2}$/.test(normalized) ? normalized : "";
 }
 
 function cleanLinkedInAdLibraryElement(element) {
   const details = element.details || {};
   const advertiser = details.advertiser || {};
   const statistics = details.statistics || {};
+  const content = details.content || details.creative || element.content || {};
+  const imageUrl = firstString(
+    content.imageUrl,
+    content.image?.url,
+    content.thumbnailUrl,
+    content.thumbnail?.url,
+    details.imageUrl,
+    element.imageUrl
+  );
   return {
     adUrl: element.adUrl || "",
     adType: details.adType || "Sponsored update",
-    advertiserName: advertiser.localizedName || advertiser.name || advertiser.vanityName || advertiser.id || "LinkedIn advertiser",
+    advertiserName: firstString(advertiser.localizedName, advertiser.name, advertiser.name?.localized?.en_US, advertiser.vanityName, advertiser.id, "LinkedIn advertiser"),
+    headline: firstString(content.title, content.headline, content.name, details.headline, element.headline),
+    description: firstString(content.text, content.commentary, content.description, content.body, details.text, element.text),
+    imageUrl,
     impressionsFrom: numberOrNull(statistics.impressionsFrom),
     impressionsTo: numberOrNull(statistics.impressionsTo),
     firstImpressionDate: linkedInDateOrNull(statistics.firstImpressionDate),
@@ -1401,6 +1434,13 @@ function numberOrNull(value) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function firstString(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
 }
 
 function httpError(message, status) {

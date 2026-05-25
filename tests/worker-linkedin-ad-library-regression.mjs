@@ -48,6 +48,11 @@ globalThis.fetch = async (url, options = {}) => {
       details: {
         advertiser: { localizedName: "Example Advertiser" },
         adType: "SPONSORED_UPDATE",
+        content: {
+          headline: "Example ad headline",
+          description: "Example ad description",
+          imageUrl: "https://example.test/ad.jpg"
+        },
         statistics: {
           firstImpressionDate: 1704067200000,
           latestImpressionDate: 1706745600000,
@@ -76,6 +81,9 @@ try {
     adUrl: "https://www.linkedin.com/ad-library/detail/123",
     adType: "SPONSORED_UPDATE",
     advertiserName: "Example Advertiser",
+    headline: "Example ad headline",
+    description: "Example ad description",
+    imageUrl: "https://example.test/ad.jpg",
     impressionsFrom: 1000,
     impressionsTo: 5000,
     firstImpressionDate: "2024-01-01T00:00:00.000Z",

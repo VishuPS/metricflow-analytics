@@ -59,6 +59,7 @@ try {
   assert.ok(adLibraryUrls[0].includes("countries=List(GB,US)"));
   assert.ok(!adLibraryUrls[1].includes("countries="));
   assert.deepEqual(body.ads, []);
+  assert.deepEqual(body.countries, ["GB", "US"]);
   assert.equal(kv.writes.length, 0, "ad library fallback responses are not persisted");
   console.log("PASS worker LinkedIn Ad Library filter fallback");
 } finally {

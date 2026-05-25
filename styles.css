@@ -725,8 +725,9 @@ textarea:focus {
 }
 
 .create-post-shell {
+  width: min(1380px, calc(100% - 40px));
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+  grid-template-columns: minmax(420px, 1fr) minmax(460px, 560px);
   align-items: start;
   gap: 24px;
 }
@@ -746,6 +747,10 @@ textarea:focus {
   display: grid;
   gap: 16px;
   padding: 20px;
+  position: sticky;
+  top: 92px;
+  max-height: calc(100vh - 112px);
+  overflow: auto;
 }
 
 .composer-form,
@@ -757,11 +762,39 @@ textarea:focus {
 
 .ad-card {
   display: grid;
-  gap: 8px;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 14px;
   background: var(--surface);
+}
+
+.ad-card-no-media {
+  grid-template-columns: 1fr;
+}
+
+.ad-card-media {
+  display: block;
+  min-height: 112px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+}
+
+.ad-card-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 112px;
+  object-fit: cover;
+}
+
+.ad-card-body {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
 }
 
 .ad-card span,
@@ -780,6 +813,23 @@ textarea:focus {
   margin: 0;
   color: var(--ink);
   font-weight: 800;
+}
+
+.ad-card-copy {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted) !important;
+  font-weight: 600 !important;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.ad-view-button {
+  width: max-content;
+  max-width: 100%;
+  min-height: 38px;
+  padding: 10px 14px;
+  text-decoration: none;
 }
 
 .dashboard-hero,
@@ -1044,6 +1094,15 @@ textarea:focus {
   .split-band,
   .copy-columns,
   .create-post-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .ad-inspiration-panel {
+    position: static;
+    max-height: none;
+  }
+
+  .ad-card {
     grid-template-columns: 1fr;
   }
 

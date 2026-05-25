@@ -495,8 +495,8 @@ function AdInspirationPanel() {
         <label>Keyword
           <input name="keyword" value="marketing automation" placeholder="marketing automation">
         </label>
-        <label>Countries
-          <input name="countries" value="" placeholder="Optional, e.g. US,GB">
+        <label>Country codes
+          <input name="countries" value="" placeholder="Optional, e.g. LK,US">
         </label>
         <button class="primary-button full" type="submit">Refresh</button>
       </form>
@@ -616,17 +616,29 @@ async function loadAdInspiration(form) {
 }
 
 function AdInspirationCard(ad) {
+  const headline = ad.headline || ad.description || "";
   return `
-    <article class="ad-card">
-      <div>
-        <span>${escapeHtml(ad.adType || "Sponsored update")}</span>
-        <strong>${escapeHtml(ad.advertiserName || "LinkedIn advertiser")}</strong>
+    <article class="ad-card ${ad.imageUrl ? "" : "ad-card-no-media"}">
+      ${ad.imageUrl ? `<a class="ad-card-media" href="${escapeAttribute(ad.adUrl || "#")}" target="_blank" rel="noreferrer"><img src="${escapeAttribute(ad.imageUrl)}" alt=""></a>` : ""}
+      <div class="ad-card-body">
+        <div>
+          <span>${escapeHtml(ad.adType || "Sponsored update")}</span>
+          <strong>${escapeHtml(ad.advertiserName || "LinkedIn advertiser")}</strong>
+        </div>
+        ${headline ? `<p class="ad-card-copy">${escapeHtml(headline)}</p>` : ""}
+        <p>${escapeHtml(impressionRange(ad))}</p>
+        <small>${escapeHtml(dateRangeLabel(ad))}</small>
+        ${ad.adUrl ? `<a class="primary-button ad-view-button" href="${escapeAttribute(ad.adUrl)}" target="_blank" rel="noreferrer">View full ad preview</a>` : ""}
       </div>
-      <p>${escapeHtml(impressionRange(ad))}</p>
-      <small>${escapeHtml(formatDateTime(ad.firstImpressionDate))} - ${escapeHtml(formatDateTime(ad.latestImpressionDate))}</small>
-      ${ad.adUrl ? `<a class="inline-link" href="${escapeAttribute(ad.adUrl)}" target="_blank" rel="noreferrer">Open ad on LinkedIn</a>` : ""}
     </article>
   `;
+}
+
+function dateRangeLabel(ad) {
+  const first = formatDateTime(ad.firstImpressionDate);
+  const latest = formatDateTime(ad.latestImpressionDate);
+  if (first && latest && first !== "Unknown" && latest !== "Unknown") return `${first} - ${latest}`;
+  return "Dates unavailable";
 }
 
 function impressionRange(ad) {
