@@ -509,8 +509,24 @@ function AdInspirationPanel() {
           <label>Keyword
             <input name="keyword" value="marketing automation" placeholder="marketing automation">
           </label>
-          <label>Country codes
-            <input name="countries" value="" placeholder="Optional, e.g. LK,US">
+          <label>Country
+            <select name="countries">
+              <option value="">All available countries</option>
+              <option value="LK">Sri Lanka (LK)</option>
+              <option value="US">United States (US)</option>
+              <option value="GB">United Kingdom (GB)</option>
+              <option value="IN">India (IN)</option>
+              <option value="AU">Australia (AU)</option>
+              <option value="CA">Canada (CA)</option>
+              <option value="SG">Singapore (SG)</option>
+              <option value="AE">United Arab Emirates (AE)</option>
+              <option value="DE">Germany (DE)</option>
+              <option value="FR">France (FR)</option>
+              <option value="NL">Netherlands (NL)</option>
+              <option value="IE">Ireland (IE)</option>
+              <option value="MY">Malaysia (MY)</option>
+              <option value="PH">Philippines (PH)</option>
+            </select>
           </label>
           <button class="primary-button full" type="submit">Refresh market signals</button>
         </form>
@@ -635,16 +651,10 @@ async function loadAdInspiration(form) {
   updateAdLibrarySearchLink(form, keyword, countries);
   list.innerHTML = `<p class="empty-state">Loading LinkedIn ad inspiration.</p>`;
   try {
-    let result = await fetchAdInspirationResults(keyword, countries);
-    let ads = result.ads || [];
-    let broadened = false;
-    if (countries && !buildAdInspirationInsights(ads, keyword).sourceCount) {
-      result = await fetchAdInspirationResults(keyword, "");
-      ads = result.ads || [];
-      broadened = true;
-    }
+    const result = await fetchAdInspirationResults(keyword, countries);
+    const ads = result.ads || [];
     const restrictedCount = ads.filter((ad) => ad.isRestricted).length;
-    list.innerHTML = AdInspirationResults(ads, restrictedCount, keyword, broadened ? "" : countries, broadened);
+    list.innerHTML = AdInspirationResults(ads, restrictedCount, keyword, countries);
     list.dataset.loaded = "true";
   } catch (error) {
     list.innerHTML = `<p class="empty-state">${escapeHtml(error.message || "LinkedIn Ad Library unavailable.")}</p>`;
