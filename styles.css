@@ -719,6 +719,25 @@ textarea:focus {
   font-size: 13px;
 }
 
+.org-option:not(.editing) .org-name-field,
+.org-option:not(.editing) [data-save-organization-name],
+.org-option.editing [data-edit-organization-name] {
+  display: none;
+}
+
+.org-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.org-actions .text-button {
+  padding: 0 4px;
+  color: var(--blue-dark);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .dashboard-shell {
   display: grid;
   gap: 28px;

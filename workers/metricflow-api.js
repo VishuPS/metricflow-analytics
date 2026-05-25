@@ -123,6 +123,9 @@ export default {
       if (request.method === "POST" && url.pathname === "/api/linkedin/select-organization") {
         return json(await selectLinkedInOrganization(request, env), env);
       }
+      if (request.method === "POST" && url.pathname === "/api/linkedin/organization-name") {
+        return json(await updateLinkedInOrganizationName(request, env), env);
+      }
 
       const connectorPatch = url.pathname.match(/^\/api\/connectors\/([^/]+)$/);
       if (request.method === "PATCH" && connectorPatch) {
@@ -1177,6 +1180,42 @@ async function selectLinkedInOrganization(request, env) {
     organizationOptions: linkedinOrganizationOptions(organizations, organizationLabels, organizationUrn),
     selectedOrganization: organizationUrn,
     selectedOrganizationName: linkedinOrganizationName(organizationUrn, organizationLabels)
+  };
+}
+
+async function updateLinkedInOrganizationName(request, env) {
+  const body = await readJson(request);
+  const submittedOrganization = body.organizationUrn;
+  const organizationName = String(body.organizationName || "").trim();
+  const account = await requireAccount(request, env);
+  const organizations = await loadUserJson(env, userLinkedInKey(account.id, "organizations"), []);
+  const selectedOrganization = await loadUserJson(env, userLinkedInKey(account.id, "organization"), null);
+  const existingLabels = await loadUserJson(env, userLinkedInKey(account.id, "organizationLabels"), {});
+  const fallbackLabels = linkedinOrganizationLabels(organizations, existingLabels);
+  const organizationUrn = resolveLinkedInOrganizationUrn(submittedOrganization, organizations, fallbackLabels);
+  const organizationUrns = organizations.map(linkedinOrganizationUrn);
+  if (!organizationUrns.includes(organizationUrn)) {
+    const error = new Error("Organization is not available for this LinkedIn user");
+    error.status = 400;
+    throw error;
+  }
+  if (!organizationName) {
+    const error = new Error("Page name is required");
+    error.status = 400;
+    throw error;
+  }
+
+  const organizationLabels = {
+    ...fallbackLabels,
+    [organizationUrn]: organizationName
+  };
+  await saveUserJson(env, userLinkedInKey(account.id, "organizationLabels"), organizationLabels);
+  return {
+    userId: account.id,
+    organizations: linkedinOrganizationDisplayNames(organizations, organizationLabels),
+    organizationOptions: linkedinOrganizationOptions(organizations, organizationLabels, selectedOrganization),
+    selectedOrganization,
+    selectedOrganizationName: linkedinOrganizationName(selectedOrganization, organizationLabels)
   };
 }
 

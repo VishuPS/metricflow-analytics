@@ -400,7 +400,11 @@ function SelectOrganizationStep(organizations, selectedOrganization) {
         <label class="org-name-field">Page name
           <input data-organization-name value="${escapeAttribute(name)}" placeholder="Company or client name">
         </label>
-        <button class="secondary-button" data-select-organization>${selected ? "Update name" : "Use page"}</button>
+        <div class="org-actions">
+          <button class="secondary-button" data-select-organization>Use page</button>
+          <button class="text-button" data-edit-organization-name>Edit name</button>
+          <button class="secondary-button" data-save-organization-name>Save name</button>
+        </div>
       </article>
     `;
   }).join("");
@@ -929,6 +933,30 @@ async function handleAppClick(event) {
       });
       linkedInState = result;
       navigate("/dashboard");
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  if (event.target.closest("[data-edit-organization-name]") && organizationTarget) {
+    organizationTarget.classList.add("editing");
+    organizationTarget.querySelector("[data-organization-name]")?.focus();
+    return;
+  }
+
+  if (event.target.closest("[data-save-organization-name]") && organizationTarget) {
+    try {
+      const nameInput = organizationTarget.querySelector("[data-organization-name]");
+      const result = await api("/api/linkedin/organization-name", {
+        method: "POST",
+        body: JSON.stringify({
+          organizationUrn: organizationTarget.dataset.organization,
+          organizationName: nameInput?.value || ""
+        })
+      });
+      linkedInState = result;
+      showToast("Page name updated");
+      await hydrateOnboarding();
     } catch (error) {
       showToast(error.message);
     }

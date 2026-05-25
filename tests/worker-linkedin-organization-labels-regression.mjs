@@ -20,6 +20,7 @@ function createKv(initial = {}) {
 const accountId = "acct_org_labels_test";
 const sessionToken = "session_org_labels_test";
 const organizationUrn = "urn:li:organization:123";
+const secondOrganizationUrn = "urn:li:organization:456";
 const prefix = `user:${accountId}:linkedin`;
 const kv = createKv({
   [`session:${sessionToken}`]: {
@@ -29,8 +30,8 @@ const kv = createKv({
     expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString()
   },
   [`${prefix}:token`]: { accessToken: "token" },
-  [`${prefix}:organizations`]: [organizationUrn],
-  [`${prefix}:organizationLabels`]: { [organizationUrn]: "Old Page Name" }
+  [`${prefix}:organizations`]: [organizationUrn, secondOrganizationUrn],
+  [`${prefix}:organizationLabels`]: { [organizationUrn]: "Old Page Name", [secondOrganizationUrn]: "Second Page" }
 });
 const env = { USER_STATE: kv };
 
@@ -39,10 +40,14 @@ const listResponse = await worker.fetch(new Request("https://api.example.test/ap
 }), env);
 const listBody = await listResponse.json();
 assert.equal(listResponse.status, 200);
-assert.deepEqual(listBody.organizations, ["Old Page Name"]);
+assert.deepEqual(listBody.organizations, ["Old Page Name", "Second Page"]);
 assert.deepEqual(listBody.organizationOptions, [{
   urn: organizationUrn,
   name: "Old Page Name",
+  selected: false
+}, {
+  urn: secondOrganizationUrn,
+  name: "Second Page",
   selected: false
 }]);
 
@@ -67,6 +72,23 @@ assert.equal(selectBody.organizationOptions[0].selected, true);
 
 const labels = JSON.parse(await kv.get(`${prefix}:organizationLabels`));
 assert.equal(labels[organizationUrn], "Client A");
+
+const renameResponse = await worker.fetch(new Request("https://api.example.test/api/linkedin/organization-name", {
+  method: "POST",
+  headers: {
+    authorization: `Bearer ${sessionToken}`,
+    "content-type": "application/json"
+  },
+  body: JSON.stringify({
+    organizationUrn: secondOrganizationUrn,
+    organizationName: "Client B"
+  })
+}), env);
+const renameBody = await renameResponse.json();
+assert.equal(renameResponse.status, 200);
+assert.equal(renameBody.selectedOrganization, organizationUrn);
+assert.equal(renameBody.organizationOptions[1].name, "Client B");
+assert.equal(renameBody.organizationOptions[1].selected, false);
 
 const stateResponse = await worker.fetch(new Request("https://api.example.test/api/state", {
   headers: { authorization: `Bearer ${sessionToken}` }
