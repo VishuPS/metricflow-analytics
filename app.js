@@ -494,7 +494,7 @@ function CreatePostPage() {
         <section class="draft-list-panel">
           <div class="section-heading">
             <h2>Saved drafts</h2>
-            <p class="muted">Drafts stay inside Metrillix until publishing is added later.</p>
+            <p class="muted">Save drafts here, then publish them to the selected LinkedIn page when ready.</p>
           </div>
           <div class="draft-list" id="draftList">
             <p class="empty-state">Loading drafts.</p>
@@ -840,14 +840,19 @@ function deleteLocalDraft(draftId) {
 async function publishDraft(draftId) {
   const localDraft = loadLocalDrafts().find((draft) => draft.id === draftId);
   let result;
-  if (localDraft) {
-    result = await api("/api/linkedin/publish", {
-      method: "POST",
-      body: JSON.stringify(localDraft)
-    });
-    result = markLocalDraftPublished(draftId, result.published);
-  } else {
-    result = await api(`/api/drafts/${encodeURIComponent(draftId)}/publish`, { method: "POST" });
+  try {
+    if (localDraft) {
+      result = await api("/api/linkedin/publish", {
+        method: "POST",
+        body: JSON.stringify(localDraft)
+      });
+      result = markLocalDraftPublished(draftId, result.published);
+    } else {
+      result = await api(`/api/drafts/${encodeURIComponent(draftId)}/publish`, { method: "POST" });
+    }
+  } catch (error) {
+    if (isMissingDraftApi(error)) throw new Error("Publishing backend is not deployed yet. Deploy the Worker API, then reconnect LinkedIn once for publishing permission.");
+    throw error;
   }
   document.querySelector("#draftList").innerHTML = DraftList(result.drafts || loadLocalDrafts());
   const link = result.published?.postUrl || result.draft?.linkedinPostUrl;
