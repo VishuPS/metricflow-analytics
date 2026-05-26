@@ -80,6 +80,10 @@ export default {
         const account = await requireAccount(request, env);
         return json({ posts: filterPosts(await loadUserJson(env, userLinkedInKey(account.id, "posts"), []), url.searchParams) }, env);
       }
+      if (route === "GET /api/drafts") {
+        const account = await requireAccount(request, env);
+        return json({ drafts: await loadDrafts(env, account.id) }, env);
+      }
       if (route === "GET /api/reports") {
         const account = await requireAccount(request, env);
         return json({ reports: await loadUserJson(env, userDataKey(account.id, "reports"), []) }, env);
@@ -125,6 +129,23 @@ export default {
       }
       if (request.method === "POST" && url.pathname === "/api/linkedin/organization-name") {
         return json(await updateLinkedInOrganizationName(request, env), env);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/drafts") {
+        const account = await requireAccount(request, env);
+        const result = await createDraft(request, env, account.id);
+        return json(result, env, 201);
+      }
+
+      const draftRoute = url.pathname.match(/^\/api\/drafts\/([^/]+)$/);
+      if (draftRoute && request.method === "PUT") {
+        const account = await requireAccount(request, env);
+        return json(await updateDraft(request, env, account.id, draftRoute[1]), env);
+      }
+
+      if (draftRoute && request.method === "DELETE") {
+        const account = await requireAccount(request, env);
+        return json(await deleteDraft(env, account.id, draftRoute[1]), env);
       }
 
       const connectorPatch = url.pathname.match(/^\/api\/connectors\/([^/]+)$/);
@@ -294,6 +315,7 @@ async function buildUserState(env, accountId) {
   const schedule = { ...defaultState.schedule, ...(await loadUserJson(env, userDataKey(accountId, "schedule"), {})) };
   const rules = await loadUserJson(env, userDataKey(accountId, "rules"), defaultState.rules);
   const reports = await loadUserJson(env, userDataKey(accountId, "reports"), []);
+  const drafts = await loadDrafts(env, accountId);
   const history = analytics?.history || generateHistory(posts);
 
   return {
@@ -314,6 +336,7 @@ async function buildUserState(env, accountId) {
     settings,
     schedule,
     reports,
+    drafts,
     linkedin: {
       organizations: linkedinOrganizationDisplayNames(organizations, organizationLabels),
       organizationOptions: linkedinOrganizationOptions(organizations, organizationLabels, selectedOrganization),
@@ -1515,6 +1538,103 @@ function summary(state) {
 
 function createReport(state, body) {
   return { id: `report-${Date.now()}`, title: body.title || "Post intelligence report", audience: body.audience || "Leadership team", sections: body.sections || [], createdAt: new Date().toISOString(), summary: summary(state), recommendation: "Use normalized post rankings to choose the next creative test." };
+}
+
+async function loadDrafts(env, accountId) {
+  const drafts = await loadUserJson(env, userDataKey(accountId, "drafts"), []);
+  return Array.isArray(drafts) ? drafts : [];
+}
+
+async function saveDrafts(env, accountId, drafts) {
+  await saveUserJson(env, userDataKey(accountId, "drafts"), drafts.slice(0, 100));
+}
+
+async function createDraft(request, env, accountId) {
+  const body = await readJson(request);
+  const now = new Date().toISOString();
+  const draft = {
+    ...await normalizeDraftPayload(env, accountId, body),
+    id: `draft-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
+    status: "draft",
+    createdAt: now,
+    updatedAt: now
+  };
+  const drafts = [draft, ...await loadDrafts(env, accountId)];
+  await saveDrafts(env, accountId, drafts);
+  return { draft, drafts };
+}
+
+async function updateDraft(request, env, accountId, draftId) {
+  const body = await readJson(request);
+  const drafts = await loadDrafts(env, accountId);
+  const index = drafts.findIndex((draft) => draft.id === decodeURIComponent(draftId));
+  if (index === -1) throw httpError("Draft not found", 404);
+  const existing = drafts[index];
+  const updated = {
+    ...existing,
+    ...await normalizeDraftPayload(env, accountId, body, existing),
+    id: existing.id,
+    status: "draft",
+    createdAt: existing.createdAt,
+    updatedAt: new Date().toISOString()
+  };
+  drafts[index] = updated;
+  await saveDrafts(env, accountId, drafts);
+  return { draft: updated, drafts };
+}
+
+async function deleteDraft(env, accountId, draftId) {
+  const drafts = await loadDrafts(env, accountId);
+  const nextDrafts = drafts.filter((draft) => draft.id !== decodeURIComponent(draftId));
+  await saveDrafts(env, accountId, nextDrafts);
+  return { drafts: nextDrafts };
+}
+
+async function normalizeDraftPayload(env, accountId, body, existing = {}) {
+  const topic = cleanText(body.topic, 240);
+  const bodyText = cleanText(body.body, 5000);
+  if (!topic && !bodyText) throw httpError("Add a post idea or draft before saving", 400);
+
+  const selectedOrganization = linkedinOrganizationUrn(await loadUserJson(env, userLinkedInKey(accountId, "organization"), null)) || "";
+  const organizationLabels = await loadUserJson(env, userLinkedInKey(accountId, "organizationLabels"), {});
+  const organizationUrn = linkedinOrganizationUrn(body.organizationUrn) || selectedOrganization;
+  const organizationName = cleanText(body.organizationName, 120) || linkedinOrganizationName(organizationUrn, organizationLabels) || "LinkedIn page";
+  const title = cleanText(body.title, 120) || draftTitle(topic, bodyText);
+  const figure = normalizeDraftFigure(body.figure, existing.figure);
+
+  return {
+    title,
+    topic,
+    body: bodyText,
+    organizationUrn,
+    organizationName,
+    figure
+  };
+}
+
+function draftTitle(topic, bodyText) {
+  const source = topic || bodyText || "Untitled draft";
+  return source.length > 70 ? `${source.slice(0, 67).trim()}...` : source;
+}
+
+function cleanText(value, limit) {
+  return String(value || "").trim().replace(/\s+/g, " ").slice(0, limit);
+}
+
+function normalizeDraftFigure(figure, existingFigure = null) {
+  if (figure === null) return null;
+  if (figure === undefined) return existingFigure || null;
+  if (!figure || typeof figure !== "object") return null;
+  const dataUrl = String(figure.dataUrl || "");
+  if (!dataUrl) return null;
+  if (!dataUrl.startsWith("data:image/")) throw httpError("Only image figures can be saved", 400);
+  if (dataUrl.length > 1600000) throw httpError("Figure is too large. Use an image under about 1 MB.", 413);
+  return {
+    name: cleanText(figure.name, 160) || "figure",
+    type: cleanText(figure.type, 80) || "image",
+    size: Number(figure.size || 0),
+    dataUrl
+  };
 }
 
 function weekKey(date) {

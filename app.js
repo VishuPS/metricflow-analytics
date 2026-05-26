@@ -9,6 +9,7 @@ let session = readSession();
 let dashboardState = null;
 let linkedInState = null;
 let linkedInOAuthStatus = null;
+let currentDraftFigure = null;
 
 const routes = {
   "/": WelcomePage,
@@ -467,18 +468,38 @@ function CreatePostPage() {
         <p class="eyebrow">Create Post</p>
         <h1>Draft a LinkedIn post</h1>
         <p class="muted">Use your page signals first, then check market signals when LinkedIn exposes enough public ad text.</p>
-        <form class="composer-form">
+        <form class="composer-form" data-draft-form>
+          <input type="hidden" name="draftId">
+          <label>Draft name
+            <input name="title" placeholder="Name this draft">
+          </label>
           <label>Post idea
             <input name="topic" placeholder="What should this post be about?">
           </label>
           <label>Draft
-            <textarea rows="12" placeholder="Write your LinkedIn post draft here."></textarea>
+            <textarea name="body" rows="12" placeholder="Write your LinkedIn post draft here."></textarea>
           </label>
+          <label>Add figure
+            <input name="figure" type="file" accept="image/*" data-draft-figure>
+          </label>
+          <div class="figure-preview" id="draftFigurePreview">
+            <p class="empty-state">No figure attached.</p>
+          </div>
           <div class="button-row">
-            <button class="primary-button" type="button">Save draft</button>
+            <button class="primary-button" type="submit">Save draft</button>
+            <button class="secondary-button" type="button" data-new-draft>New draft</button>
             <button class="secondary-button" type="button" data-route="/dashboard">Back to dashboard</button>
           </div>
         </form>
+        <section class="draft-list-panel">
+          <div class="section-heading">
+            <h2>Saved drafts</h2>
+            <p class="muted">Drafts stay inside Metrillix until publishing is added later.</p>
+          </div>
+          <div class="draft-list" id="draftList">
+            <p class="empty-state">Loading drafts.</p>
+          </div>
+        </section>
       </section>
       ${AdInspirationPanel()}
     </main>
@@ -626,7 +647,125 @@ function PostMetric(label, value) {
 async function hydrateCreatePost() {
   const form = document.querySelector("[data-ad-inspiration-form]");
   if (form) updateAdLibrarySearchLink(form);
+  currentDraftFigure = null;
+  renderDraftFigurePreview();
+  await loadDrafts();
   await loadPageInspiration();
+}
+
+async function loadDrafts() {
+  const list = document.querySelector("#draftList");
+  if (!list) return;
+  list.innerHTML = `<p class="empty-state">Loading drafts.</p>`;
+  try {
+    const result = await api("/api/drafts");
+    list.innerHTML = DraftList(result.drafts || []);
+  } catch (error) {
+    list.innerHTML = `<p class="empty-state">${escapeHtml(error.message || "Unable to load drafts.")}</p>`;
+  }
+}
+
+function DraftList(drafts) {
+  if (!drafts.length) return `<p class="empty-state">No drafts saved yet.</p>`;
+  return drafts.map((draft) => `
+    <article class="draft-row" data-draft-id="${escapeAttribute(draft.id)}">
+      ${draft.figure?.dataUrl ? `<img class="draft-thumb" src="${escapeAttribute(draft.figure.dataUrl)}" alt="">` : `<div class="draft-thumb draft-thumb-empty">Draft</div>`}
+      <div class="draft-main">
+        <strong>${escapeHtml(draft.title || "Untitled draft")}</strong>
+        <span>${escapeHtml(draft.organizationName || "LinkedIn page")} - ${escapeHtml(draft.status || "draft")}</span>
+        <small>${escapeHtml(formatDateTime(draft.createdAt))}</small>
+      </div>
+      <div class="draft-actions">
+        <button class="secondary-button" type="button" data-edit-draft="${escapeAttribute(draft.id)}">Edit</button>
+        <button class="text-button danger" type="button" data-delete-draft="${escapeAttribute(draft.id)}">Delete</button>
+      </div>
+    </article>
+  `).join("");
+}
+
+async function saveDraft(form) {
+  const data = new FormData(form);
+  const draftId = String(data.get("draftId") || "").trim();
+  const payload = {
+    title: data.get("title"),
+    topic: data.get("topic"),
+    body: data.get("body"),
+    figure: currentDraftFigure
+  };
+  const result = await api(draftId ? `/api/drafts/${encodeURIComponent(draftId)}` : "/api/drafts", {
+    method: draftId ? "PUT" : "POST",
+    body: JSON.stringify(payload)
+  });
+  form.elements.draftId.value = result.draft?.id || "";
+  document.querySelector("#draftList").innerHTML = DraftList(result.drafts || []);
+  showToast("Draft saved");
+}
+
+async function editDraft(draftId) {
+  const result = await api("/api/drafts");
+  const draft = (result.drafts || []).find((item) => item.id === draftId);
+  if (!draft) throw new Error("Draft not found");
+  const form = document.querySelector("[data-draft-form]");
+  form.elements.draftId.value = draft.id || "";
+  form.elements.title.value = draft.title || "";
+  form.elements.topic.value = draft.topic || "";
+  form.elements.body.value = draft.body || "";
+  currentDraftFigure = draft.figure || null;
+  form.elements.figure.value = "";
+  renderDraftFigurePreview();
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function deleteDraft(draftId) {
+  const result = await api(`/api/drafts/${encodeURIComponent(draftId)}`, { method: "DELETE" });
+  document.querySelector("#draftList").innerHTML = DraftList(result.drafts || []);
+  const form = document.querySelector("[data-draft-form]");
+  if (form?.elements.draftId.value === draftId) resetDraftForm(form);
+  showToast("Draft deleted");
+}
+
+function resetDraftForm(form) {
+  form.reset();
+  form.elements.draftId.value = "";
+  currentDraftFigure = null;
+  renderDraftFigurePreview();
+}
+
+function renderDraftFigurePreview() {
+  const preview = document.querySelector("#draftFigurePreview");
+  if (!preview) return;
+  if (!currentDraftFigure?.dataUrl) {
+    preview.innerHTML = `<p class="empty-state">No figure attached.</p>`;
+    return;
+  }
+  preview.innerHTML = `
+    <img src="${escapeAttribute(currentDraftFigure.dataUrl)}" alt="">
+    <div>
+      <strong>${escapeHtml(currentDraftFigure.name || "Attached figure")}</strong>
+      <span>${formatBytes(currentDraftFigure.size)}</span>
+      <button class="text-button danger" type="button" data-remove-figure>Remove figure</button>
+    </div>
+  `;
+}
+
+function readDraftFigure(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return resolve(null);
+    if (!file.type.startsWith("image/")) return reject(new Error("Choose an image file"));
+    if (file.size > 1200000) return reject(new Error("Use an image under about 1 MB"));
+    const reader = new FileReader();
+    reader.onload = () => resolve({ name: file.name, type: file.type, size: file.size, dataUrl: String(reader.result || "") });
+    reader.onerror = () => reject(new Error("Could not read image"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatBytes(value) {
+  const size = Number(value || 0);
+  if (!size) return "Image";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 async function loadPageInspiration() {
@@ -983,6 +1122,29 @@ function wirePageEvents() {
       await setInspirationTab(button.dataset.inspirationTab);
     });
   });
+
+  document.querySelectorAll("[data-draft-form]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await saveDraft(form);
+      } catch (error) {
+        showToast(error.message);
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-draft-figure]").forEach((input) => {
+    input.addEventListener("change", async () => {
+      try {
+        currentDraftFigure = await readDraftFigure(input.files?.[0]);
+        renderDraftFigurePreview();
+      } catch (error) {
+        input.value = "";
+        showToast(error.message);
+      }
+    });
+  });
 }
 
 async function setInspirationTab(tab) {
@@ -1074,6 +1236,40 @@ async function handleAppClick(event) {
       dashboardState = null;
       showToast("LinkedIn disconnected");
       navigate("/dashboard/onboarding");
+    } catch (error) {
+      showToast(error.message);
+    }
+    return;
+  }
+
+  if (event.target.closest("[data-new-draft]")) {
+    const form = document.querySelector("[data-draft-form]");
+    if (form) resetDraftForm(form);
+    return;
+  }
+
+  if (event.target.closest("[data-remove-figure]")) {
+    currentDraftFigure = null;
+    const figureInput = document.querySelector("[data-draft-figure]");
+    if (figureInput) figureInput.value = "";
+    renderDraftFigurePreview();
+    return;
+  }
+
+  const editDraftTarget = event.target.closest("[data-edit-draft]");
+  if (editDraftTarget) {
+    try {
+      await editDraft(editDraftTarget.dataset.editDraft);
+    } catch (error) {
+      showToast(error.message);
+    }
+    return;
+  }
+
+  const deleteDraftTarget = event.target.closest("[data-delete-draft]");
+  if (deleteDraftTarget) {
+    try {
+      await deleteDraft(deleteDraftTarget.dataset.deleteDraft);
     } catch (error) {
       showToast(error.message);
     }
