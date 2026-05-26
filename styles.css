@@ -111,6 +111,30 @@ button {
   padding: 72px 0;
 }
 
+.page-back-row {
+  display: flex;
+  align-items: center;
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 14px;
+  background: var(--white);
+  color: var(--blue-dark);
+  font-weight: 800;
+  box-shadow: 0 8px 20px rgba(20, 23, 26, 0.06);
+}
+
+.back-button:hover {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+}
+
 .hero-shell {
   min-height: calc(100vh - 72px);
   display: grid;
@@ -753,6 +777,10 @@ textarea:focus {
   grid-template-columns: minmax(420px, 1fr) minmax(460px, 560px);
   align-items: start;
   gap: 24px;
+}
+
+.create-post-shell .page-back-row {
+  grid-column: 1 / -1;
 }
 
 .composer-panel,

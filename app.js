@@ -4,6 +4,7 @@ const apiBaseUrl = window.METRICFLOW_API_BASE_URL || "";
 const appUrl = window.METRICFLOW_CLOUDFLARE_APP_URL || window.location.origin;
 const sessionKey = "metricflow.session";
 const cookieConsentKey = "metrillix.cookieConsent";
+const previousPathKey = "metrillix.previousPath";
 
 let session = readSession();
 let dashboardState = null;
@@ -44,13 +45,26 @@ function showToast(message) {
   showToast.timer = window.setTimeout(() => toast.classList.remove("show"), 2600);
 }
 
-function navigate(path) {
+function navigate(path, { trackPrevious = true } = {}) {
+  if (trackPrevious && window.location.pathname !== path) {
+    sessionStorage.setItem(previousPathKey, window.location.pathname);
+  }
   const shouldScrollTop = path === "/" || window.location.pathname === path;
   window.history.pushState({}, "", path);
   render();
   if (shouldScrollTop) {
     window.requestAnimationFrame(() => window.scrollTo(0, 0));
   }
+}
+
+function navigateBack(fallback = "/") {
+  const previousPath = sessionStorage.getItem(previousPathKey);
+  if (previousPath && previousPath !== window.location.pathname && routes[previousPath]) {
+    sessionStorage.removeItem(previousPathKey);
+    navigate(previousPath, { trackPrevious: false });
+    return;
+  }
+  navigate(fallback, { trackPrevious: false });
 }
 
 function captureOAuthReturn() {
@@ -180,6 +194,10 @@ function TopNav({ right = "login" } = {}) {
   `;
 }
 
+function BackButton({ fallback = "/" } = {}) {
+  return `<div class="page-back-row"><button class="back-button" type="button" data-back data-back-fallback="${escapeAttribute(fallback)}">Back</button></div>`;
+}
+
 function WelcomePage() {
   return `
     ${TopNav()}
@@ -256,6 +274,7 @@ function CookiePolicyPage() {
   return `
     ${TopNav()}
     <main class="page-shell policy-page">
+      ${BackButton({ fallback: "/" })}
       <section>
         <p class="eyebrow">Cookie Policy</p>
         <h1>How Metrillix uses cookies</h1>
@@ -282,6 +301,7 @@ function SignupPage() {
   return `
     ${TopNav()}
     <main class="page-shell auth-shell">
+      ${BackButton({ fallback: "/" })}
       <section class="auth-card">
         <p class="eyebrow">Create account</p>
         <h1>Start with MetricFlow</h1>
@@ -301,6 +321,7 @@ function LoginPage() {
   return `
     ${TopNav()}
     <main class="page-shell auth-shell">
+      ${BackButton({ fallback: "/" })}
       <section class="auth-card">
         <p class="eyebrow">Welcome back</p>
         <h1>Log in</h1>
@@ -320,6 +341,7 @@ function ForgotPasswordPage() {
   return `
     ${TopNav()}
     <main class="page-shell auth-shell">
+      ${BackButton({ fallback: "/login" })}
       <section class="auth-card">
         <p class="eyebrow">Password reset</p>
         <h1>Reset your password</h1>
@@ -339,6 +361,7 @@ function ResetPasswordPage() {
   return `
     ${TopNav()}
     <main class="page-shell auth-shell">
+      ${BackButton({ fallback: "/login" })}
       <section class="auth-card">
         <p class="eyebrow">New password</p>
         <h1>Choose a new password</h1>
@@ -359,6 +382,7 @@ function OnboardingPage() {
   return `
     ${TopNav({ right: "dashboard" })}
     <main class="page-shell narrow-shell">
+      ${BackButton({ fallback: "/dashboard" })}
       <section class="step-card" id="onboardingContent">
         <p class="eyebrow">Onboarding</p>
         <h1>Preparing your LinkedIn workspace</h1>
@@ -434,6 +458,7 @@ function Dashboard() {
   return `
     ${TopNav({ right: "dashboard" })}
     <main class="page-shell dashboard-shell">
+      ${BackButton({ fallback: "/" })}
       <section class="dashboard-hero">
         <div>
           <p class="eyebrow">Dashboard</p>
@@ -464,6 +489,7 @@ function CreatePostPage() {
   return `
     ${TopNav({ right: "dashboard" })}
     <main class="page-shell create-post-shell">
+      ${BackButton({ fallback: "/dashboard" })}
       <section class="composer-panel">
         <p class="eyebrow">Create Post</p>
         <h1>Draft a LinkedIn post</h1>
@@ -1296,6 +1322,13 @@ async function handleAppClick(event) {
   if (event.target.closest("[data-accept-cookies]")) {
     localStorage.setItem(cookieConsentKey, "accepted");
     renderCookieBanner();
+    return;
+  }
+
+  const backTarget = event.target.closest("[data-back]");
+  if (backTarget) {
+    event.preventDefault();
+    navigateBack(backTarget.dataset.backFallback || "/");
     return;
   }
 
