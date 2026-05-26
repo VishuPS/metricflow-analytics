@@ -78,7 +78,9 @@ export default {
       }
       if (route === "GET /api/posts") {
         const account = await requireAccount(request, env);
-        return json({ posts: filterPosts(await loadUserJson(env, userLinkedInKey(account.id, "posts"), []), url.searchParams) }, env);
+        const selectedOrganization = linkedinOrganizationUrn(await loadUserJson(env, userLinkedInKey(account.id, "organization"), null)) || null;
+        const posts = selectedOrganizationPosts(await loadUserJson(env, userLinkedInKey(account.id, "posts"), []), selectedOrganization);
+        return json({ posts: filterPosts(posts, url.searchParams) }, env);
       }
       if (route === "GET /api/drafts") {
         const account = await requireAccount(request, env);
@@ -319,7 +321,8 @@ async function buildUserState(env, accountId) {
   const organizations = await loadUserJson(env, userLinkedInKey(accountId, "organizations"), []);
   const organizationLabels = await loadUserJson(env, userLinkedInKey(accountId, "organizationLabels"), {});
   const selectedOrganization = linkedinOrganizationUrn(await loadUserJson(env, userLinkedInKey(accountId, "organization"), null)) || null;
-  const posts = await loadUserJson(env, userLinkedInKey(accountId, "posts"), []);
+  const allPosts = await loadUserJson(env, userLinkedInKey(accountId, "posts"), []);
+  const posts = selectedOrganizationPosts(allPosts, selectedOrganization);
   const analytics = await loadUserJson(env, userLinkedInKey(accountId, "analytics"), null);
   const sync = await loadUserJson(env, userLinkedInKey(accountId, "sync"), null);
   const settings = { ...defaultState.settings, ...(await loadUserJson(env, userDataKey(accountId, "settings"), {})) };
@@ -327,7 +330,7 @@ async function buildUserState(env, accountId) {
   const rules = await loadUserJson(env, userDataKey(accountId, "rules"), defaultState.rules);
   const reports = await loadUserJson(env, userDataKey(accountId, "reports"), []);
   const drafts = await loadDrafts(env, accountId);
-  const history = analytics?.history || generateHistory(posts);
+  const history = generateHistory(posts);
 
   return {
     ...structuredClone(defaultState),
@@ -845,12 +848,13 @@ async function ingestSource(source, options, env, accountId) {
   const rawPosts = env.LINKEDIN_DEMO_MODE === "true" ? demoLinkedInPosts() : await fetchLinkedInPosts(accessToken, orgUrn, options);
   const postIds = rawPosts.map((post) => post.id || post.urn || post.activity);
   const rawMetrics = env.LINKEDIN_DEMO_MODE === "true" ? Object.fromEntries(postIds.map((id, index) => [id, demoLinkedInMetric(index)])) : await fetchLinkedInMetrics(accessToken, orgUrn, postIds);
-  const normalized = normalizeLinkedInPosts(rawPosts, rawMetrics);
+  const normalized = normalizeLinkedInPosts(rawPosts, rawMetrics, orgUrn);
   const diagnostics = linkedinSyncDiagnostics(rawPosts, normalized, rawMetrics);
 
   const existingPosts = await loadUserJson(env, userLinkedInKey(accountId, "posts"), []);
-  const posts = mergePosts(existingPosts, normalized);
-  const history = generateHistory(posts);
+  const posts = mergePosts(existingPosts.filter((post) => !linkedInPostBelongsToOrganization(post, orgUrn)), normalized);
+  const selectedPosts = selectedOrganizationPosts(posts, orgUrn);
+  const history = generateHistory(selectedPosts);
   const syncedAt = new Date().toISOString();
   await saveUserJson(env, userLinkedInKey(accountId, "posts"), posts);
   await saveUserJson(env, userLinkedInKey(accountId, "analytics"), {
@@ -865,7 +869,7 @@ async function ingestSource(source, options, env, accountId) {
     organization: orgUrn,
     diagnostics
   });
-  return { source, fetched: rawPosts.length, saved: normalized.length, diagnostics, posts: normalized };
+  return { source, fetched: rawPosts.length, saved: normalized.length, diagnostics, posts: selectedPosts };
 }
 
 async function syncConnector(source, options, env, accountId) {
@@ -1374,15 +1378,17 @@ function withRawRestliQuery(url, key, value) {
   return `${href}${href.includes("?") ? "&" : "?"}${key}=${value}`;
 }
 
-function normalizeLinkedInPosts(rawPosts, rawMetrics = {}) {
+function normalizeLinkedInPosts(rawPosts, rawMetrics = {}, organizationUrn = "") {
   return rawPosts.map((post) => {
     const postId = String(post.id || post.urn || post.activity || "");
     const metrics = rawMetrics[postId] || {};
     const text = post.specificContent?.["com.linkedin.ugc.ShareContent"]?.shareCommentary?.text || post.text || "";
+    const author = String(post.author || organizationUrn || "");
     return {
       source: "linkedin",
       post_id: postId,
-      author_id: String(post.author || ""),
+      author_id: author,
+      organization_urn: organizationUrn || author,
       published_at: linkedInDate(post.created?.time || post.published_at),
       url: post.permalink || post.url || `https://www.linkedin.com/feed/update/${postId}`,
       text,
@@ -1456,6 +1462,24 @@ function mergePosts(existing, newPosts) {
   return [...byKey.values()].sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)));
 }
 
+function selectedOrganizationPosts(posts, selectedOrganization) {
+  if (!selectedOrganization) return [];
+  return (posts || []).filter((post) => linkedInPostBelongsToOrganization(post, selectedOrganization));
+}
+
+function linkedInPostBelongsToOrganization(post, selectedOrganization) {
+  const organizationUrn = linkedinOrganizationUrn(selectedOrganization);
+  if (!organizationUrn) return false;
+  return [
+    post.organization_urn,
+    post.organizationUrn,
+    post.author_id,
+    post.authorId,
+    post.author,
+    post.platform_raw?.post?.author
+  ].map(linkedinOrganizationUrn).includes(organizationUrn);
+}
+
 function generateHistory(posts) {
   const now = new Date();
   return {
@@ -1515,7 +1539,7 @@ function statePayload(state) {
     insights: [{ type: "ranking", title: ranked[0] ? `${ranked[0].text || ranked[0].post_id} leads normalized posts` : "No normalized posts yet", detail: ranked[0] ? "This post has the strongest combined engagement, click, and conversion score." : "Connect LinkedIn and run ingestion." }],
     patterns: patterns(state.posts || []),
     contentIntelligence: { winningFormats: patterns(state.posts || []), recommendations: [ranked[0] ? `Create a follow-up to ${ranked[0].text || ranked[0].post_id}.` : "Run LinkedIn ingestion to generate recommendations."], nextBrief: { contentPillar: "normalized", format: ranked[0]?.media_type || "text", angle: "Use normalized post metrics to choose the next creative test." } },
-    normalizedSchema: { post: ["source", "post_id", "author_id", "published_at", "url", "text", "media_type", "thumbnail_url", "reach", "impressions", "engagements", "likes", "comments", "shares", "saves", "clicks", "conversions", "platform_raw"] }
+    normalizedSchema: { post: ["source", "post_id", "author_id", "organization_urn", "published_at", "url", "text", "media_type", "thumbnail_url", "reach", "impressions", "engagements", "likes", "comments", "shares", "saves", "clicks", "conversions", "platform_raw"] }
   };
 }
 
