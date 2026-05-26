@@ -661,6 +661,10 @@ async function loadDrafts() {
     const result = await api("/api/drafts");
     list.innerHTML = DraftList(result.drafts || []);
   } catch (error) {
+    if (isMissingDraftApi(error)) {
+      list.innerHTML = DraftList(loadLocalDrafts());
+      return;
+    }
     list.innerHTML = `<p class="empty-state">${escapeHtml(error.message || "Unable to load drafts.")}</p>`;
   }
 }
@@ -692,17 +696,29 @@ async function saveDraft(form) {
     body: data.get("body"),
     figure: currentDraftFigure
   };
-  const result = await api(draftId ? `/api/drafts/${encodeURIComponent(draftId)}` : "/api/drafts", {
-    method: draftId ? "PUT" : "POST",
-    body: JSON.stringify(payload)
-  });
+  let result;
+  try {
+    result = await api(draftId ? `/api/drafts/${encodeURIComponent(draftId)}` : "/api/drafts", {
+      method: draftId ? "PUT" : "POST",
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    if (!isMissingDraftApi(error)) throw error;
+    result = saveLocalDraft(draftId, payload);
+  }
   form.elements.draftId.value = result.draft?.id || "";
   document.querySelector("#draftList").innerHTML = DraftList(result.drafts || []);
-  showToast("Draft saved");
+  showToast(result.local ? "Draft saved locally" : "Draft saved");
 }
 
 async function editDraft(draftId) {
-  const result = await api("/api/drafts");
+  let result;
+  try {
+    result = await api("/api/drafts");
+  } catch (error) {
+    if (!isMissingDraftApi(error)) throw error;
+    result = { drafts: loadLocalDrafts() };
+  }
   const draft = (result.drafts || []).find((item) => item.id === draftId);
   if (!draft) throw new Error("Draft not found");
   const form = document.querySelector("[data-draft-form]");
@@ -717,7 +733,13 @@ async function editDraft(draftId) {
 }
 
 async function deleteDraft(draftId) {
-  const result = await api(`/api/drafts/${encodeURIComponent(draftId)}`, { method: "DELETE" });
+  let result;
+  try {
+    result = await api(`/api/drafts/${encodeURIComponent(draftId)}`, { method: "DELETE" });
+  } catch (error) {
+    if (!isMissingDraftApi(error)) throw error;
+    result = deleteLocalDraft(draftId);
+  }
   document.querySelector("#draftList").innerHTML = DraftList(result.drafts || []);
   const form = document.querySelector("[data-draft-form]");
   if (form?.elements.draftId.value === draftId) resetDraftForm(form);
@@ -766,6 +788,51 @@ function formatBytes(value) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function isMissingDraftApi(error) {
+  return String(error?.message || "").toLowerCase().includes("api route not found");
+}
+
+function localDraftsKey() {
+  return `metrillix.drafts.${session.accountId || session.email || "local"}`;
+}
+
+function loadLocalDrafts() {
+  try {
+    const drafts = JSON.parse(localStorage.getItem(localDraftsKey()) || "[]");
+    return Array.isArray(drafts) ? drafts : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalDraft(draftId, payload) {
+  const drafts = loadLocalDrafts();
+  const now = new Date().toISOString();
+  const index = drafts.findIndex((draft) => draft.id === draftId);
+  const existing = index >= 0 ? drafts[index] : {};
+  const draft = {
+    ...existing,
+    id: existing.id || `local-draft-${Date.now()}`,
+    title: String(payload.title || payload.topic || payload.body || "Untitled draft").trim().slice(0, 120),
+    topic: String(payload.topic || "").trim(),
+    body: String(payload.body || "").trim(),
+    figure: payload.figure || null,
+    status: "draft",
+    organizationName: linkedInState?.selectedOrganizationName || dashboardState?.linkedin?.selectedOrganizationName || "LinkedIn page",
+    createdAt: existing.createdAt || now,
+    updatedAt: now
+  };
+  const nextDrafts = index >= 0 ? drafts.map((item) => item.id === draft.id ? draft : item) : [draft, ...drafts];
+  localStorage.setItem(localDraftsKey(), JSON.stringify(nextDrafts.slice(0, 100)));
+  return { draft, drafts: nextDrafts, local: true };
+}
+
+function deleteLocalDraft(draftId) {
+  const drafts = loadLocalDrafts().filter((draft) => draft.id !== draftId);
+  localStorage.setItem(localDraftsKey(), JSON.stringify(drafts));
+  return { drafts, local: true };
 }
 
 async function loadPageInspiration() {
