@@ -5,7 +5,7 @@ const connectors = {
     color: "#0a66c2",
     authUrl: "https://www.linkedin.com/oauth/v2/authorization",
     tokenUrl: "https://www.linkedin.com/oauth/v2/accessToken",
-    scopes: ["openid", "profile", "r_organization_admin", "r_organization_social", "r_ads", "r_ads_reporting"]
+    scopes: ["openid", "profile", "r_organization_admin", "r_organization_social", "w_organization_social", "r_ads", "r_ads_reporting"]
   },
   instagram: {
     id: "instagram",
@@ -137,6 +137,12 @@ export default {
         return json(result, env, 201);
       }
 
+      const draftPublishRoute = url.pathname.match(/^\/api\/drafts\/([^/]+)\/publish$/);
+      if (draftPublishRoute && request.method === "POST") {
+        const account = await requireAccount(request, env);
+        return json(await publishDraft(env, account.id, draftPublishRoute[1]), env);
+      }
+
       const draftRoute = url.pathname.match(/^\/api\/drafts\/([^/]+)$/);
       if (draftRoute && request.method === "PUT") {
         const account = await requireAccount(request, env);
@@ -146,6 +152,11 @@ export default {
       if (draftRoute && request.method === "DELETE") {
         const account = await requireAccount(request, env);
         return json(await deleteDraft(env, account.id, draftRoute[1]), env);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/linkedin/publish") {
+        const account = await requireAccount(request, env);
+        return json(await publishLinkedInPayload(request, env, account.id), env);
       }
 
       const connectorPatch = url.pathname.match(/^\/api\/connectors\/([^/]+)$/);
@@ -1590,6 +1601,30 @@ async function deleteDraft(env, accountId, draftId) {
   return { drafts: nextDrafts };
 }
 
+async function publishDraft(env, accountId, draftId) {
+  const drafts = await loadDrafts(env, accountId);
+  const index = drafts.findIndex((draft) => draft.id === decodeURIComponent(draftId));
+  if (index === -1) throw httpError("Draft not found", 404);
+  const published = await publishLinkedInDraft(env, accountId, drafts[index]);
+  const updated = {
+    ...drafts[index],
+    status: "published",
+    publishedAt: new Date().toISOString(),
+    linkedinPostUrn: published.postUrn,
+    linkedinPostUrl: published.postUrl
+  };
+  drafts[index] = updated;
+  await saveDrafts(env, accountId, drafts);
+  return { draft: updated, drafts, published };
+}
+
+async function publishLinkedInPayload(request, env, accountId) {
+  const body = await readJson(request);
+  const draft = await normalizeDraftPayload(env, accountId, body);
+  const published = await publishLinkedInDraft(env, accountId, draft);
+  return { published };
+}
+
 async function normalizeDraftPayload(env, accountId, body, existing = {}) {
   const topic = cleanText(body.topic, 240);
   const bodyText = cleanText(body.body, 5000);
@@ -1635,6 +1670,108 @@ function normalizeDraftFigure(figure, existingFigure = null) {
     size: Number(figure.size || 0),
     dataUrl
   };
+}
+
+async function publishLinkedInDraft(env, accountId, draft) {
+  const token = await loadUserJson(env, userLinkedInKey(accountId, "token"), null);
+  if (!token?.accessToken) throw httpError("Reconnect LinkedIn before publishing", 401);
+  const selectedOrganization = linkedinOrganizationUrn(await loadUserJson(env, userLinkedInKey(accountId, "organization"), null)) || "";
+  const organizationUrn = linkedinOrganizationUrn(draft.organizationUrn) || selectedOrganization;
+  if (!organizationUrn) throw httpError("Select a LinkedIn page before publishing", 400);
+  const commentary = cleanLinkedInCommentary(draft.body || draft.topic || "");
+  if (!commentary) throw httpError("Add draft text before publishing", 400);
+
+  const media = draft.figure?.dataUrl
+    ? [await uploadLinkedInImage(token.accessToken, organizationUrn, draft.figure, env)]
+    : [];
+  const payload = {
+    author: organizationUrn,
+    commentary,
+    visibility: "PUBLIC",
+    distribution: {
+      feedDistribution: "MAIN_FEED",
+      targetEntities: [],
+      thirdPartyDistributionChannels: []
+    },
+    lifecycleState: "PUBLISHED",
+    isReshareDisabledByAuthor: false
+  };
+  if (media.length) payload.content = { media };
+
+  const response = await fetch("https://api.linkedin.com/rest/posts", {
+    method: "POST",
+    headers: linkedInWriteHeaders(token.accessToken, env),
+    body: JSON.stringify(payload)
+  });
+  const responseText = await response.text();
+  const responsePayload = parseMaybeJson(responseText);
+  if (response.status === 401) throw httpError("Reconnect LinkedIn before publishing", 401);
+  if (response.status === 403) throw httpError("LinkedIn publishing unavailable. Reconnect LinkedIn and confirm the selected page allows organization posting.", 403);
+  if (!response.ok) throw httpError(responsePayload?.message || responseText || "LinkedIn publish failed", response.status);
+  const postUrn = response.headers.get("x-restli-id") || responsePayload?.id || "";
+  return {
+    postUrn,
+    postUrl: postUrn ? `https://www.linkedin.com/feed/update/${encodeURIComponent(postUrn)}` : "",
+    raw: responsePayload || {}
+  };
+}
+
+async function uploadLinkedInImage(accessToken, ownerUrn, figure, env) {
+  const initializeResponse = await fetch("https://api.linkedin.com/rest/images?action=initializeUpload", {
+    method: "POST",
+    headers: linkedInWriteHeaders(accessToken, env),
+    body: JSON.stringify({ initializeUploadRequest: { owner: ownerUrn } })
+  });
+  const initializePayload = await initializeResponse.json().catch(() => ({}));
+  if (initializeResponse.status === 401) throw httpError("Reconnect LinkedIn before publishing", 401);
+  if (initializeResponse.status === 403) throw httpError("LinkedIn image publishing unavailable. Reconnect LinkedIn with page posting permission.", 403);
+  if (!initializeResponse.ok) throw httpError(initializePayload.message || "LinkedIn image upload could not be initialized", initializeResponse.status);
+  const value = initializePayload.value || initializePayload;
+  const uploadUrl = value.uploadUrl || value.uploadUrlExpiresAt && value.uploadUrl;
+  const imageUrn = value.image || value.asset;
+  if (!uploadUrl || !imageUrn) throw httpError("LinkedIn image upload response was incomplete", 502);
+
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "content-type": figure.type || "image/png" },
+    body: dataUrlBytes(figure.dataUrl)
+  });
+  if (!uploadResponse.ok) throw httpError("LinkedIn image upload failed", uploadResponse.status);
+  return {
+    id: imageUrn,
+    title: figure.name || "Draft figure"
+  };
+}
+
+function linkedInWriteHeaders(accessToken, env) {
+  return {
+    authorization: `Bearer ${accessToken}`,
+    "content-type": "application/json",
+    "linkedin-version": linkedInMarketingVersion(env),
+    "x-restli-protocol-version": "2.0.0"
+  };
+}
+
+function cleanLinkedInCommentary(value) {
+  return String(value || "").trim().slice(0, 3000);
+}
+
+function parseMaybeJson(value) {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function dataUrlBytes(dataUrl) {
+  const match = String(dataUrl || "").match(/^data:[^;]+;base64,(.+)$/);
+  if (!match) throw httpError("Attached figure is not a valid image", 400);
+  const binary = atob(match[1]);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
 }
 
 function weekKey(date) {

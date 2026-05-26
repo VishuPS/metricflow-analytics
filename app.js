@@ -680,6 +680,8 @@ function DraftList(drafts) {
         <small>${escapeHtml(formatDateTime(draft.createdAt))}</small>
       </div>
       <div class="draft-actions">
+        ${draft.status === "published" && draft.linkedinPostUrl ? `<a class="secondary-button" href="${escapeAttribute(draft.linkedinPostUrl)}" target="_blank" rel="noreferrer">View post</a>` : ""}
+        ${draft.status === "published" ? "" : `<button class="primary-button" type="button" data-publish-draft="${escapeAttribute(draft.id)}">Publish</button>`}
         <button class="secondary-button" type="button" data-edit-draft="${escapeAttribute(draft.id)}">Edit</button>
         <button class="text-button danger" type="button" data-delete-draft="${escapeAttribute(draft.id)}">Delete</button>
       </div>
@@ -833,6 +835,41 @@ function deleteLocalDraft(draftId) {
   const drafts = loadLocalDrafts().filter((draft) => draft.id !== draftId);
   localStorage.setItem(localDraftsKey(), JSON.stringify(drafts));
   return { drafts, local: true };
+}
+
+async function publishDraft(draftId) {
+  const localDraft = loadLocalDrafts().find((draft) => draft.id === draftId);
+  let result;
+  if (localDraft) {
+    result = await api("/api/linkedin/publish", {
+      method: "POST",
+      body: JSON.stringify(localDraft)
+    });
+    result = markLocalDraftPublished(draftId, result.published);
+  } else {
+    result = await api(`/api/drafts/${encodeURIComponent(draftId)}/publish`, { method: "POST" });
+  }
+  document.querySelector("#draftList").innerHTML = DraftList(result.drafts || loadLocalDrafts());
+  const link = result.published?.postUrl || result.draft?.linkedinPostUrl;
+  showToast(link ? "Published to LinkedIn" : "Published to LinkedIn");
+}
+
+function markLocalDraftPublished(draftId, published = {}) {
+  const drafts = loadLocalDrafts();
+  const now = new Date().toISOString();
+  const nextDrafts = drafts.map((draft) => draft.id === draftId ? {
+    ...draft,
+    status: "published",
+    publishedAt: now,
+    linkedinPostUrn: published.postUrn || "",
+    linkedinPostUrl: published.postUrl || ""
+  } : draft);
+  localStorage.setItem(localDraftsKey(), JSON.stringify(nextDrafts));
+  return {
+    draft: nextDrafts.find((draft) => draft.id === draftId),
+    drafts: nextDrafts,
+    published
+  };
 }
 
 async function loadPageInspiration() {
@@ -1339,6 +1376,20 @@ async function handleAppClick(event) {
       await deleteDraft(deleteDraftTarget.dataset.deleteDraft);
     } catch (error) {
       showToast(error.message);
+    }
+    return;
+  }
+
+  const publishDraftTarget = event.target.closest("[data-publish-draft]");
+  if (publishDraftTarget) {
+    try {
+      publishDraftTarget.disabled = true;
+      publishDraftTarget.textContent = "Publishing";
+      await publishDraft(publishDraftTarget.dataset.publishDraft);
+    } catch (error) {
+      showToast(error.message);
+      publishDraftTarget.disabled = false;
+      publishDraftTarget.textContent = "Publish";
     }
     return;
   }
