@@ -221,9 +221,9 @@ export default {
         return json({ rules }, env);
       }
 
-      return json({ message: "API route not found" }, env, 404);
+      return json({ message: "This page or feature is not available yet." }, env, 404);
     } catch (error) {
-      return json({ message: error.message || "Worker error" }, env, error.status || 500);
+      return json({ message: publicErrorMessage(error), code: error.code || undefined }, env, error.status || 500);
     }
   },
 
@@ -684,7 +684,7 @@ function oauthSetupRequired(source, env, missingName) {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>MetricFlow OAuth setup required</title>
+    <title>Metrillix LinkedIn setup required</title>
     <style>
       body { margin: 0; font-family: Inter, Arial, sans-serif; background: #fff; color: #14171a; }
       main { width: min(680px, calc(100% - 40px)); margin: 96px auto; }
@@ -695,10 +695,10 @@ function oauthSetupRequired(source, env, missingName) {
   </head>
   <body>
     <main>
-      <p>MetricFlow</p>
-      <h1>LinkedIn OAuth setup required</h1>
-      <p>The app-level LinkedIn OAuth secret <code>${missingName}</code> is not configured on the Cloudflare Worker yet.</p>
-      <p>This is not a personal LinkedIn token. It belongs to the MetricFlow LinkedIn Developer app and lets each user connect their own LinkedIn account through OAuth.</p>
+      <p>Metrillix</p>
+      <h1>LinkedIn setup required</h1>
+      <p>LinkedIn connection setup is not complete yet. Missing setting: <code>${missingName}</code>.</p>
+      <p>This is an app-level LinkedIn setting for Metrillix. It is not a personal LinkedIn token.</p>
       <p>Required redirect URI: <code>${env.LINKEDIN_REDIRECT_URI || "https://metricflow-api.vsooriarachchi.workers.dev/oauth/linkedin/callback"}</code></p>
       <p><a href="${env.PAGES_URL || "https://metricflow-analytics.pages.dev"}/dashboard/onboarding">Return to onboarding</a></p>
     </main>
@@ -894,7 +894,7 @@ async function syncConnector(source, options, env, accountId) {
       source,
       error: true,
       statusCode: error.status || 500,
-      message: error.message || "LinkedIn sync failed"
+      message: publicErrorMessage(error, "LinkedIn sync failed")
     };
   }
 }
@@ -905,7 +905,7 @@ async function saveLinkedInSyncFailure(env, accountId, error, attemptedAt) {
     ...existing,
     status: "failed",
     lastAttemptedAt: attemptedAt,
-    lastError: error.message || "LinkedIn sync failed"
+    lastError: publicErrorMessage(error, "LinkedIn sync failed")
   });
 }
 
@@ -1822,6 +1822,27 @@ function httpError(message, status) {
   const error = new Error(message);
   error.status = status;
   return error;
+}
+
+function publicErrorMessage(error, fallback = "Something went wrong. Please try again.") {
+  const message = String(error?.message || "").trim();
+  const lower = message.toLowerCase();
+  const status = Number(error?.status || 0);
+
+  if (!message) return fallback;
+  if (status === 401 || /oauth token missing|reconnect linkedin|unauthorized|token.*expired|invalid token/.test(lower)) {
+    return "Please reconnect LinkedIn, then try again.";
+  }
+  if (status === 403 || /forbidden|permission|access denied|not enough permissions|scope/.test(lower)) {
+    return "This LinkedIn page does not allow that action yet. Reconnect LinkedIn and confirm the selected page has the right permissions.";
+  }
+  if (/field value validation failed|param validation|data processing exception|restli|ugc posts api|social actions api|analytics api|organization lookup|linkedin .*api/.test(lower)) {
+    return "LinkedIn could not complete this request. Reconnect LinkedIn or choose another company page, then try again.";
+  }
+  if (/api route not found|worker error|internal error|server error/.test(lower)) {
+    return fallback;
+  }
+  return message;
 }
 
 async function readJson(request) {

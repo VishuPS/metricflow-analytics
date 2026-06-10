@@ -45,6 +45,10 @@ function showToast(message) {
   showToast.timer = window.setTimeout(() => toast.classList.remove("show"), 2600);
 }
 
+function showError(error, fallback = "Something went wrong. Please try again.") {
+  showToast(userMessage(error, fallback));
+}
+
 function navigate(path, { trackPrevious = true } = {}) {
   if (trackPrevious && window.location.pathname !== path) {
     sessionStorage.setItem(previousPathKey, window.location.pathname);
@@ -74,7 +78,7 @@ function captureOAuthReturn() {
     showToast("LinkedIn connected");
   }
   if (params.get("connector") === "error") {
-    showToast(params.get("message") || "LinkedIn connection failed");
+    showToast(userMessage(params.get("message"), "LinkedIn connection failed. Please try connecting again."));
     window.history.replaceState({}, "", "/dashboard/onboarding");
   }
 }
@@ -92,7 +96,9 @@ async function api(path, options = {}) {
   const payload = type.includes("application/json") ? await response.json().catch(() => ({})) : await response.text();
   if (!response.ok) {
     const message = typeof payload === "string" ? payload : payload.message;
-    throw new Error(message || "Request failed");
+    const error = new Error(message || "Request failed");
+    error.status = response.status;
+    throw error;
   }
   return payload;
 }
@@ -186,7 +192,7 @@ function TopNav({ right = "login" } = {}) {
 
   return `
     <header class="top-nav">
-      <a class="brand-link" href="/" data-route="/" aria-label="MetricFlow home">
+      <a class="brand-link" href="/" data-route="/" aria-label="Metrillix home">
         <img class="brand-logo" src="/assets/metric-flow-logo.png?v=20260525-metrillix-logo" alt="Metrillix">
       </a>
       <nav>${links}</nav>
@@ -204,7 +210,7 @@ function WelcomePage() {
     <main class="marketing-page">
       <section class="front-hero" id="home">
         <h1>Analytics for LinkedIn, Simplified</h1>
-        <p>Track your LinkedIn performance with clean, actionable insights designed for creators, founders, and marketing teams.</p>
+        <p>Track LinkedIn company page performance with clean, actionable insights for founders, creators, and marketing teams.</p>
         <div class="hero-actions">
           <button class="primary-button" data-route="/signup">Get Started</button>
           <button class="text-button" data-route="/login">Log In</button>
@@ -220,12 +226,12 @@ function WelcomePage() {
           <article class="feature-card">
             <span class="feature-placeholder">01</span>
             <h3>Post Performance Insights</h3>
-            <p>See exactly which posts resonate with your audience. Track impressions, clicks, reactions, comments, and shares — all in one place.</p>
+            <p>See which company page posts resonate with your audience. Track impressions, clicks, reactions, comments, and shares in one place.</p>
           </article>
           <article class="feature-card">
             <span class="feature-placeholder">02</span>
             <h3>Audience Growth Tracking</h3>
-            <p>Understand who’s following your Page, how your audience is evolving, and what drives growth over time.</p>
+            <p>Understand how your page audience is evolving and what content appears to support growth over time.</p>
           </article>
           <article class="feature-card">
             <span class="feature-placeholder">03</span>
@@ -238,17 +244,17 @@ function WelcomePage() {
       <section class="front-section about-section" id="about">
         <p class="eyebrow">About Us</p>
         <h2>Metrillix helps professionals understand their LinkedIn impact.</h2>
-        <p>We built Metrillix because creators and businesses deserve analytics that are simple, accurate, and genuinely useful. Our platform turns raw LinkedIn data into clear insights — helping you grow your audience, improve your content strategy, and make smarter decisions with confidence.</p>
+        <p>We built Metrillix for businesses that want simple LinkedIn page analytics without digging through scattered reports. Metrillix turns authorized company page data into clear insights for content planning, performance review, and publishing decisions.</p>
       </section>
 
       <section class="front-section policy-section" id="privacy">
         <p class="eyebrow">Privacy Policy</p>
-        <p>Metrillix collects only the data you explicitly authorize through LinkedIn OAuth. We never access personal messages, private data, or anything outside the permissions you grant. Your analytics belong to you — we do not sell, share, or aggregate your data across accounts. You can revoke access at any time through LinkedIn’s security settings.</p>
+        <p>Metrillix only uses the data you authorize through LinkedIn OAuth for company pages you manage. We do not access personal messages, personal profile analytics, or pages you have not selected. We do not sell your analytics data, and each Metrillix account is kept separate from other accounts.</p>
       </section>
 
       <section class="front-section policy-section" id="terms">
         <p class="eyebrow">Terms of Service</p>
-        <p>By using Metrillix, you agree to use the platform responsibly and in compliance with LinkedIn’s API terms. You retain full ownership of your content and analytics. We provide the service “as is” and continuously improve it to ensure accuracy, reliability, and security.</p>
+        <p>By using Metrillix, you agree to connect only LinkedIn company pages you are authorized to manage and to use the platform in line with LinkedIn's API terms. Drafts and page analytics remain inside your account unless you choose to publish a draft to LinkedIn.</p>
       </section>
 
       <section class="front-cta">
@@ -265,7 +271,7 @@ function WelcomePage() {
         <button class="footer-link" data-route="/cookie-policy">Cookie Policy</button>
         <a href="mailto:hello@metrillix.com">Contact</a>
       </nav>
-      <p>© 2026 Metrillix — LinkedIn Analytics for Professionals</p>
+      <p>Copyright 2026 Metrillix - LinkedIn Analytics for Professionals</p>
     </footer>
   `;
 }
@@ -278,7 +284,7 @@ function CookiePolicyPage() {
       <section>
         <p class="eyebrow">Cookie Policy</p>
         <h1>How Metrillix uses cookies</h1>
-        <p class="muted">Metrillix uses essential cookies to keep your account secure, remember your session, and protect authenticated dashboard requests. These cookies are needed for the product to work.</p>
+        <p class="muted">Metrillix uses essential cookies to keep your account secure, remember your session, and protect authenticated dashboard requests. These cookies are required for login, LinkedIn connection, drafts, publishing, and analytics pages to work.</p>
       </section>
       <section class="policy-block">
         <h2>Essential cookies</h2>
@@ -286,11 +292,15 @@ function CookiePolicyPage() {
       </section>
       <section class="policy-block">
         <h2>Preference cookies</h2>
-        <p>We store your cookie notice choice in your browser so the notice does not keep appearing. This preference does not contain account analytics or LinkedIn data.</p>
+        <p>We store your cookie notice choice in your browser so the notice does not keep appearing. This preference does not contain account analytics, drafts, LinkedIn tokens, or LinkedIn page data.</p>
       </section>
       <section class="policy-block">
         <h2>LinkedIn cookies</h2>
-        <p>When you connect LinkedIn, LinkedIn may use its own cookies on linkedin.com to authenticate your LinkedIn account. Metrillix does not control LinkedIn cookies.</p>
+        <p>When you connect LinkedIn, LinkedIn may use its own cookies on linkedin.com to authenticate your LinkedIn account and confirm the company pages you manage. Metrillix does not control LinkedIn cookies.</p>
+      </section>
+      <section class="policy-block">
+        <h2>LinkedIn page access</h2>
+        <p>Metrillix is built for LinkedIn company pages, not personal profile analytics. You can disconnect LinkedIn from Metrillix at any time, and you can also revoke access from your LinkedIn security settings.</p>
       </section>
     </main>
     ${CookieBanner()}
@@ -304,7 +314,7 @@ function SignupPage() {
       ${BackButton({ fallback: "/" })}
       <section class="auth-card">
         <p class="eyebrow">Create account</p>
-        <h1>Start with MetricFlow</h1>
+        <h1>Start with Metrillix</h1>
         <form data-auth="signup">
           <label>Name<input name="name" autocomplete="name" required></label>
           <label>Email<input name="email" type="email" autocomplete="email" required></label>
@@ -331,7 +341,7 @@ function LoginPage() {
           <button class="primary-button full" type="submit">Log in</button>
         </form>
         <p class="muted"><button class="inline-link" data-route="/forgot-password">Forgot your password?</button></p>
-        <p class="muted">New to MetricFlow? <button class="inline-link" data-route="/signup">Create an account</button></p>
+        <p class="muted">New to Metrillix? <button class="inline-link" data-route="/signup">Create an account</button></p>
       </section>
     </main>
   `;
@@ -394,7 +404,7 @@ function OnboardingPage() {
 
 function ConnectLinkedInStep() {
   const helper = linkedInOAuthStatus?.configured === false
-    ? "Connect through the MetricFlow backend. If OAuth setup is still missing, the backend will show the required app configuration without storing any user tokens in the frontend."
+    ? "Connect through Metrillix. If LinkedIn setup is still being finalized, Metrillix will show what needs attention without storing LinkedIn tokens in your browser."
     : "Connect the LinkedIn account that administers the organizations you want to analyze.";
   const connectUrl = `${apiBaseUrl}/api/connectors/linkedin/connect?session=${encodeURIComponent(session.token || "")}`;
   const disconnectButton = linkedInState?.connected
@@ -437,7 +447,7 @@ function SelectOrganizationStep(organizations, selectedOrganization) {
   return `
     <p class="eyebrow">Step 2</p>
     <h1>Select organization</h1>
-    <p class="muted">Choose the LinkedIn organization MetricFlow should use for post ingestion and analytics.</p>
+    <p class="muted">Choose the LinkedIn company page Metrillix should use for post sync and analytics.</p>
     <div class="org-list">${items}</div>
     <div class="button-row">
       <button class="secondary-button" data-disconnect-linkedin>Disconnect LinkedIn</button>
@@ -449,7 +459,7 @@ function DashboardReadyStep() {
   return `
     <p class="eyebrow">Step 3</p>
     <h1>Your dashboard is ready</h1>
-    <p class="muted">MetricFlow has an active LinkedIn organization. You can now load the analytics dashboard.</p>
+    <p class="muted">Metrillix has an active LinkedIn company page. You can now load the analytics dashboard.</p>
     <button class="primary-button" data-route="/dashboard">Open dashboard</button>
   `;
 }
@@ -691,7 +701,7 @@ async function loadDrafts() {
       list.innerHTML = DraftList(loadLocalDrafts());
       return;
     }
-    list.innerHTML = `<p class="empty-state">${escapeHtml(error.message || "Unable to load drafts.")}</p>`;
+    list.innerHTML = `<p class="empty-state">${escapeHtml(userMessage(error, "Unable to load drafts."))}</p>`;
   }
 }
 
@@ -877,7 +887,7 @@ async function publishDraft(draftId) {
       result = await api(`/api/drafts/${encodeURIComponent(draftId)}/publish`, { method: "POST" });
     }
   } catch (error) {
-    if (isMissingDraftApi(error)) throw new Error("Publishing backend is not deployed yet. Deploy the Worker API, then reconnect LinkedIn once for publishing permission.");
+    if (isMissingDraftApi(error)) throw new Error("This feature is still being updated. Please try again shortly.");
     throw error;
   }
   document.querySelector("#draftList").innerHTML = DraftList(result.drafts || loadLocalDrafts());
@@ -912,7 +922,7 @@ async function loadPageInspiration() {
     const posts = state.postRankings || state.posts || [];
     list.innerHTML = PageInspirationResults(posts);
   } catch (error) {
-    list.innerHTML = `<p class="empty-state">${escapeHtml(error.message || "Unable to load page signals.")}</p>`;
+    list.innerHTML = `<p class="empty-state">${escapeHtml(userMessage(error, "Unable to load page signals."))}</p>`;
   }
 }
 
@@ -931,7 +941,7 @@ async function loadAdInspiration(form) {
     list.innerHTML = AdInspirationResults(ads, restrictedCount, keyword, countries);
     list.dataset.loaded = "true";
   } catch (error) {
-    list.innerHTML = `<p class="empty-state">${escapeHtml(error.message || "LinkedIn Ad Library unavailable.")}</p>`;
+    list.innerHTML = `<p class="empty-state">${escapeHtml(userMessage(error, "LinkedIn Ad Library unavailable."))}</p>`;
   }
 }
 
@@ -1169,7 +1179,7 @@ function SyncStatusPanel(sync, summary = {}) {
         <span>Connection health</span>
         <strong>Sync failed</strong>
       </div>
-      <p>${sync.lastError || "LinkedIn sync failed."} ${sync.lastAttemptedAt ? `Last attempted ${formatDateTime(sync.lastAttemptedAt)}.` : ""} Reconnect LinkedIn or confirm the selected company page has analytics permissions.</p>
+      <p>${userMessage(sync.lastError || "LinkedIn sync failed.", "LinkedIn sync failed.")} ${sync.lastAttemptedAt ? `Last attempted ${formatDateTime(sync.lastAttemptedAt)}.` : ""}</p>
     `;
   }
 
@@ -1217,7 +1227,7 @@ function wirePageEvents() {
       try {
         await authenticate(form.dataset.auth, form);
       } catch (error) {
-        showToast(error.message);
+        showError(error);
       }
     });
   });
@@ -1228,7 +1238,7 @@ function wirePageEvents() {
       try {
         await requestPasswordReset(form);
       } catch (error) {
-        showToast(error.message);
+        showError(error);
       }
     });
   });
@@ -1239,7 +1249,7 @@ function wirePageEvents() {
       try {
         await submitPasswordReset(form);
       } catch (error) {
-        showToast(error.message);
+        showError(error);
       }
     });
   });
@@ -1264,7 +1274,7 @@ function wirePageEvents() {
       try {
         await saveDraft(form);
       } catch (error) {
-        showToast(error.message);
+        showError(error, "Unable to save draft.");
       }
     });
   });
@@ -1276,7 +1286,7 @@ function wirePageEvents() {
         renderDraftFigurePreview();
       } catch (error) {
         input.value = "";
-        showToast(error.message);
+        showError(error, "Unable to attach that image.");
       }
     });
   });
@@ -1316,6 +1326,37 @@ function escapeAttribute(value) {
     "\"": "&quot;",
     "'": "&#39;"
   }[char]));
+}
+
+function userMessage(error, fallback = "Something went wrong. Please try again.") {
+  const raw = typeof error === "string" ? error : error?.message;
+  const message = String(raw || "").trim();
+  const lower = message.toLowerCase();
+  const status = Number(error?.status || 0);
+
+  if (!message) return fallback;
+  if (status === 401 || /oauth token missing|reconnect linkedin|unauthorized|token.*expired|invalid token/.test(lower)) {
+    return "Please reconnect LinkedIn, then try again.";
+  }
+  if (status === 403 || /forbidden|permission|access denied|not enough permissions|scope/.test(lower)) {
+    return "This LinkedIn page does not allow that action yet. Reconnect LinkedIn and confirm the selected page has the right permissions.";
+  }
+  if (/api route not found|route not found|worker api|publishing backend|backend is not deployed|not deployed/.test(lower)) {
+    return "This feature is still being updated. Please try again shortly.";
+  }
+  if (/field value validation failed|param validation|data processing exception|restli|ugc posts api|social actions api|analytics api|organization lookup|linkedin .*api/.test(lower)) {
+    return "LinkedIn could not complete this request. Reconnect LinkedIn or choose another company page, then try again.";
+  }
+  if (/organization selection required|select a linkedin page|missing linkedin organization|organization is not available/.test(lower)) {
+    return "Select a LinkedIn company page before continuing.";
+  }
+  if (/ad library access unavailable/.test(lower)) {
+    return "LinkedIn Ad Library access is unavailable for this account.";
+  }
+  if (/request failed|server error|internal error|fetch failed|networkerror|failed to fetch/.test(lower)) {
+    return fallback;
+  }
+  return message;
 }
 
 async function handleAppClick(event) {
@@ -1367,7 +1408,7 @@ async function handleAppClick(event) {
       showToast(`LinkedIn synced: ${result.saved || 0} posts saved`);
     } catch (error) {
       await hydrateDashboard().catch(() => {});
-      showToast(error.message);
+      showError(error, "Unable to sync LinkedIn right now.");
     }
   }
 
@@ -1379,7 +1420,7 @@ async function handleAppClick(event) {
       showToast("LinkedIn disconnected");
       navigate("/dashboard/onboarding");
     } catch (error) {
-      showToast(error.message);
+      showError(error, "Unable to disconnect LinkedIn right now.");
     }
     return;
   }
@@ -1403,7 +1444,7 @@ async function handleAppClick(event) {
     try {
       await editDraft(editDraftTarget.dataset.editDraft);
     } catch (error) {
-      showToast(error.message);
+      showError(error, "Unable to open this draft.");
     }
     return;
   }
@@ -1413,7 +1454,7 @@ async function handleAppClick(event) {
     try {
       await deleteDraft(deleteDraftTarget.dataset.deleteDraft);
     } catch (error) {
-      showToast(error.message);
+      showError(error, "Unable to delete this draft.");
     }
     return;
   }
@@ -1425,7 +1466,7 @@ async function handleAppClick(event) {
       publishDraftTarget.textContent = "Publishing";
       await publishDraft(publishDraftTarget.dataset.publishDraft);
     } catch (error) {
-      showToast(error.message);
+      showError(error, "Unable to publish this draft.");
       publishDraftTarget.disabled = false;
       publishDraftTarget.textContent = "Publish";
     }
@@ -1446,7 +1487,7 @@ async function handleAppClick(event) {
       linkedInState = result;
       navigate("/dashboard");
     } catch (error) {
-      showToast(error.message);
+      showError(error, "Unable to select this LinkedIn page.");
     }
   }
 
@@ -1470,7 +1511,7 @@ async function handleAppClick(event) {
       showToast("Page name updated");
       await hydrateOnboarding();
     } catch (error) {
-      showToast(error.message);
+      showError(error, "Unable to update this page name.");
     }
   }
 }
@@ -1511,7 +1552,7 @@ async function render() {
     if (route === "/dashboard") await hydrateDashboard();
     if (route === "/create-post") await hydrateCreatePost();
   } catch (error) {
-    showToast(error.message);
+    showError(error);
   }
   renderCookieBanner();
 }
