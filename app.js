@@ -501,25 +501,16 @@ function AnalyticsDashboardPage() {
   return `
     ${TopNav({ right: "dashboard" })}
     <main class="analytics-app-shell">
-      <aside class="analytics-sidebar">
-        <a class="brand-link analytics-sidebar-logo" href="/" data-route="/" aria-label="Metrillix home">
-          <img class="brand-logo" src="/assets/metric-flow-logo.png?v=20260525-metrillix-logo" alt="Metrillix">
-        </a>
-        <nav>
-          <button class="active" type="button" data-route="/dashboard/analytics">Dashboard</button>
-          <button type="button" data-analytics-scroll="posts">Posts</button>
-        </nav>
-        <div class="analytics-plan-card" id="analyticsPlanCard">
-          <span>Plan</span>
-          <strong>Loading</strong>
-        </div>
-      </aside>
       <section class="analytics-main">
         <header class="analytics-header">
           <div>
             <p class="eyebrow">Account Analytics</p>
             <h1>Workspace Analytics</h1>
             <p class="muted" id="analyticsOrg">Loading selected company page.</p>
+          </div>
+          <div class="analytics-plan-card" id="analyticsPlanCard">
+            <span>Plan</span>
+            <strong>Loading</strong>
           </div>
           <div class="button-row">
             <button class="secondary-button" type="button" data-route="/dashboard">Individual view</button>
@@ -884,15 +875,20 @@ function renderLineChart(selector, rows, key, label, options = {}) {
   const max = Math.max(...values, 1);
   const width = 640;
   const height = 260;
-  const points = rows.map((row, index) => {
+  const plotted = rows.map((row, index) => {
     const x = rows.length === 1 ? width / 2 : (index / (rows.length - 1)) * width;
     const y = height - ((Number(row[key] || 0) / max) * (height - 18)) - 9;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
+    return { x, y, value: Number(row[key] || 0) };
+  });
+  const linePoints = rows.length === 1
+    ? `18,${plotted[0].y.toFixed(1)} ${width - 18},${plotted[0].y.toFixed(1)}`
+    : plotted.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+  const circles = plotted.map((point) => `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="7"></circle>`).join("");
   target.innerHTML = `
     <div class="line-chart">
       <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeAttribute(label)} chart">
-        <polyline points="${points}" fill="none" stroke="var(--blue-dark)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>
+        <polyline points="${linePoints}" fill="none" stroke="var(--blue-dark)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>
+        <g fill="var(--white)" stroke="var(--blue-dark)" stroke-width="4">${circles}</g>
       </svg>
       <div class="chart-axis">
         <span>${escapeHtml(rows[0].date || "")}</span>
@@ -1727,13 +1723,6 @@ async function handleAppClick(event) {
   if (routeTarget) {
     event.preventDefault();
     navigate(routeTarget.dataset.route);
-    return;
-  }
-
-  const analyticsScrollTarget = event.target.closest("[data-analytics-scroll]");
-  if (analyticsScrollTarget) {
-    event.preventDefault();
-    document.querySelector(`#${analyticsScrollTarget.dataset.analyticsScroll}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
   }
 
