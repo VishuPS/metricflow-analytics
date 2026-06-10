@@ -114,6 +114,7 @@ button {
 .page-back-row {
   display: flex;
   align-items: center;
+  margin-top: 4px;
 }
 
 .back-button {
@@ -1360,7 +1361,7 @@ textarea:focus {
 
 .analytics-overview-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -1404,12 +1405,8 @@ textarea:focus {
   color: var(--rose);
 }
 
-.analytics-insights {
-  display: grid;
-  gap: 14px;
-}
-
-.insight-grid {
+.analytics-insights,
+.analytics-insight-cards {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
@@ -1421,6 +1418,23 @@ textarea:focus {
   padding: 16px;
 }
 
+.insight-card.compact {
+  min-height: 132px;
+}
+
+.insight-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.insight-card strong {
+  overflow-wrap: anywhere;
+  font-size: clamp(20px, 2.4vw, 28px);
+  line-height: 1.15;
+}
+
 .insight-card p {
   margin: 0;
   color: var(--muted);
@@ -1428,15 +1442,18 @@ textarea:focus {
 }
 
 .analytics-chart-grid,
-.analytics-table-grid,
-.analytics-lower-grid {
+.analytics-table-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
 
-.analytics-lower-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.analytics-trend-grid .analytics-panel {
+  min-height: 390px;
+}
+
+.analytics-trend-grid .line-chart svg {
+  min-height: 260px;
 }
 
 .analytics-wide-panel {
@@ -1464,6 +1481,15 @@ textarea:focus {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: linear-gradient(180deg, #ffffff 0%, #f7f9fb 100%);
+}
+
+.empty-chart {
+  min-height: 260px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(59, 175, 218, 0.08), rgba(255, 255, 255, 0)),
+    var(--surface);
 }
 
 .chart-axis {
@@ -1722,15 +1748,15 @@ textarea:focus {
 
   .analytics-filters,
   .analytics-overview-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .analytics-filters .primary-button {
     grid-column: 1 / -1;
   }
 
-  .insight-grid,
-  .analytics-lower-grid {
+  .analytics-insights,
+  .analytics-insight-cards {
     grid-template-columns: 1fr;
   }
 }
@@ -1911,7 +1937,9 @@ textarea:focus {
   .analytics-filters,
   .analytics-overview-grid,
   .analytics-chart-grid,
-  .analytics-table-grid {
+  .analytics-table-grid,
+  .analytics-insights,
+  .analytics-insight-cards {
     grid-template-columns: 1fr;
   }
 

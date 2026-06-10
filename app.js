@@ -281,7 +281,6 @@ function CookiePolicyPage() {
   return `
     ${TopNav()}
     <main class="page-shell policy-page">
-      ${BackButton({ fallback: "/" })}
       <section>
         <p class="eyebrow">Cookie Policy</p>
         <h1>How Metrillix uses cookies</h1>
@@ -303,6 +302,7 @@ function CookiePolicyPage() {
         <h2>LinkedIn page access</h2>
         <p>Metrillix is built for LinkedIn company pages, not personal profile analytics. You can disconnect LinkedIn from Metrillix at any time, and you can also revoke access from your LinkedIn security settings.</p>
       </section>
+      ${BackButton({ fallback: "/" })}
     </main>
     ${CookieBanner()}
   `;
@@ -312,7 +312,6 @@ function SignupPage() {
   return `
     ${TopNav()}
     <main class="page-shell auth-shell">
-      ${BackButton({ fallback: "/" })}
       <section class="auth-card">
         <p class="eyebrow">Create account</p>
         <h1>Start with Metrillix</h1>
@@ -324,6 +323,7 @@ function SignupPage() {
         </form>
         <p class="muted">Already have an account? <button class="inline-link" data-route="/login">Log in</button></p>
       </section>
+      ${BackButton({ fallback: "/" })}
     </main>
   `;
 }
@@ -332,7 +332,6 @@ function LoginPage() {
   return `
     ${TopNav()}
     <main class="page-shell auth-shell">
-      ${BackButton({ fallback: "/" })}
       <section class="auth-card">
         <p class="eyebrow">Welcome back</p>
         <h1>Log in</h1>
@@ -344,6 +343,7 @@ function LoginPage() {
         <p class="muted"><button class="inline-link" data-route="/forgot-password">Forgot your password?</button></p>
         <p class="muted">New to Metrillix? <button class="inline-link" data-route="/signup">Create an account</button></p>
       </section>
+      ${BackButton({ fallback: "/" })}
     </main>
   `;
 }
@@ -352,7 +352,6 @@ function ForgotPasswordPage() {
   return `
     ${TopNav()}
     <main class="page-shell auth-shell">
-      ${BackButton({ fallback: "/login" })}
       <section class="auth-card">
         <p class="eyebrow">Password reset</p>
         <h1>Reset your password</h1>
@@ -363,6 +362,7 @@ function ForgotPasswordPage() {
         </form>
         <p class="muted"><button class="inline-link" data-route="/login">Back to log in</button></p>
       </section>
+      ${BackButton({ fallback: "/login" })}
     </main>
   `;
 }
@@ -372,7 +372,6 @@ function ResetPasswordPage() {
   return `
     ${TopNav()}
     <main class="page-shell auth-shell">
-      ${BackButton({ fallback: "/login" })}
       <section class="auth-card">
         <p class="eyebrow">New password</p>
         <h1>Choose a new password</h1>
@@ -385,6 +384,7 @@ function ResetPasswordPage() {
         </form>
         <p class="muted"><button class="inline-link" data-route="/login">Back to log in</button></p>
       </section>
+      ${BackButton({ fallback: "/login" })}
     </main>
   `;
 }
@@ -393,12 +393,12 @@ function OnboardingPage() {
   return `
     ${TopNav({ right: "dashboard" })}
     <main class="page-shell narrow-shell">
-      ${BackButton({ fallback: "/dashboard" })}
       <section class="step-card" id="onboardingContent">
         <p class="eyebrow">Onboarding</p>
         <h1>Preparing your LinkedIn workspace</h1>
         <p class="muted">Checking your connection and organization access.</p>
       </section>
+      ${BackButton({ fallback: "/dashboard" })}
     </main>
   `;
 }
@@ -469,7 +469,6 @@ function Dashboard() {
   return `
     ${TopNav({ right: "dashboard" })}
     <main class="page-shell dashboard-shell">
-      ${BackButton({ fallback: "/" })}
       <section class="dashboard-hero">
         <div>
           <p class="eyebrow">Dashboard</p>
@@ -493,6 +492,7 @@ function Dashboard() {
         </div>
         <div class="post-list" id="postList"></div>
       </section>
+      ${BackButton({ fallback: "/" })}
     </main>
   `;
 }
@@ -508,9 +508,6 @@ function AnalyticsDashboardPage() {
         <nav>
           <button class="active" type="button" data-route="/dashboard/analytics">Dashboard</button>
           <button type="button" data-analytics-scroll="posts">Posts</button>
-          <button type="button" data-analytics-scroll="reports">Reports</button>
-          <button type="button" data-analytics-scroll="billing">Billing</button>
-          <button type="button" data-analytics-scroll="settings">Settings</button>
         </nav>
         <div class="analytics-plan-card" id="analyticsPlanCard">
           <span>Plan</span>
@@ -518,11 +515,10 @@ function AnalyticsDashboardPage() {
         </div>
       </aside>
       <section class="analytics-main">
-        ${BackButton({ fallback: "/dashboard" })}
         <header class="analytics-header">
           <div>
             <p class="eyebrow">Account Analytics</p>
-            <h1>Performance dashboard</h1>
+            <h1>Workspace Analytics</h1>
             <p class="muted" id="analyticsOrg">Loading selected company page.</p>
           </div>
           <div class="button-row">
@@ -569,82 +565,27 @@ function AnalyticsDashboardPage() {
           <button class="primary-button" type="submit">Apply</button>
         </form>
         <section class="analytics-empty" id="analyticsEmpty" hidden>
-          <div>
-            <p class="eyebrow">Get started</p>
-            <h2>Connect LinkedIn to view analytics</h2>
-            <p class="muted">Connect a LinkedIn company page, import post analytics, then return here to see account-level performance insights.</p>
-          </div>
-          <div class="analytics-steps">
-            <span>1. Connect LinkedIn</span>
-            <span>2. Import post analytics</span>
-            <span>3. View dashboard</span>
-          </div>
-          <button class="primary-button" type="button" data-route="/dashboard/onboarding">Connect LinkedIn</button>
+          <p class="empty-state">No LinkedIn analytics yet. Connect LinkedIn and run sync from the individual view.</p>
         </section>
         <section class="analytics-overview-grid" id="analyticsOverview"></section>
-        <section class="analytics-insights" id="analyticsInsights"></section>
-        <section class="analytics-chart-grid">
+        <section class="analytics-chart-grid analytics-trend-grid">
           <article class="analytics-panel">
-            <div class="section-heading"><h2>Impressions over time</h2></div>
-            <div id="impressionsChart"></div>
+            <div class="section-heading"><h2>Reach Trend</h2></div>
+            <div id="reachChart"></div>
           </article>
           <article class="analytics-panel">
-            <div class="section-heading"><h2>Engagement over time</h2></div>
+            <div class="section-heading"><h2>Engagement Trend</h2></div>
             <div id="engagementChart"></div>
           </article>
-          <article class="analytics-panel">
-            <div class="section-heading"><h2>Engagement rate over time</h2></div>
-            <div id="engagementRateChart"></div>
-          </article>
-          <article class="analytics-panel">
-            <div class="section-heading"><h2>Post performance by media type</h2></div>
-            <div id="mediaPerformanceChart"></div>
-          </article>
-          <article class="analytics-panel">
-            <div class="section-heading"><h2>Best posting days</h2></div>
-            <div id="postingDaysChart"></div>
-          </article>
-          <article class="analytics-panel">
-            <div class="section-heading"><h2>Best posting hours</h2></div>
-            <div id="postingHoursChart"></div>
-          </article>
         </section>
+        <section class="analytics-insight-cards" id="analyticsInsights"></section>
         <section class="analytics-table-grid" id="posts">
-          <article class="analytics-panel">
-            <div class="section-heading"><h2>Top 10 posts by impressions</h2></div>
-            <div id="topImpressionsTable"></div>
-          </article>
-          <article class="analytics-panel">
-            <div class="section-heading"><h2>Top 10 posts by engagement rate</h2></div>
-            <div id="topEngagementRateTable"></div>
-          </article>
-          <article class="analytics-panel">
-            <div class="section-heading"><h2>Recent posts</h2></div>
-            <div id="recentPostsTable"></div>
-          </article>
-          <article class="analytics-panel">
-            <div class="section-heading"><h2>Underperforming posts</h2></div>
-            <div id="underperformingPostsTable"></div>
-          </article>
           <article class="analytics-panel analytics-wide-panel">
-            <div class="section-heading"><h2>Hashtag performance</h2></div>
-            <div id="hashtagPerformanceTable"></div>
+            <div class="section-heading"><h2>Top Posts</h2></div>
+            <div id="topPostsTable"></div>
           </article>
         </section>
-        <section class="analytics-lower-grid">
-          <article class="analytics-panel" id="reports">
-            <h2>Reports</h2>
-            <p class="muted">Pro and Agency plans include 12-month analytics and report-ready summaries.</p>
-          </article>
-          <article class="analytics-panel" id="billing">
-            <h2>Billing</h2>
-            <p class="muted">Free trial includes all features for 30 days. Basic keeps 30-day analytics. Pro unlocks reports and insights. Agency adds multi-profile client reporting.</p>
-          </article>
-          <article class="analytics-panel" id="settings">
-            <h2>Settings</h2>
-            <p class="muted">Manage LinkedIn page access, plan settings, and dashboard preferences from this workspace.</p>
-          </article>
-        </section>
+        ${BackButton({ fallback: "/dashboard" })}
       </section>
     </main>
   `;
@@ -654,7 +595,6 @@ function CreatePostPage() {
   return `
     ${TopNav({ right: "dashboard" })}
     <main class="page-shell create-post-shell">
-      ${BackButton({ fallback: "/dashboard" })}
       <section class="composer-panel">
         <p class="eyebrow">Create Post</p>
         <h1>Draft a LinkedIn post</h1>
@@ -693,6 +633,7 @@ function CreatePostPage() {
         </section>
       </section>
       ${AdInspirationPanel()}
+      ${BackButton({ fallback: "/dashboard" })}
     </main>
   `;
 }
@@ -864,23 +805,15 @@ async function loadAnalyticsDashboard() {
   }
   renderPlanCard(summary.plan);
   renderAnalyticsOverview(summary);
-  renderAnalyticsInsights(insights.insights || []);
-  renderLineChart("#impressionsChart", timeseries.timeseries || [], "impressions", "Impressions");
+  renderAnalyticsInsights(insights.insights || [], media, summary);
+  renderLineChart("#reachChart", timeseries.timeseries || [], "reach", "Reach");
   renderLineChart("#engagementChart", timeseries.timeseries || [], "engagement", "Engagement");
-  renderLineChart("#engagementRateChart", timeseries.timeseries || [], "engagementRate", "Engagement rate", { percent: true });
-  renderBarChart("#mediaPerformanceChart", media.mediaPerformance || [], "mediaType", "engagementRate", { percent: true });
-  renderBarChart("#postingDaysChart", media.postingDays || [], "key", "engagementRate", { percent: true });
-  renderBarChart("#postingHoursChart", (media.postingHours || []).slice(0, 10), "key", "engagementRate", { percent: true });
-  renderPostsTable("#topImpressionsTable", topPosts.byImpressions || []);
-  renderPostsTable("#topEngagementRateTable", topPosts.byEngagementRate || []);
-  renderPostsTable("#recentPostsTable", topPosts.recent || []);
-  renderPostsTable("#underperformingPostsTable", topPosts.underperforming || []);
-  renderHashtagTable("#hashtagPerformanceTable", hashtags.hashtagPerformance || []);
+  renderPostsTable("#topPostsTable", topPosts.byImpressions || []);
 }
 
 function setAnalyticsLoading() {
   const loading = `<p class="empty-state">Loading analytics.</p>`;
-  ["#analyticsOverview", "#analyticsInsights", "#impressionsChart", "#engagementChart", "#engagementRateChart", "#mediaPerformanceChart", "#postingDaysChart", "#postingHoursChart", "#topImpressionsTable", "#topEngagementRateTable", "#recentPostsTable", "#underperformingPostsTable", "#hashtagPerformanceTable"].forEach((selector) => {
+  ["#analyticsOverview", "#analyticsInsights", "#reachChart", "#engagementChart", "#topPostsTable"].forEach((selector) => {
     const element = document.querySelector(selector);
     if (element) element.innerHTML = loading;
   });
@@ -903,16 +836,13 @@ function renderAnalyticsOverview(summary) {
   const target = document.querySelector("#analyticsOverview");
   if (!target) return;
   const totals = summary.totals || {};
-  const best = summary.bestPost;
   const cards = [
-    ["Total impressions", formatNumber(totals.impressions), summary.deltas?.impressions],
-    ["Total engagement", formatNumber(totals.engagement), summary.deltas?.engagement],
-    ["Average engagement rate", formatPercent(totals.engagementRate), summary.deltas?.engagementRate],
-    ["Total posts", formatNumber(totals.posts), summary.deltas?.posts],
-    ["Best-performing post", best ? truncateText(best.text, 54) : "No post yet", null],
-    ["Follower growth", formatNumber(totals.followerGrowth), null],
-    ["Profile views", formatNumber(totals.profileViews), null],
-    ["Click-through rate", totals.clickThroughRate === null ? "No clicks yet" : formatPercent(totals.clickThroughRate), null]
+    ["Reach", formatNumber(totals.impressions), summary.deltas?.impressions],
+    ["Engagement", formatNumber(totals.engagement), summary.deltas?.engagement],
+    ["Avg Engagement", formatPercent(totals.engagementRate), summary.deltas?.engagementRate],
+    ["Rate", totals.clickThroughRate === null ? "No clicks" : formatPercent(totals.clickThroughRate), null],
+    ["Posts", formatNumber(totals.posts), summary.deltas?.posts],
+    ["Followers", formatNumber(totals.followerGrowth), null]
   ];
   target.innerHTML = cards.map(([label, value, delta]) => `
     <article class="analytics-card">
@@ -923,36 +853,37 @@ function renderAnalyticsOverview(summary) {
   `).join("");
 }
 
-function renderAnalyticsInsights(insights) {
+function renderAnalyticsInsights(insights, media = {}, summary = {}) {
   const target = document.querySelector("#analyticsInsights");
   if (!target) return;
-  target.innerHTML = `
-    <div class="section-heading">
-      <h2>Insights</h2>
-      <p class="muted">Simple signals generated from the selected period.</p>
-    </div>
-    <div class="insight-grid">
-      ${insights.length ? insights.map((insight) => `
-        <article class="insight-card">
-          <strong>${escapeHtml(insight.title)}</strong>
-          <p>${escapeHtml(insight.detail)}</p>
-        </article>
-      `).join("") : `<p class="empty-state">Sync more posts to generate insights.</p>`}
-    </div>
-  `;
+  const bestDay = (media.postingDays || [])[0];
+  const bestHour = (media.postingHours || [])[0];
+  const bestPost = summary.bestPost;
+  const cards = [
+    ["Best Day", bestDay ? bestDay.key : "Not enough data", bestDay ? `${formatPercent(bestDay.engagementRate)} engagement rate` : "Sync more posts"],
+    ["Best Hour", bestHour ? bestHour.key : "Not enough data", bestHour ? `${formatPercent(bestHour.engagementRate)} engagement rate` : "Sync more posts"],
+    ["Best Post", bestPost ? truncateText(bestPost.text, 58) : "No post yet", bestPost ? `${formatNumber(bestPost.impressions)} reach / ${formatPercent(bestPost.engagementRate)} rate` : "Sync LinkedIn"]
+  ];
+  target.innerHTML = cards.map(([title, value, detail]) => `
+    <article class="insight-card compact">
+      <span>${escapeHtml(title)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <p>${escapeHtml(detail)}</p>
+    </article>
+  `).join("");
 }
 
 function renderLineChart(selector, rows, key, label, options = {}) {
   const target = document.querySelector(selector);
   if (!target) return;
   if (!rows.length) {
-    target.innerHTML = `<p class="empty-state">No ${escapeHtml(label.toLowerCase())} data for this period.</p>`;
+    target.innerHTML = `<div class="empty-chart" aria-hidden="true"></div>`;
     return;
   }
   const values = rows.map((row) => Number(row[key] || 0));
   const max = Math.max(...values, 1);
   const width = 640;
-  const height = 190;
+  const height = 260;
   const points = rows.map((row, index) => {
     const x = rows.length === 1 ? width / 2 : (index / (rows.length - 1)) * width;
     const y = height - ((Number(row[key] || 0) / max) * (height - 18)) - 9;
@@ -976,7 +907,7 @@ function renderBarChart(selector, rows, labelKey, valueKey, options = {}) {
   const target = document.querySelector(selector);
   if (!target) return;
   if (!rows.length) {
-    target.innerHTML = `<p class="empty-state">No data for this period.</p>`;
+    target.innerHTML = `<div class="empty-chart" aria-hidden="true"></div>`;
     return;
   }
   const max = Math.max(...rows.map((row) => Number(row[valueKey] || 0)), 1);
@@ -1002,7 +933,7 @@ function renderPostsTable(selector, posts) {
   target.innerHTML = `
     <div class="analytics-table-wrap">
       <table class="analytics-table">
-        <thead><tr><th>Post</th><th>Media</th><th>Impressions</th><th>Engagement</th><th>Rate</th><th>Clicks</th></tr></thead>
+        <thead><tr><th>Post</th><th>Media</th><th>Reach</th><th>Engagement</th><th>Rate</th><th>Clicks</th></tr></thead>
         <tbody>
           ${posts.map((post) => `
             <tr>

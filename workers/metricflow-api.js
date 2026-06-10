@@ -1648,8 +1648,9 @@ function dashboardTimeseries(posts) {
   const groups = new Map();
   for (const post of posts) {
     const date = isoDate(postDate(post));
-    const row = groups.get(date) || { date, posts: 0, impressions: 0, engagement: 0, engagementRate: 0, clicks: 0 };
+    const row = groups.get(date) || { date, posts: 0, reach: 0, impressions: 0, engagement: 0, engagementRate: 0, clicks: 0 };
     row.posts += 1;
+    row.reach += postImpressions(post);
     row.impressions += postImpressions(post);
     row.engagement += postEngagement(post);
     row.clicks += postClicks(post);
