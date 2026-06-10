@@ -20,6 +20,7 @@ const routes = {
   "/reset-password": ResetPasswordPage,
   "/cookie-policy": CookiePolicyPage,
   "/dashboard/onboarding": OnboardingPage,
+  "/dashboard/analytics": AnalyticsDashboardPage,
   "/create-post": CreatePostPage,
   "/dashboard": Dashboard
 };
@@ -477,6 +478,7 @@ function Dashboard() {
         </div>
         <div class="button-row">
           <button class="primary-button" data-sync-linkedin>Sync LinkedIn</button>
+          <button class="secondary-button" data-route="/dashboard/analytics">Analytics dashboard</button>
           <button class="secondary-button" data-route="/create-post">Create post</button>
           <button class="secondary-button" data-route="/dashboard/onboarding">Manage pages</button>
           <button class="secondary-button" data-disconnect-linkedin>Disconnect LinkedIn</button>
@@ -490,6 +492,159 @@ function Dashboard() {
           <p class="muted">Normalized from the selected LinkedIn organization.</p>
         </div>
         <div class="post-list" id="postList"></div>
+      </section>
+    </main>
+  `;
+}
+
+function AnalyticsDashboardPage() {
+  return `
+    ${TopNav({ right: "dashboard" })}
+    <main class="analytics-app-shell">
+      <aside class="analytics-sidebar">
+        <a class="brand-link analytics-sidebar-logo" href="/" data-route="/" aria-label="Metrillix home">
+          <img class="brand-logo" src="/assets/metric-flow-logo.png?v=20260525-metrillix-logo" alt="Metrillix">
+        </a>
+        <nav>
+          <button class="active" type="button" data-route="/dashboard/analytics">Dashboard</button>
+          <button type="button" data-analytics-scroll="posts">Posts</button>
+          <button type="button" data-analytics-scroll="reports">Reports</button>
+          <button type="button" data-analytics-scroll="billing">Billing</button>
+          <button type="button" data-analytics-scroll="settings">Settings</button>
+        </nav>
+        <div class="analytics-plan-card" id="analyticsPlanCard">
+          <span>Plan</span>
+          <strong>Loading</strong>
+        </div>
+      </aside>
+      <section class="analytics-main">
+        ${BackButton({ fallback: "/dashboard" })}
+        <header class="analytics-header">
+          <div>
+            <p class="eyebrow">Account Analytics</p>
+            <h1>Performance dashboard</h1>
+            <p class="muted" id="analyticsOrg">Loading selected company page.</p>
+          </div>
+          <div class="button-row">
+            <button class="secondary-button" type="button" data-route="/dashboard">Individual view</button>
+            <button class="primary-button" type="button" data-sync-linkedin>Sync LinkedIn</button>
+            <button class="secondary-button" type="button" data-route="/create-post">Create post</button>
+          </div>
+        </header>
+        <form class="analytics-filters" data-analytics-filters>
+          <label>Date range
+            <select name="range">
+              <option value="7">Last 7 days</option>
+              <option value="30" selected>Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+          <label>From
+            <input name="from" type="date">
+          </label>
+          <label>To
+            <input name="to" type="date">
+          </label>
+          <label>Media type
+            <select name="mediaType">
+              <option value="all">All media</option>
+              <option value="text">Text</option>
+              <option value="image">Image</option>
+              <option value="carousel">Carousel</option>
+              <option value="video">Video</option>
+              <option value="document">Document</option>
+              <option value="poll">Poll</option>
+            </select>
+          </label>
+          <label>Sort posts by
+            <select name="sortBy">
+              <option value="date">Date</option>
+              <option value="impressions">Impressions</option>
+              <option value="engagement">Engagement</option>
+              <option value="engagement_rate">Engagement rate</option>
+              <option value="clicks">Clicks</option>
+            </select>
+          </label>
+          <button class="primary-button" type="submit">Apply</button>
+        </form>
+        <section class="analytics-empty" id="analyticsEmpty" hidden>
+          <div>
+            <p class="eyebrow">Get started</p>
+            <h2>Connect LinkedIn to view analytics</h2>
+            <p class="muted">Connect a LinkedIn company page, import post analytics, then return here to see account-level performance insights.</p>
+          </div>
+          <div class="analytics-steps">
+            <span>1. Connect LinkedIn</span>
+            <span>2. Import post analytics</span>
+            <span>3. View dashboard</span>
+          </div>
+          <button class="primary-button" type="button" data-route="/dashboard/onboarding">Connect LinkedIn</button>
+        </section>
+        <section class="analytics-overview-grid" id="analyticsOverview"></section>
+        <section class="analytics-insights" id="analyticsInsights"></section>
+        <section class="analytics-chart-grid">
+          <article class="analytics-panel">
+            <div class="section-heading"><h2>Impressions over time</h2></div>
+            <div id="impressionsChart"></div>
+          </article>
+          <article class="analytics-panel">
+            <div class="section-heading"><h2>Engagement over time</h2></div>
+            <div id="engagementChart"></div>
+          </article>
+          <article class="analytics-panel">
+            <div class="section-heading"><h2>Engagement rate over time</h2></div>
+            <div id="engagementRateChart"></div>
+          </article>
+          <article class="analytics-panel">
+            <div class="section-heading"><h2>Post performance by media type</h2></div>
+            <div id="mediaPerformanceChart"></div>
+          </article>
+          <article class="analytics-panel">
+            <div class="section-heading"><h2>Best posting days</h2></div>
+            <div id="postingDaysChart"></div>
+          </article>
+          <article class="analytics-panel">
+            <div class="section-heading"><h2>Best posting hours</h2></div>
+            <div id="postingHoursChart"></div>
+          </article>
+        </section>
+        <section class="analytics-table-grid" id="posts">
+          <article class="analytics-panel">
+            <div class="section-heading"><h2>Top 10 posts by impressions</h2></div>
+            <div id="topImpressionsTable"></div>
+          </article>
+          <article class="analytics-panel">
+            <div class="section-heading"><h2>Top 10 posts by engagement rate</h2></div>
+            <div id="topEngagementRateTable"></div>
+          </article>
+          <article class="analytics-panel">
+            <div class="section-heading"><h2>Recent posts</h2></div>
+            <div id="recentPostsTable"></div>
+          </article>
+          <article class="analytics-panel">
+            <div class="section-heading"><h2>Underperforming posts</h2></div>
+            <div id="underperformingPostsTable"></div>
+          </article>
+          <article class="analytics-panel analytics-wide-panel">
+            <div class="section-heading"><h2>Hashtag performance</h2></div>
+            <div id="hashtagPerformanceTable"></div>
+          </article>
+        </section>
+        <section class="analytics-lower-grid">
+          <article class="analytics-panel" id="reports">
+            <h2>Reports</h2>
+            <p class="muted">Pro and Agency plans include 12-month analytics and report-ready summaries.</p>
+          </article>
+          <article class="analytics-panel" id="billing">
+            <h2>Billing</h2>
+            <p class="muted">Free trial includes all features for 30 days. Basic keeps 30-day analytics. Pro unlocks reports and insights. Agency adds multi-profile client reporting.</p>
+          </article>
+          <article class="analytics-panel" id="settings">
+            <h2>Settings</h2>
+            <p class="muted">Manage LinkedIn page access, plan settings, and dashboard preferences from this workspace.</p>
+          </article>
+        </section>
       </section>
     </main>
   `;
@@ -665,6 +820,251 @@ async function hydrateDashboard(stateOverride = null) {
     </article>
   `;
   }).join("") : `<p class="empty-state">No posts yet. Sync LinkedIn to fetch analytics for the selected organization.</p>`;
+}
+
+async function hydrateAnalyticsDashboard() {
+  const details = await loadLinkedInState();
+  if (!details.selectedOrganization) {
+    renderAnalyticsEmpty();
+    return;
+  }
+  const org = document.querySelector("#analyticsOrg");
+  if (org) org.textContent = details.selectedOrganizationName || organizationName(details.selectedOrganization);
+  await loadAnalyticsDashboard();
+}
+
+function analyticsQuery() {
+  const form = document.querySelector("[data-analytics-filters]");
+  const params = new URLSearchParams();
+  if (!form) return params;
+  const data = new FormData(form);
+  for (const key of ["range", "from", "to", "mediaType", "sortBy"]) {
+    const value = String(data.get(key) || "").trim();
+    if (value) params.set(key, value);
+  }
+  return params;
+}
+
+async function loadAnalyticsDashboard() {
+  const query = analyticsQuery().toString();
+  const suffix = query ? `?${query}` : "";
+  setAnalyticsLoading();
+  const [summary, timeseries, topPosts, media, hashtags, insights] = await Promise.all([
+    api(`/dashboard/summary${suffix}`),
+    api(`/dashboard/timeseries${suffix}`),
+    api(`/dashboard/top-posts${suffix}`),
+    api(`/dashboard/media-performance${suffix}`),
+    api(`/dashboard/hashtag-performance${suffix}`),
+    api(`/dashboard/insights${suffix}`)
+  ]);
+  if (!summary.connected || !summary.totals.posts) {
+    renderAnalyticsEmpty(summary);
+  } else {
+    document.querySelector("#analyticsEmpty").hidden = true;
+  }
+  renderPlanCard(summary.plan);
+  renderAnalyticsOverview(summary);
+  renderAnalyticsInsights(insights.insights || []);
+  renderLineChart("#impressionsChart", timeseries.timeseries || [], "impressions", "Impressions");
+  renderLineChart("#engagementChart", timeseries.timeseries || [], "engagement", "Engagement");
+  renderLineChart("#engagementRateChart", timeseries.timeseries || [], "engagementRate", "Engagement rate", { percent: true });
+  renderBarChart("#mediaPerformanceChart", media.mediaPerformance || [], "mediaType", "engagementRate", { percent: true });
+  renderBarChart("#postingDaysChart", media.postingDays || [], "key", "engagementRate", { percent: true });
+  renderBarChart("#postingHoursChart", (media.postingHours || []).slice(0, 10), "key", "engagementRate", { percent: true });
+  renderPostsTable("#topImpressionsTable", topPosts.byImpressions || []);
+  renderPostsTable("#topEngagementRateTable", topPosts.byEngagementRate || []);
+  renderPostsTable("#recentPostsTable", topPosts.recent || []);
+  renderPostsTable("#underperformingPostsTable", topPosts.underperforming || []);
+  renderHashtagTable("#hashtagPerformanceTable", hashtags.hashtagPerformance || []);
+}
+
+function setAnalyticsLoading() {
+  const loading = `<p class="empty-state">Loading analytics.</p>`;
+  ["#analyticsOverview", "#analyticsInsights", "#impressionsChart", "#engagementChart", "#engagementRateChart", "#mediaPerformanceChart", "#postingDaysChart", "#postingHoursChart", "#topImpressionsTable", "#topEngagementRateTable", "#recentPostsTable", "#underperformingPostsTable", "#hashtagPerformanceTable"].forEach((selector) => {
+    const element = document.querySelector(selector);
+    if (element) element.innerHTML = loading;
+  });
+}
+
+function renderAnalyticsEmpty(summary = {}) {
+  const empty = document.querySelector("#analyticsEmpty");
+  if (empty) empty.hidden = false;
+  renderPlanCard(summary.plan);
+}
+
+function renderPlanCard(plan = {}) {
+  const card = document.querySelector("#analyticsPlanCard");
+  if (!card) return;
+  const note = plan.trialActive ? `${plan.trialDaysRemaining} trial days left` : `${plan.rangeLimitDays || 30}-day analytics`;
+  card.innerHTML = `<span>Plan</span><strong>${escapeHtml(plan.label || "Free trial")}</strong><small>${escapeHtml(note)}</small>`;
+}
+
+function renderAnalyticsOverview(summary) {
+  const target = document.querySelector("#analyticsOverview");
+  if (!target) return;
+  const totals = summary.totals || {};
+  const best = summary.bestPost;
+  const cards = [
+    ["Total impressions", formatNumber(totals.impressions), summary.deltas?.impressions],
+    ["Total engagement", formatNumber(totals.engagement), summary.deltas?.engagement],
+    ["Average engagement rate", formatPercent(totals.engagementRate), summary.deltas?.engagementRate],
+    ["Total posts", formatNumber(totals.posts), summary.deltas?.posts],
+    ["Best-performing post", best ? truncateText(best.text, 54) : "No post yet", null],
+    ["Follower growth", formatNumber(totals.followerGrowth), null],
+    ["Profile views", formatNumber(totals.profileViews), null],
+    ["Click-through rate", totals.clickThroughRate === null ? "No clicks yet" : formatPercent(totals.clickThroughRate), null]
+  ];
+  target.innerHTML = cards.map(([label, value, delta]) => `
+    <article class="analytics-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      ${delta === null || delta === undefined ? "" : `<small class="${Number(delta) >= 0 ? "positive" : "negative"}">${Number(delta) >= 0 ? "+" : ""}${formatPercent(delta)} vs previous</small>`}
+    </article>
+  `).join("");
+}
+
+function renderAnalyticsInsights(insights) {
+  const target = document.querySelector("#analyticsInsights");
+  if (!target) return;
+  target.innerHTML = `
+    <div class="section-heading">
+      <h2>Insights</h2>
+      <p class="muted">Simple signals generated from the selected period.</p>
+    </div>
+    <div class="insight-grid">
+      ${insights.length ? insights.map((insight) => `
+        <article class="insight-card">
+          <strong>${escapeHtml(insight.title)}</strong>
+          <p>${escapeHtml(insight.detail)}</p>
+        </article>
+      `).join("") : `<p class="empty-state">Sync more posts to generate insights.</p>`}
+    </div>
+  `;
+}
+
+function renderLineChart(selector, rows, key, label, options = {}) {
+  const target = document.querySelector(selector);
+  if (!target) return;
+  if (!rows.length) {
+    target.innerHTML = `<p class="empty-state">No ${escapeHtml(label.toLowerCase())} data for this period.</p>`;
+    return;
+  }
+  const values = rows.map((row) => Number(row[key] || 0));
+  const max = Math.max(...values, 1);
+  const width = 640;
+  const height = 190;
+  const points = rows.map((row, index) => {
+    const x = rows.length === 1 ? width / 2 : (index / (rows.length - 1)) * width;
+    const y = height - ((Number(row[key] || 0) / max) * (height - 18)) - 9;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  target.innerHTML = `
+    <div class="line-chart">
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeAttribute(label)} chart">
+        <polyline points="${points}" fill="none" stroke="var(--blue-dark)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>
+      </svg>
+      <div class="chart-axis">
+        <span>${escapeHtml(rows[0].date || "")}</span>
+        <strong>${escapeHtml(formatChartValue(max, options))}</strong>
+        <span>${escapeHtml(rows[rows.length - 1].date || "")}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderBarChart(selector, rows, labelKey, valueKey, options = {}) {
+  const target = document.querySelector(selector);
+  if (!target) return;
+  if (!rows.length) {
+    target.innerHTML = `<p class="empty-state">No data for this period.</p>`;
+    return;
+  }
+  const max = Math.max(...rows.map((row) => Number(row[valueKey] || 0)), 1);
+  target.innerHTML = `<div class="bar-chart">${rows.slice(0, 10).map((row) => {
+    const value = Number(row[valueKey] || 0);
+    return `
+      <div class="bar-row">
+        <span>${escapeHtml(row[labelKey] || "Unknown")}</span>
+        <div><i style="width:${Math.max(4, (value / max) * 100).toFixed(1)}%"></i></div>
+        <strong>${escapeHtml(formatChartValue(value, options))}</strong>
+      </div>
+    `;
+  }).join("")}</div>`;
+}
+
+function renderPostsTable(selector, posts) {
+  const target = document.querySelector(selector);
+  if (!target) return;
+  if (!posts.length) {
+    target.innerHTML = `<p class="empty-state">No posts in this view.</p>`;
+    return;
+  }
+  target.innerHTML = `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Post</th><th>Media</th><th>Impressions</th><th>Engagement</th><th>Rate</th><th>Clicks</th></tr></thead>
+        <tbody>
+          ${posts.map((post) => `
+            <tr>
+              <td><a href="${escapeAttribute(post.url || "#")}" target="_blank" rel="noreferrer">${escapeHtml(truncateText(post.text || post.postId, 68))}</a><small>${escapeHtml(formatDateTime(post.createdAt))}</small></td>
+              <td>${escapeHtml(post.mediaType || "text")}</td>
+              <td>${formatNumber(post.impressions)}</td>
+              <td>${formatNumber(post.engagement)}</td>
+              <td>${formatPercent(post.engagementRate)}</td>
+              <td>${formatNumber(post.clicks)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderHashtagTable(selector, hashtags) {
+  const target = document.querySelector(selector);
+  if (!target) return;
+  if (!hashtags.length) {
+    target.innerHTML = `<p class="empty-state">No hashtags found in synced posts.</p>`;
+    return;
+  }
+  target.innerHTML = `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr><th>Hashtag</th><th>Posts</th><th>Impressions</th><th>Engagement</th><th>Rate</th><th>Clicks</th></tr></thead>
+        <tbody>
+          ${hashtags.map((tag) => `
+            <tr>
+              <td><strong>${escapeHtml(tag.hashtag)}</strong></td>
+              <td>${formatNumber(tag.posts)}</td>
+              <td>${formatNumber(tag.impressions)}</td>
+              <td>${formatNumber(tag.engagement)}</td>
+              <td>${formatPercent(tag.engagementRate)}</td>
+              <td>${formatNumber(tag.clicks)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function formatNumber(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? number.toLocaleString() : "0";
+}
+
+function formatPercent(value) {
+  const number = Number(value || 0);
+  return `${number.toFixed(Math.abs(number) >= 10 ? 0 : 1)}%`;
+}
+
+function formatChartValue(value, options = {}) {
+  return options.percent ? formatPercent(value) : formatNumber(value);
+}
+
+function truncateText(value, length) {
+  const text = String(value || "Untitled post").trim();
+  return text.length > length ? `${text.slice(0, length - 1)}...` : text;
 }
 
 function PostThumbnail(post) {
@@ -1290,6 +1690,25 @@ function wirePageEvents() {
       }
     });
   });
+
+  document.querySelectorAll("[data-analytics-filters]").forEach((form) => {
+    form.addEventListener("change", () => {
+      const custom = form.elements.range?.value === "custom";
+      form.elements.from.disabled = !custom;
+      form.elements.to.disabled = !custom;
+    });
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await loadAnalyticsDashboard();
+      } catch (error) {
+        showError(error, "Unable to load analytics.");
+      }
+    });
+    const custom = form.elements.range?.value === "custom";
+    form.elements.from.disabled = !custom;
+    form.elements.to.disabled = !custom;
+  });
 }
 
 async function setInspirationTab(tab) {
@@ -1380,6 +1799,13 @@ async function handleAppClick(event) {
     return;
   }
 
+  const analyticsScrollTarget = event.target.closest("[data-analytics-scroll]");
+  if (analyticsScrollTarget) {
+    event.preventDefault();
+    document.querySelector(`#${analyticsScrollTarget.dataset.analyticsScroll}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
   if (event.target.closest("[data-logout]")) {
     await api("/api/logout", { method: "POST" }).catch(() => {});
     clearSession();
@@ -1401,13 +1827,25 @@ async function handleAppClick(event) {
       if (result.state) {
         dashboardState = result.state;
         linkedInState = { ...(linkedInState || {}), ...(result.state.linkedin || {}) };
-        await hydrateDashboard(result.state);
+        if (window.location.pathname === "/dashboard/analytics") {
+          await hydrateAnalyticsDashboard();
+        } else {
+          await hydrateDashboard(result.state);
+        }
       } else {
-        await hydrateDashboard();
+        if (window.location.pathname === "/dashboard/analytics") {
+          await hydrateAnalyticsDashboard();
+        } else {
+          await hydrateDashboard();
+        }
       }
       showToast(`LinkedIn synced: ${result.saved || 0} posts saved`);
     } catch (error) {
-      await hydrateDashboard().catch(() => {});
+      if (window.location.pathname === "/dashboard/analytics") {
+        await hydrateAnalyticsDashboard().catch(() => {});
+      } else {
+        await hydrateDashboard().catch(() => {});
+      }
       showError(error, "Unable to sync LinkedIn right now.");
     }
   }
@@ -1550,6 +1988,7 @@ async function render() {
   try {
     if (route === "/dashboard/onboarding") await hydrateOnboarding();
     if (route === "/dashboard") await hydrateDashboard();
+    if (route === "/dashboard/analytics") await hydrateAnalyticsDashboard();
     if (route === "/create-post") await hydrateCreatePost();
   } catch (error) {
     showError(error);

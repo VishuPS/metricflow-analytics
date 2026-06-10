@@ -67,6 +67,11 @@ export default {
         const account = await requireAccount(request, env);
         return json(await userStatePayload(env, account.id), env);
       }
+      const dashboardRoute = url.pathname.match(/^\/(?:api\/)?dashboard\/(summary|timeseries|top-posts|media-performance|hashtag-performance|insights)$/);
+      if (request.method === "GET" && dashboardRoute) {
+        const account = await requireAccount(request, env);
+        return json(await dashboardPayload(dashboardRoute[1], request, env, account), env);
+      }
       if (route === "GET /api/connectors") {
         const account = await requireAccount(request, env);
         return json({ connectors: connectorStatus(await buildUserState(env, account.id), env, url) }, env);
@@ -1515,6 +1520,403 @@ function filterPosts(posts, params) {
     if (params.get("to") && date > params.get("to")) return false;
     return true;
   });
+}
+
+async function dashboardPayload(section, request, env, account) {
+  const state = await buildUserState(env, account.id);
+  const fullAccount = await loadAccountById(env, account.id);
+  const plan = dashboardPlan(fullAccount, state.settings || {});
+  const filters = dashboardFilters(new URL(request.url).searchParams, plan);
+  const allPosts = state.posts || [];
+  const posts = filterDashboardPosts(allPosts, filters);
+  const previousPosts = previousPeriodPosts(allPosts, filters);
+  const context = { state, account: fullAccount || account, plan, filters, posts, previousPosts };
+
+  if (section === "summary") return dashboardSummary(context);
+  if (section === "timeseries") return { filters, plan, timeseries: dashboardTimeseries(posts) };
+  if (section === "top-posts") return dashboardTopPosts(context);
+  if (section === "media-performance") return { filters, plan, mediaPerformance: dashboardMediaPerformance(posts), postingDays: bestPostingDays(posts), postingHours: bestPostingHours(posts) };
+  if (section === "hashtag-performance") return { filters, plan, hashtagPerformance: dashboardHashtagPerformance(posts) };
+  if (section === "insights") return { filters, plan, insights: dashboardInsights(context) };
+  return { filters, plan };
+}
+
+async function loadAccountById(env, accountId) {
+  const lookup = await loadUserJson(env, `auth:id:${accountId}`, null);
+  if (!lookup?.email) return null;
+  const raw = await env.USER_STATE?.get(authAccountKey(lookup.email));
+  return raw ? JSON.parse(raw) : null;
+}
+
+function dashboardPlan(account, settings = {}) {
+  const name = String(settings.plan || account?.plan || "trial").toLowerCase();
+  const createdAt = account?.createdAt || new Date().toISOString();
+  const ageDays = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86400000));
+  const trialDaysRemaining = Math.max(0, 30 - ageDays);
+  const trialActive = name === "trial" && trialDaysRemaining > 0;
+  const planName = trialActive ? "trial" : name;
+  const rangeLimitDays = planName === "agency" || planName === "pro" || trialActive ? 365 : 30;
+  return {
+    name: planName,
+    label: planName === "agency" ? "Agency" : planName === "pro" ? "Pro" : planName === "basic" ? "Basic" : "Free trial",
+    trialActive,
+    trialDaysRemaining,
+    rangeLimitDays,
+    features: {
+      insights: trialActive || planName === "pro" || planName === "agency",
+      reports: trialActive || planName === "pro" || planName === "agency",
+      multiProfile: planName === "agency"
+    }
+  };
+}
+
+function dashboardFilters(params, plan) {
+  const requestedRange = String(params.get("range") || "30").toLowerCase();
+  const now = new Date();
+  let to = validDate(params.get("to")) || now;
+  let from;
+  if (requestedRange === "custom") {
+    from = validDate(params.get("from")) || daysAgo(to, Math.min(30, plan.rangeLimitDays));
+  } else {
+    const requestedDays = Number(requestedRange || 30);
+    const days = Number.isFinite(requestedDays) ? requestedDays : 30;
+    from = daysAgo(to, Math.min(days, plan.rangeLimitDays));
+  }
+  const maxFrom = daysAgo(to, plan.rangeLimitDays);
+  if (from < maxFrom) from = maxFrom;
+  return {
+    range: requestedRange,
+    from: startOfDay(from),
+    to: endOfDay(to),
+    mediaType: String(params.get("mediaType") || "all").toLowerCase(),
+    sortBy: String(params.get("sortBy") || "date").toLowerCase(),
+    limitedByPlan: requestedRange === "custom" ? from.getTime() === maxFrom.getTime() : Number(requestedRange) > plan.rangeLimitDays
+  };
+}
+
+function filterDashboardPosts(posts, filters) {
+  return (posts || []).filter((post) => {
+    const date = postDate(post);
+    if (!date || date < filters.from || date > filters.to) return false;
+    if (filters.mediaType !== "all" && postMediaType(post) !== filters.mediaType) return false;
+    return true;
+  }).sort((a, b) => sortDashboardPosts(a, b, filters.sortBy));
+}
+
+function previousPeriodPosts(posts, filters) {
+  const lengthMs = filters.to.getTime() - filters.from.getTime();
+  const previousTo = new Date(filters.from.getTime() - 1);
+  const previousFrom = new Date(previousTo.getTime() - lengthMs);
+  return (posts || []).filter((post) => {
+    const date = postDate(post);
+    if (!date || date < previousFrom || date > previousTo) return false;
+    if (filters.mediaType !== "all" && postMediaType(post) !== filters.mediaType) return false;
+    return true;
+  });
+}
+
+function dashboardSummary({ posts, previousPosts, filters, plan, state }) {
+  const totals = postTotals(posts);
+  const previous = postTotals(previousPosts);
+  const bestPost = [...posts].sort((a, b) => postScore(b) - postScore(a))[0] || null;
+  return {
+    filters,
+    plan,
+    connected: Boolean(state.linkedin?.connected),
+    selectedOrganizationName: state.linkedin?.selectedOrganizationName || "",
+    totals: {
+      impressions: totals.impressions,
+      engagement: totals.engagement,
+      engagementRate: totals.impressions ? (totals.engagement / totals.impressions) * 100 : 0,
+      posts: posts.length,
+      followerGrowth: totals.followerGrowth,
+      profileViews: totals.profileViews,
+      clicks: totals.clicks,
+      clickThroughRate: totals.impressions && totals.clicks ? (totals.clicks / totals.impressions) * 100 : null
+    },
+    deltas: {
+      impressions: percentDelta(totals.impressions, previous.impressions),
+      engagement: percentDelta(totals.engagement, previous.engagement),
+      engagementRate: percentDelta(totals.impressions ? (totals.engagement / totals.impressions) * 100 : 0, previous.impressions ? (previous.engagement / previous.impressions) * 100 : 0),
+      posts: percentDelta(posts.length, previousPosts.length)
+    },
+    bestPost: bestPost ? dashboardPost(bestPost) : null
+  };
+}
+
+function dashboardTimeseries(posts) {
+  const groups = new Map();
+  for (const post of posts) {
+    const date = isoDate(postDate(post));
+    const row = groups.get(date) || { date, posts: 0, impressions: 0, engagement: 0, engagementRate: 0, clicks: 0 };
+    row.posts += 1;
+    row.impressions += postImpressions(post);
+    row.engagement += postEngagement(post);
+    row.clicks += postClicks(post);
+    groups.set(date, row);
+  }
+  return [...groups.values()].sort((a, b) => a.date.localeCompare(b.date)).map((row) => ({
+    ...row,
+    engagementRate: row.impressions ? (row.engagement / row.impressions) * 100 : 0
+  }));
+}
+
+function dashboardTopPosts({ posts, filters, plan }) {
+  return {
+    filters,
+    plan,
+    byImpressions: [...posts].sort((a, b) => postImpressions(b) - postImpressions(a)).slice(0, 10).map(dashboardPost),
+    byEngagementRate: [...posts].sort((a, b) => postEngagementRate(b) - postEngagementRate(a)).slice(0, 10).map(dashboardPost),
+    recent: [...posts].sort((a, b) => (postDate(b)?.getTime() || 0) - (postDate(a)?.getTime() || 0)).slice(0, 25).map(dashboardPost),
+    underperforming: [...posts].filter((post) => postImpressions(post) > 0).sort((a, b) => postEngagementRate(a) - postEngagementRate(b)).slice(0, 10).map(dashboardPost)
+  };
+}
+
+function dashboardMediaPerformance(posts) {
+  const groups = new Map();
+  for (const post of posts) {
+    const type = postMediaType(post);
+    const row = groups.get(type) || { mediaType: type, posts: 0, impressions: 0, engagement: 0, clicks: 0, engagementRate: 0, clickThroughRate: null };
+    row.posts += 1;
+    row.impressions += postImpressions(post);
+    row.engagement += postEngagement(post);
+    row.clicks += postClicks(post);
+    groups.set(type, row);
+  }
+  return [...groups.values()].map((row) => ({
+    ...row,
+    engagementRate: row.impressions ? (row.engagement / row.impressions) * 100 : 0,
+    clickThroughRate: row.impressions && row.clicks ? (row.clicks / row.impressions) * 100 : null
+  })).sort((a, b) => b.engagementRate - a.engagementRate);
+}
+
+function bestPostingDays(posts) {
+  return groupedPostingPerformance(posts, (date) => date.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" }));
+}
+
+function bestPostingHours(posts) {
+  return groupedPostingPerformance(posts, (date) => `${String(date.getUTCHours()).padStart(2, "0")}:00`);
+}
+
+function groupedPostingPerformance(posts, keyFn) {
+  const groups = new Map();
+  for (const post of posts) {
+    const date = postDate(post);
+    if (!date) continue;
+    const key = keyFn(date);
+    const row = groups.get(key) || { key, posts: 0, impressions: 0, engagement: 0, engagementRate: 0 };
+    row.posts += 1;
+    row.impressions += postImpressions(post);
+    row.engagement += postEngagement(post);
+    groups.set(key, row);
+  }
+  return [...groups.values()].map((row) => ({
+    ...row,
+    engagementRate: row.impressions ? (row.engagement / row.impressions) * 100 : 0
+  })).sort((a, b) => b.engagementRate - a.engagementRate || b.impressions - a.impressions);
+}
+
+function dashboardHashtagPerformance(posts) {
+  const groups = new Map();
+  for (const post of posts) {
+    for (const tag of postHashtags(post)) {
+      const row = groups.get(tag) || { hashtag: tag, posts: 0, impressions: 0, engagement: 0, clicks: 0, engagementRate: 0 };
+      row.posts += 1;
+      row.impressions += postImpressions(post);
+      row.engagement += postEngagement(post);
+      row.clicks += postClicks(post);
+      groups.set(tag, row);
+    }
+  }
+  return [...groups.values()].map((row) => ({
+    ...row,
+    engagementRate: row.impressions ? (row.engagement / row.impressions) * 100 : 0
+  })).sort((a, b) => b.engagement - a.engagement || b.engagementRate - a.engagementRate).slice(0, 30);
+}
+
+function dashboardInsights({ posts, previousPosts, plan }) {
+  if (!plan.features.insights) {
+    return [{ title: "Insights are a Pro feature", detail: "Upgrade to Pro or Agency to unlock written performance insights and reports." }];
+  }
+  if (!posts.length) {
+    return [{ title: "No LinkedIn posts synced yet", detail: "Connect LinkedIn and run sync to generate account-level performance insights." }];
+  }
+  const insights = [];
+  const media = dashboardMediaPerformance(posts);
+  const text = media.find((row) => row.mediaType === "text");
+  const bestMedia = media[0];
+  if (bestMedia && text && bestMedia.mediaType !== "text" && text.engagementRate > 0) {
+    insights.push({ title: `${titleCase(bestMedia.mediaType)} posts lead performance`, detail: `Your ${bestMedia.mediaType} posts perform ${Math.round(((bestMedia.engagementRate - text.engagementRate) / text.engagementRate) * 100)}% better than text posts by engagement rate.` });
+  } else if (bestMedia) {
+    insights.push({ title: `${titleCase(bestMedia.mediaType)} is your strongest format`, detail: `${titleCase(bestMedia.mediaType)} posts have the highest engagement rate in this period.` });
+  }
+  const days = bestPostingDays(posts);
+  const hours = bestPostingHours(posts);
+  if (days[0] && hours[0]) insights.push({ title: "Best posting time", detail: `Your best posting time appears to be ${days[0].key} around ${hours[0].key}.` });
+  const questionPosts = posts.filter((post) => postTextValue(post).includes("?"));
+  const nonQuestionPosts = posts.filter((post) => !postTextValue(post).includes("?"));
+  const questionRate = average(questionPosts.map((post) => postComments(post)));
+  const nonQuestionRate = average(nonQuestionPosts.map((post) => postComments(post)));
+  if (questionPosts.length >= 2 && questionRate > nonQuestionRate) insights.push({ title: "Questions drive comments", detail: "Posts with questions receive higher comments than posts without questions." });
+  const currentTotals = postTotals(posts);
+  const previousTotals = postTotals(previousPosts);
+  const currentRate = currentTotals.impressions ? (currentTotals.engagement / currentTotals.impressions) * 100 : 0;
+  const previousRate = previousTotals.impressions ? (previousTotals.engagement / previousTotals.impressions) * 100 : 0;
+  if (previousPosts.length) {
+    const direction = currentRate >= previousRate ? "improving" : "declining";
+    insights.push({ title: `Engagement rate is ${direction}`, detail: `Your engagement rate is ${direction} compared with the previous period.` });
+  }
+  return insights.slice(0, 6);
+}
+
+function postTotals(posts) {
+  return (posts || []).reduce((sum, post) => {
+    sum.impressions += postImpressions(post);
+    sum.engagement += postEngagement(post);
+    sum.clicks += postClicks(post);
+    sum.profileViews += numberMetric(post.profile_views ?? post.profileViews);
+    sum.followerGrowth += numberMetric(post.follower_growth ?? post.followerGrowth);
+    return sum;
+  }, { impressions: 0, engagement: 0, clicks: 0, profileViews: 0, followerGrowth: 0 });
+}
+
+function dashboardPost(post) {
+  return {
+    postId: post.post_id || post.id || "",
+    text: postTextValue(post),
+    url: post.url || post.post_url || "",
+    createdAt: post.published_at || post.created_at || post.createdAt || "",
+    mediaType: postMediaType(post),
+    hashtags: postHashtags(post),
+    impressions: postImpressions(post),
+    engagement: postEngagement(post),
+    engagementRate: postEngagementRate(post),
+    clicks: postClicks(post),
+    comments: postComments(post),
+    reactions: postReactions(post),
+    shares: postShares(post),
+    profileViews: numberMetric(post.profile_views ?? post.profileViews),
+    followerGrowth: numberMetric(post.follower_growth ?? post.followerGrowth)
+  };
+}
+
+function sortDashboardPosts(a, b, sortBy) {
+  if (sortBy === "impressions") return postImpressions(b) - postImpressions(a);
+  if (sortBy === "engagement") return postEngagement(b) - postEngagement(a);
+  if (sortBy === "engagement_rate") return postEngagementRate(b) - postEngagementRate(a);
+  if (sortBy === "clicks") return postClicks(b) - postClicks(a);
+  return (postDate(b)?.getTime() || 0) - (postDate(a)?.getTime() || 0);
+}
+
+function postDate(post) {
+  const value = post?.published_at || post?.created_at || post?.createdAt || post?.created;
+  const date = value && typeof value === "object" && value.time ? new Date(Number(value.time)) : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function postTextValue(post) {
+  return String(post?.text || post?.post_text || post?.commentary || post?.title || post?.post_id || "").trim();
+}
+
+function postMediaType(post) {
+  return String(post?.media_type || post?.mediaType || "text").toLowerCase();
+}
+
+function postImpressions(post) {
+  return numberMetric(post?.impressions ?? post?.metrics?.impressions ?? post?.reach);
+}
+
+function postReactions(post) {
+  return numberMetric(post?.reactions ?? post?.likes ?? post?.metrics?.likes);
+}
+
+function postComments(post) {
+  return numberMetric(post?.comments ?? post?.metrics?.comments);
+}
+
+function postShares(post) {
+  return numberMetric(post?.reposts ?? post?.shares ?? post?.metrics?.shares);
+}
+
+function postClicks(post) {
+  return numberMetric(post?.clicks ?? post?.metrics?.clicks);
+}
+
+function postEngagement(post) {
+  const explicit = numberOrNull(post?.engagements ?? post?.engagement ?? post?.total_engagement ?? post?.metrics?.engagements);
+  if (explicit !== null) return explicit;
+  return postReactions(post) + postComments(post) + postShares(post) + postClicks(post);
+}
+
+function postEngagementRate(post) {
+  const explicit = numberOrNull(post?.engagement_rate ?? post?.engagementRate);
+  if (explicit !== null) return explicit;
+  const impressions = postImpressions(post);
+  return impressions ? (postEngagement(post) / impressions) * 100 : 0;
+}
+
+function postScore(post) {
+  return postEngagement(post) * 2 + postClicks(post) + postImpressions(post) / 100;
+}
+
+function postHashtags(post) {
+  const raw = post?.hashtags;
+  if (Array.isArray(raw)) return raw.map(cleanHashtag).filter(Boolean);
+  if (typeof raw === "string" && raw.trim()) return raw.split(/[,\s]+/).map(cleanHashtag).filter(Boolean);
+  return Array.from(postTextValue(post).matchAll(/#[a-z0-9][a-z0-9_]{1,48}/gi)).map((match) => cleanHashtag(match[0])).filter(Boolean);
+}
+
+function cleanHashtag(value) {
+  const tag = String(value || "").trim().replace(/^#/, "").toLowerCase();
+  return tag ? `#${tag}` : "";
+}
+
+function numberMetric(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function percentDelta(current, previous) {
+  if (!previous && !current) return 0;
+  if (!previous) return 100;
+  return ((current - previous) / previous) * 100;
+}
+
+function validDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysAgo(date, days) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() - Math.max(1, Number(days || 1)) + 1);
+  return next;
+}
+
+function startOfDay(date) {
+  const next = new Date(date);
+  next.setUTCHours(0, 0, 0, 0);
+  return next;
+}
+
+function endOfDay(date) {
+  const next = new Date(date);
+  next.setUTCHours(23, 59, 59, 999);
+  return next;
+}
+
+function isoDate(date) {
+  return date ? date.toISOString().slice(0, 10) : "";
+}
+
+function average(values) {
+  const numbers = values.filter((value) => Number.isFinite(Number(value)));
+  return numbers.length ? numbers.reduce((sum, value) => sum + Number(value), 0) / numbers.length : 0;
+}
+
+function titleCase(value) {
+  return String(value || "").replace(/(^|\s|-)\w/g, (match) => match.toUpperCase());
 }
 
 function connectorStatus(state, env, requestUrl) {
