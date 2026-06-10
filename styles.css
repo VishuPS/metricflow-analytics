@@ -769,7 +769,8 @@ textarea:focus {
 
 .dashboard-shell {
   display: grid;
-  gap: 28px;
+  gap: 18px;
+  padding-top: 32px;
 }
 
 .create-post-shell {
@@ -1169,8 +1170,93 @@ textarea:focus {
 }
 
 .dashboard-hero {
-  padding-bottom: 24px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--line);
+}
+
+.dashboard-hero h1 {
+  margin-bottom: 8px;
+  font-size: clamp(36px, 5vw, 56px);
+}
+
+.dashboard-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.workspace-menu {
+  position: relative;
+}
+
+.workspace-menu summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 14px;
+  background: var(--white);
+  color: var(--ink);
+  font-weight: 800;
+  list-style: none;
+  cursor: pointer;
+}
+
+.workspace-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.workspace-menu summary::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  margin-left: 10px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translateY(-2px);
+}
+
+.workspace-menu[open] summary {
+  border-color: var(--blue);
+  color: var(--blue-dark);
+}
+
+.workspace-menu div {
+  position: absolute;
+  right: 0;
+  z-index: 8;
+  width: 220px;
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--white);
+  box-shadow: var(--shadow);
+}
+
+.workspace-menu button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 800;
+  text-align: left;
+}
+
+.workspace-menu button:hover {
+  background: var(--surface);
+}
+
+.workspace-menu button.danger {
+  color: var(--rose);
 }
 
 .metrics-grid {
@@ -1180,37 +1266,34 @@ textarea:focus {
 }
 
 .sync-panel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 18px 20px;
+  padding: 14px 16px;
   background: var(--surface);
 }
 
-.sync-panel div {
+.sync-health-item {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
-.sync-panel span {
+.sync-health-item span {
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
-.sync-panel strong {
-  font-size: 18px;
+.sync-health-item strong {
+  overflow-wrap: anywhere;
+  font-size: 15px;
 }
 
-.sync-panel p {
-  max-width: 620px;
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.6;
-  text-align: right;
+.sync-health-message {
+  min-width: 0;
 }
 
 .metric-card,
@@ -1831,6 +1914,26 @@ textarea:focus {
     flex-direction: column;
   }
 
+  .dashboard-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-actions .primary-button,
+  .dashboard-actions .secondary-button,
+  .workspace-menu summary {
+    width: 100%;
+  }
+
+  .workspace-menu div {
+    position: static;
+    width: 100%;
+  }
+
+  .sync-panel {
+    grid-template-columns: 1fr;
+  }
+
   .post-row {
     align-items: stretch;
     grid-template-columns: 1fr;
@@ -1878,10 +1981,6 @@ textarea:focus {
   .org-option {
     align-items: stretch;
     grid-template-columns: 1fr;
-  }
-
-  .sync-panel p {
-    text-align: left;
   }
 
   .cookie-banner {

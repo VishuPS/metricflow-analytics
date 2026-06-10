@@ -472,15 +472,19 @@ function Dashboard() {
       <section class="dashboard-hero">
         <div>
           <p class="eyebrow">Dashboard</p>
-          <h1>LinkedIn analytics</h1>
+          <h1>Workspace Analytics</h1>
           <p class="muted" id="dashboardOrg">Loading selected organization.</p>
         </div>
-        <div class="button-row">
-          <button class="primary-button" data-sync-linkedin>Sync LinkedIn</button>
-          <button class="secondary-button" data-route="/dashboard/analytics">Analytics dashboard</button>
-          <button class="secondary-button" data-route="/create-post">Create post</button>
-          <button class="secondary-button" data-route="/dashboard/onboarding">Manage pages</button>
-          <button class="secondary-button" data-disconnect-linkedin>Disconnect LinkedIn</button>
+        <div class="dashboard-actions">
+          <button class="primary-button" data-sync-linkedin>Sync Data</button>
+          <button class="secondary-button" data-route="/create-post">Create Post</button>
+          <details class="workspace-menu">
+            <summary>Workspace Actions</summary>
+            <div>
+              <button type="button" data-route="/dashboard/onboarding">Manage Pages</button>
+              <button class="danger" type="button" data-disconnect-linkedin>Disconnect LinkedIn</button>
+            </div>
+          </details>
         </div>
       </section>
       <section class="sync-panel" id="syncStatusPanel"></section>
@@ -1500,39 +1504,60 @@ function impressionRange(ad) {
 }
 
 function SyncStatusPanel(sync, summary = {}) {
-  if (sync?.status === "failed") {
-    return `
-      <div>
-        <span>Connection health</span>
-        <strong>Sync failed</strong>
-      </div>
-      <p>${userMessage(sync.lastError || "LinkedIn sync failed.", "LinkedIn sync failed.")} ${sync.lastAttemptedAt ? `Last attempted ${formatDateTime(sync.lastAttemptedAt)}.` : ""}</p>
-    `;
-  }
-
-  if (!sync?.lastIngestedAt) {
-    return `
-      <div>
-        <span>Connection health</span>
-        <strong>Not synced yet</strong>
-      </div>
-      <p>LinkedIn is connected. Run sync to fetch company page posts and analytics.</p>
-    `;
-  }
-
-  const diagnostics = sync.diagnostics || {};
+  const diagnostics = sync?.diagnostics || {};
   const metricCoverage = [
     `${diagnostics.postsWithReach || 0} reach`,
     `${diagnostics.postsWithEngagements || 0} engagement`,
     `${diagnostics.postsWithClicks || 0} clicks`
   ].join(" / ");
 
+  if (sync?.status === "failed") {
+    return `
+      <div class="sync-health-item">
+        <span>Last sync</span>
+        <strong>Sync failed</strong>
+      </div>
+      <div class="sync-health-item">
+        <span>Posts tracked</span>
+        <strong>${Number(summary.trackedPosts || 0).toLocaleString()}</strong>
+      </div>
+      <div class="sync-health-item sync-health-message">
+        <span>Metric coverage</span>
+        <strong>${escapeHtml(userMessage(sync.lastError || "LinkedIn sync failed.", "LinkedIn sync failed."))}</strong>
+      </div>
+    `;
+  }
+
+  if (!sync?.lastIngestedAt) {
+    return `
+      <div class="sync-health-item">
+        <span>Last sync</span>
+        <strong>Not synced yet</strong>
+      </div>
+      <div class="sync-health-item">
+        <span>Posts tracked</span>
+        <strong>${Number(summary.trackedPosts || 0).toLocaleString()}</strong>
+      </div>
+      <div class="sync-health-item">
+        <span>Metric coverage</span>
+        <strong>Waiting for sync</strong>
+      </div>
+    `;
+  }
+
   return `
-    <div>
-      <span>Connection health</span>
+    <div class="sync-health-item">
+      <span>Last sync</span>
       <strong>${formatDateTime(sync.lastIngestedAt)}</strong>
     </div>
-    <p>${sync.fetched || 0} fetched, ${sync.saved || 0} saved, ${summary.trackedPosts || 0} tracked posts. Metric coverage: ${metricCoverage}.</p>
+    <div class="sync-health-item">
+      <span>Posts tracked</span>
+      <strong>${Number(summary.trackedPosts || 0).toLocaleString()}</strong>
+    </div>
+    <div class="sync-health-item">
+      <span>Metric coverage</span>
+      <strong>${escapeHtml(metricCoverage)}</strong>
+    </div>
   `;
 }
 
