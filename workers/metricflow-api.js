@@ -1696,7 +1696,13 @@ function bestPostingDays(posts) {
 }
 
 function bestPostingHours(posts) {
-  return groupedPostingPerformance(posts, (date) => `${String(date.getUTCHours()).padStart(2, "0")}:00`);
+  return groupedPostingPerformance(posts, hourRangeLabel);
+}
+
+function hourRangeLabel(date) {
+  const startHour = date.getUTCHours();
+  const endHour = (startHour + 1) % 24;
+  return `${String(startHour).padStart(2, "0")}:00-${String(endHour).padStart(2, "0")}:00`;
 }
 
 function groupedPostingPerformance(posts, keyFn) {

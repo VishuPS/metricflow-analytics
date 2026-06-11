@@ -72,6 +72,7 @@ const media = await get("/dashboard/media-performance?range=30");
 assert.equal(media.mediaPerformance[0].mediaType, "carousel");
 assert.ok(media.postingDays.length);
 assert.ok(media.postingHours.length);
+assert.match(media.postingHours[0].key, /^\d{2}:00-\d{2}:00$/);
 
 const hashtags = await get("/dashboard/hashtag-performance?range=30");
 assert.equal(hashtags.hashtagPerformance[0].hashtag, "#growth");
@@ -79,10 +80,71 @@ assert.equal(hashtags.hashtagPerformance[0].hashtag, "#growth");
 const insights = await get("/dashboard/insights?range=30");
 assert.ok(insights.insights.length);
 
+const messyAccountId = "acct_dashboard_messy";
+const messySessionToken = "session_dashboard_messy";
+const messyOrganization = "urn:li:organization:777";
+const otherOrganization = "urn:li:organization:888";
+const messyPosts = Array.from({ length: 85 }, (_, index) => messyPost(index, messyOrganization));
+const messyKv = createKv({
+  [`auth:id:${messyAccountId}`]: { email: "messy-analytics@example.test" },
+  "auth:account:messy-analytics@example.test": {
+    id: messyAccountId,
+    name: "Messy Analytics Test",
+    email: "messy-analytics@example.test",
+    plan: "agency",
+    createdAt: "2026-05-01T00:00:00.000Z"
+  },
+  [`session:${messySessionToken}`]: {
+    accountId: messyAccountId,
+    name: "Messy Analytics Test",
+    email: "messy-analytics@example.test",
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+  },
+  [`user:${messyAccountId}:linkedin:token`]: {
+    accessToken: "linkedin-dashboard-messy-token"
+  },
+  [`user:${messyAccountId}:linkedin:organizations`]: [messyOrganization, otherOrganization],
+  [`user:${messyAccountId}:linkedin:organizationLabels`]: {
+    [messyOrganization]: "Messy Page",
+    [otherOrganization]: "Other Page"
+  },
+  [`user:${messyAccountId}:linkedin:organization`]: messyOrganization,
+  [`user:${messyAccountId}:linkedin:posts`]: [
+    ...messyPosts,
+    messyPost(999, otherOrganization)
+  ]
+});
+const messyEnv = { USER_STATE: messyKv };
+const messyAuth = { authorization: `Bearer ${messySessionToken}` };
+
+const messySummary = await getWith("/dashboard/summary?range=90", messyEnv, messyAuth);
+assert.equal(messySummary.selectedOrganizationName, "Messy Page");
+assert.equal(messySummary.totals.posts, 85);
+assert.ok(messySummary.totals.impressions > 0);
+assert.ok(Number.isFinite(messySummary.totals.engagementRate));
+assert.ok(messySummary.bestPost.postId);
+
+const messyTimeseries = await getWith("/dashboard/timeseries?range=90", messyEnv, messyAuth);
+assert.ok(messyTimeseries.timeseries.length > 1);
+assert.ok(messyTimeseries.timeseries.every((row) => Object.hasOwn(row, "reach")));
+
+const messyMedia = await getWith("/dashboard/media-performance?range=90", messyEnv, messyAuth);
+assert.ok(messyMedia.mediaPerformance.length >= 4);
+assert.ok(messyMedia.postingHours.every((row) => /^\d{2}:00-\d{2}:00$/.test(row.key)));
+
+const messyTopPosts = await getWith("/dashboard/top-posts?range=90", messyEnv, messyAuth);
+assert.ok(messyTopPosts.byImpressions.length <= 10);
+assert.ok(messyTopPosts.byEngagementRate.length <= 10);
+assert.ok(!messyTopPosts.byImpressions.some((row) => row.postId === "urn:li:share:messy-999"));
+
 console.log("PASS worker dashboard analytics aggregation");
 
 async function get(path) {
-  const response = await worker.fetch(new Request(`https://api.example.test${path}`, { headers: auth }), env);
+  return getWith(path, env, auth);
+}
+
+async function getWith(path, testEnv, testAuth) {
+  const response = await worker.fetch(new Request(`https://api.example.test${path}`, { headers: testAuth }), testEnv);
   assert.equal(response.status, 200);
   return response.json();
 }
@@ -104,5 +166,32 @@ function post(postId, text, mediaType, publishedAt, impressions, engagement, cli
     shares: Math.floor(engagement * 0.1),
     clicks,
     platform_raw: { post: { author: organization }, metrics: {} }
+  };
+}
+
+function messyPost(index, postOrganization) {
+  const mediaTypes = ["text", "image", "carousel", "video", "document", "poll"];
+  const day = (index % 28) + 1;
+  const hour = index % 24;
+  const explicitEngagement = index % 7 === 0 ? undefined : 5 + (index % 30);
+  const impressions = index % 10 === 0 ? null : 100 + index * 13;
+  return {
+    source: "linkedin",
+    post_id: `urn:li:share:messy-${index}`,
+    author_id: postOrganization,
+    organization_urn: postOrganization,
+    published_at: new Date(Date.UTC(2026, 4, day, hour, 0, 0)).toISOString(),
+    url: index % 13 === 0 ? "" : `https://www.linkedin.com/feed/update/urn:li:share:messy-${index}`,
+    text: index % 13 === 0 ? "" : index % 3 === 0 ? `Question post ${index}? #growth #market` : `Post ${index} #tag${index % 5}`,
+    media_type: mediaTypes[index % mediaTypes.length],
+    impressions,
+    reach: impressions ? impressions + 20 : 80 + index,
+    engagements: explicitEngagement,
+    reactions: index % 9,
+    likes: index % 11,
+    comments: index % 5,
+    shares: index % 4,
+    clicks: index % 6,
+    platform_raw: { post: { author: postOrganization }, metrics: {} }
   };
 }

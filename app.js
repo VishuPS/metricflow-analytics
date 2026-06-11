@@ -933,15 +933,13 @@ function renderPostsTable(selector, posts) {
   target.innerHTML = `
     <div class="analytics-table-wrap">
       <table class="analytics-table">
-        <thead><tr><th>Post</th><th>Media</th><th>Reach</th><th>Engagement</th><th>Rate</th><th>Clicks</th></tr></thead>
+        <thead><tr><th>Post</th><th>Reach</th><th>Engagement</th><th>Clicks</th></tr></thead>
         <tbody>
           ${posts.map((post) => `
             <tr>
               <td><a href="${escapeAttribute(post.url || "#")}" target="_blank" rel="noreferrer">${escapeHtml(truncateText(post.text || post.postId, 68))}</a><small>${escapeHtml(formatDateTime(post.createdAt))}</small></td>
-              <td>${escapeHtml(post.mediaType || "text")}</td>
               <td>${formatNumber(post.impressions)}</td>
               <td>${formatNumber(post.engagement)}</td>
-              <td>${formatPercent(post.engagementRate)}</td>
               <td>${formatNumber(post.clicks)}</td>
             </tr>
           `).join("")}
