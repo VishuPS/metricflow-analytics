@@ -67,6 +67,10 @@ export default {
         const account = await requireAccount(request, env);
         return json(await userStatePayload(env, account.id), env);
       }
+      if ((route === "POST /dashboard/ai-recommendations" || route === "POST /api/dashboard/ai-recommendations")) {
+        const account = await requireAccount(request, env);
+        return json(await generateAiRecommendations(request, env, account), env);
+      }
       const dashboardRoute = url.pathname.match(/^\/(?:api\/)?dashboard\/(summary|timeseries|top-posts|media-performance|hashtag-performance|insights|recommendations)$/);
       if (request.method === "GET" && dashboardRoute) {
         const account = await requireAccount(request, env);
@@ -90,6 +94,10 @@ export default {
       if (route === "GET /api/drafts") {
         const account = await requireAccount(request, env);
         return json({ drafts: await loadDrafts(env, account.id) }, env);
+      }
+      if ((route === "POST /api/drafts/score" || route === "POST /drafts/score")) {
+        const account = await requireAccount(request, env);
+        return json(await scoreDraftWithAi(request, env, account), env);
       }
       if (route === "GET /api/reports") {
         const account = await requireAccount(request, env);
@@ -1906,6 +1914,183 @@ function dashboardRecommendations({ posts, previousPosts, plan }) {
   }
 
   return recommendations.slice(0, 6);
+}
+
+async function generateAiRecommendations(request, env, account) {
+  ensureAiConfigured(env);
+  const requestUrl = new URL(request.url);
+  const section = await dashboardPayload("recommendations", request, env, account);
+  const summary = await dashboardPayload("summary", request, env, account);
+  const media = await dashboardPayload("media-performance", request, env, account);
+  const hashtags = await dashboardPayload("hashtag-performance", request, env, account);
+  const context = aiDecisionContext({
+    account,
+    summary,
+    media,
+    hashtags,
+    recommendations: section.recommendations || []
+  });
+  const strategy = await openAiJson(env, {
+    purpose: "workspace_strategy",
+    system: "You are Metrillix AI, a strategic LinkedIn analytics advisor. Use only the supplied analytics summary. Return concise JSON only. Do not invent metrics, do not mention hidden data, and do not expose implementation details.",
+    user: {
+      task: "Generate a blackbox-style decision strategy for the next LinkedIn company-page post.",
+      output_shape: {
+        headline: "short strategic headline",
+        recommendation: "main next action",
+        why: ["2-4 reasons grounded in the provided data"],
+        next_post_brief: {
+          format: "recommended format",
+          topic_angle: "recommended angle",
+          hook: "suggested opening hook",
+          cta: "suggested CTA",
+          hashtags: ["0-5 hashtags"],
+          timing: "recommended day and hour range"
+        },
+        risks: ["1-3 risks or caveats"],
+        confidence: "early | medium | high"
+      },
+      context
+    }
+  });
+  const decision = await saveAiDecision(env, account.id, {
+    type: "workspace_strategy",
+    filters: section.filters,
+    inputSummary: context,
+    output: strategy,
+    createdAt: new Date().toISOString(),
+    source: "openai"
+  });
+  return { strategy, decisionId: decision.id, generatedAt: decision.createdAt };
+}
+
+async function scoreDraftWithAi(request, env, account) {
+  ensureAiConfigured(env);
+  const body = await readJson(request);
+  const draft = {
+    title: cleanText(body.title, 120),
+    topic: cleanText(body.topic, 240),
+    body: cleanText(body.body, 5000)
+  };
+  if (!draft.topic && !draft.body) throw httpError("Add a draft before scoring it", 400);
+  const syntheticRequest = new Request(`${new URL(request.url).origin}/dashboard/recommendations?range=90`, {
+    headers: request.headers
+  });
+  const section = await dashboardPayload("recommendations", syntheticRequest, env, account);
+  const summary = await dashboardPayload("summary", syntheticRequest, env, account);
+  const media = await dashboardPayload("media-performance", syntheticRequest, env, account);
+  const hashtags = await dashboardPayload("hashtag-performance", syntheticRequest, env, account);
+  const context = aiDecisionContext({
+    account,
+    summary,
+    media,
+    hashtags,
+    recommendations: section.recommendations || []
+  });
+  const score = await openAiJson(env, {
+    purpose: "draft_score",
+    system: "You are Metrillix AI, a LinkedIn draft strategist. Score the draft against the supplied workspace analytics. Return JSON only. Be practical, specific, and concise.",
+    user: {
+      task: "Score this LinkedIn draft and recommend improvements before publishing.",
+      output_shape: {
+        score: "integer 0-100",
+        verdict: "short verdict",
+        strengths: ["1-3 strengths"],
+        improvements: ["2-5 improvements"],
+        suggested_revision: "optional revised draft excerpt",
+        recommended_timing: "best timing from analytics",
+        confidence: "early | medium | high"
+      },
+      draft,
+      context
+    }
+  });
+  const decision = await saveAiDecision(env, account.id, {
+    type: "draft_score",
+    draft: { title: draft.title, topic: draft.topic, bodyExcerpt: truncateForRecommendation(draft.body, 500) },
+    inputSummary: context,
+    output: score,
+    createdAt: new Date().toISOString(),
+    source: "openai"
+  });
+  return { score, decisionId: decision.id, generatedAt: decision.createdAt };
+}
+
+function aiDecisionContext({ account, summary, media, hashtags, recommendations }) {
+  const bestPost = summary.bestPost || null;
+  return {
+    workspace: summary.selectedOrganizationName || account?.name || "LinkedIn workspace",
+    plan: summary.plan?.label || summary.plan?.name || "unknown",
+    post_count: summary.totals?.posts || 0,
+    total_reach: summary.totals?.impressions || 0,
+    total_engagement: summary.totals?.engagement || 0,
+    engagement_rate: roundMetric(summary.totals?.engagementRate),
+    click_through_rate: summary.totals?.clickThroughRate === null ? null : roundMetric(summary.totals?.clickThroughRate),
+    best_media_type: media.mediaPerformance?.[0]?.mediaType || null,
+    best_day: media.postingDays?.[0]?.key || null,
+    best_hour: media.postingHours?.[0]?.key || null,
+    top_hashtags: (hashtags.hashtagPerformance || []).slice(0, 5).map((row) => ({
+      hashtag: row.hashtag,
+      engagement_rate: roundMetric(row.engagementRate),
+      posts: row.posts
+    })),
+    best_posts: bestPost ? [{
+      text_excerpt: truncateForRecommendation(bestPost.text, 220),
+      reach: bestPost.impressions,
+      engagement_rate: roundMetric(bestPost.engagementRate),
+      clicks: bestPost.clicks
+    }] : [],
+    rule_recommendations: (recommendations || []).slice(0, 6).map((item) => ({
+      title: item.title,
+      action: item.action,
+      reason: item.reason,
+      confidence: item.confidence,
+      category: item.category
+    }))
+  };
+}
+
+function ensureAiConfigured(env) {
+  if (!env.OPENAI_API_KEY) throw httpError("AI recommendations are not configured yet.", 503);
+}
+
+async function openAiJson(env, { system, user }) {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      model: env.OPENAI_MODEL || "gpt-4o-mini",
+      messages: [
+        { role: "system", content: `${system} Respond with a single valid JSON object.` },
+        { role: "user", content: JSON.stringify(user) }
+      ],
+      response_format: { type: "json_object" }
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw httpError(payload.error?.message || "AI recommendations are unavailable right now.", response.status);
+  const text = payload.choices?.[0]?.message?.content || "";
+  const parsed = parseMaybeJson(text);
+  if (!parsed) throw httpError("AI returned an unreadable recommendation.", 502);
+  return parsed;
+}
+
+async function saveAiDecision(env, accountId, decision) {
+  const decisions = await loadUserJson(env, userDataKey(accountId, "aiDecisions"), []);
+  const saved = {
+    id: `ai-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    ...decision
+  };
+  await saveUserJson(env, userDataKey(accountId, "aiDecisions"), [saved, ...decisions].slice(0, 50));
+  return saved;
+}
+
+function roundMetric(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? Number(number.toFixed(2)) : 0;
 }
 
 function topPostIdsBy(posts, scoreFn, limit = 3) {

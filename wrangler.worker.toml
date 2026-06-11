@@ -10,5 +10,6 @@ kv_namespaces = [
 LINKEDIN_DEMO_MODE = "false"
 LINKEDIN_VERSION = "202605"
 LINKEDIN_AD_LIBRARY_VERSION = "202605"
+OPENAI_MODEL = "gpt-4o-mini"
 CORS_ORIGIN = "https://metrillix.com"
 PAGES_URL = "https://metrillix.com"

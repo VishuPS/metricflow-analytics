@@ -585,8 +585,10 @@ function AnalyticsDashboardPage() {
               <h2>Recommended next moves</h2>
               <p class="muted">Rules-based decisions from this workspace history.</p>
             </div>
+            <button class="secondary-button" type="button" data-generate-ai-strategy>Generate AI strategy</button>
           </div>
           <div class="decision-list" id="analyticsRecommendations"></div>
+          <div class="ai-result-panel" id="aiStrategyResult" hidden></div>
         </section>
         <section class="analytics-table-grid" id="posts">
           <article class="analytics-panel analytics-wide-panel">
@@ -627,10 +629,12 @@ function CreatePostPage() {
           </div>
           <div class="button-row">
             <button class="primary-button" type="submit">Save draft</button>
+            <button class="secondary-button" type="button" data-score-draft>Score draft</button>
             <button class="secondary-button" type="button" data-new-draft>New draft</button>
             <button class="secondary-button" type="button" data-route="/dashboard">Back to dashboard</button>
           </div>
         </form>
+        <div class="ai-result-panel" id="draftScoreResult" hidden></div>
         <section class="draft-list-panel">
           <div class="section-heading">
             <h2>Saved drafts</h2>
@@ -901,6 +905,109 @@ function renderRecommendations(selector, recommendations) {
       <small>${escapeHtml(item.reason || "")}</small>
     </article>
   `).join("");
+}
+
+async function generateAiStrategy(button) {
+  const target = document.querySelector("#aiStrategyResult");
+  if (!target) return;
+  target.hidden = false;
+  target.innerHTML = `<p class="empty-state">Generating AI strategy.</p>`;
+  button.disabled = true;
+  const previousText = button.textContent;
+  button.textContent = "Generating";
+  try {
+    const query = analyticsQuery().toString();
+    const suffix = query ? `?${query}` : "";
+    const result = await api(`/dashboard/ai-recommendations${suffix}`, { method: "POST" });
+    target.innerHTML = AiStrategyResult(result.strategy);
+  } finally {
+    button.disabled = false;
+    button.textContent = previousText;
+  }
+}
+
+async function scoreCurrentDraft(button) {
+  const form = document.querySelector("[data-draft-form]");
+  const target = document.querySelector("#draftScoreResult");
+  if (!form || !target) return;
+  const data = new FormData(form);
+  const payload = {
+    title: data.get("title"),
+    topic: data.get("topic"),
+    body: data.get("body")
+  };
+  target.hidden = false;
+  target.innerHTML = `<p class="empty-state">Scoring draft with AI.</p>`;
+  button.disabled = true;
+  const previousText = button.textContent;
+  button.textContent = "Scoring";
+  try {
+    const result = await api("/api/drafts/score", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    target.innerHTML = AiDraftScoreResult(result.score);
+  } finally {
+    button.disabled = false;
+    button.textContent = previousText;
+  }
+}
+
+function AiStrategyResult(strategy = {}) {
+  const brief = strategy.next_post_brief || {};
+  return `
+    <article class="ai-card">
+      <div>
+        <span>AI strategy</span>
+        <strong>${escapeHtml(strategy.headline || "Recommended strategy")}</strong>
+        <p>${escapeHtml(strategy.recommendation || "Use the recommendations above as your next content direction.")}</p>
+      </div>
+      ${AiBulletGroup("Why", strategy.why)}
+      <div class="ai-brief-grid">
+        ${AiBriefItem("Format", brief.format)}
+        ${AiBriefItem("Timing", brief.timing)}
+        ${AiBriefItem("Topic angle", brief.topic_angle)}
+        ${AiBriefItem("CTA", brief.cta)}
+      </div>
+      ${brief.hook ? `<p class="ai-hook"><strong>Hook:</strong> ${escapeHtml(brief.hook)}</p>` : ""}
+      ${Array.isArray(brief.hashtags) && brief.hashtags.length ? `<p class="ai-hook"><strong>Hashtags:</strong> ${escapeHtml(brief.hashtags.join(", "))}</p>` : ""}
+      ${AiBulletGroup("Risks", strategy.risks)}
+      <small>${escapeHtml(strategy.confidence || "early")} confidence</small>
+    </article>
+  `;
+}
+
+function AiDraftScoreResult(score = {}) {
+  return `
+    <article class="ai-card">
+      <div>
+        <span>AI draft score</span>
+        <strong>${escapeHtml(score.score ?? "Not scored")}/100</strong>
+        <p>${escapeHtml(score.verdict || "Draft reviewed against workspace history.")}</p>
+      </div>
+      ${AiBulletGroup("Strengths", score.strengths)}
+      ${AiBulletGroup("Improve before publishing", score.improvements)}
+      ${score.suggested_revision ? `<div class="ai-revision"><strong>Suggested revision</strong><p>${escapeHtml(score.suggested_revision)}</p></div>` : ""}
+      ${score.recommended_timing ? `<p class="ai-hook"><strong>Timing:</strong> ${escapeHtml(score.recommended_timing)}</p>` : ""}
+      <small>${escapeHtml(score.confidence || "early")} confidence</small>
+    </article>
+  `;
+}
+
+function AiBulletGroup(title, items) {
+  const values = Array.isArray(items) ? items.filter(Boolean).slice(0, 5) : [];
+  if (!values.length) return "";
+  return `
+    <div class="ai-list">
+      <strong>${escapeHtml(title)}</strong>
+      <ul>${values.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+    </div>
+  `;
+}
+
+function AiBriefItem(label, value) {
+  if (!value) return "";
+  return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
 }
 
 function renderLineChart(selector, rows, key, label, options = {}) {
@@ -1695,6 +1802,34 @@ function wirePageEvents() {
     });
   });
 
+  document.querySelectorAll("[data-generate-ai-strategy]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await generateAiStrategy(button);
+      } catch (error) {
+        const target = document.querySelector("#aiStrategyResult");
+        if (target) {
+          target.hidden = false;
+          target.innerHTML = `<p class="empty-state">${escapeHtml(userMessage(error, "AI strategy is unavailable right now."))}</p>`;
+        }
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-score-draft]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await scoreCurrentDraft(button);
+      } catch (error) {
+        const target = document.querySelector("#draftScoreResult");
+        if (target) {
+          target.hidden = false;
+          target.innerHTML = `<p class="empty-state">${escapeHtml(userMessage(error, "AI draft scoring is unavailable right now."))}</p>`;
+        }
+      }
+    });
+  });
+
   document.querySelectorAll("[data-draft-figure]").forEach((input) => {
     input.addEventListener("change", async () => {
       try {
@@ -1791,6 +1926,9 @@ function userMessage(error, fallback = "Something went wrong. Please try again."
   }
   if (/ad library access unavailable/.test(lower)) {
     return "LinkedIn Ad Library access is unavailable for this account.";
+  }
+  if (/ai recommendations are not configured|openai|ai .*unavailable|ai returned/.test(lower)) {
+    return "AI recommendations are not configured yet. Add the AI API key and try again.";
   }
   if (status === 404) {
     return "This feature is not available yet. Please refresh and try again shortly.";

@@ -1509,6 +1509,78 @@ textarea:focus {
   font-weight: 700;
 }
 
+.ai-result-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.ai-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--blue-soft);
+  border-radius: 8px;
+  padding: 16px;
+  background: #f7fcff;
+}
+
+.ai-card > div:first-child {
+  display: grid;
+  gap: 6px;
+}
+
+.ai-card span,
+.ai-brief-grid span {
+  color: var(--blue-dark);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.ai-card strong {
+  line-height: 1.25;
+}
+
+.ai-card p,
+.ai-card small {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.ai-card > div:first-child p,
+.ai-hook {
+  color: var(--ink);
+}
+
+.ai-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-list ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.ai-brief-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ai-brief-grid div,
+.ai-revision {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--white);
+}
+
 .insight-card {
   display: grid;
   gap: 8px;
@@ -1825,7 +1897,8 @@ textarea:focus {
 
   .analytics-insights,
   .analytics-insight-cards,
-  .decision-list {
+  .decision-list,
+  .ai-brief-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -2021,7 +2094,8 @@ textarea:focus {
   .analytics-table-grid,
   .analytics-insights,
   .analytics-insight-cards,
-  .decision-list {
+  .decision-list,
+  .ai-brief-grid {
     grid-template-columns: 1fr;
   }
 
