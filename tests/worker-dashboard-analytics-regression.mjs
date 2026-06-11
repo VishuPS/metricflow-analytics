@@ -80,6 +80,12 @@ assert.equal(hashtags.hashtagPerformance[0].hashtag, "#growth");
 const insights = await get("/dashboard/insights?range=30");
 assert.ok(insights.insights.length);
 
+const recommendations = await get("/dashboard/recommendations?range=30");
+assert.ok(recommendations.recommendations.length);
+assert.ok(recommendations.recommendations.some((item) => item.id === "recommended-format"));
+assert.ok(recommendations.recommendations.some((item) => item.id === "recommended-time"));
+assert.ok(recommendations.recommendations.every((item) => item.title && item.action && item.reason));
+
 const messyAccountId = "acct_dashboard_messy";
 const messySessionToken = "session_dashboard_messy";
 const messyOrganization = "urn:li:organization:777";
@@ -136,6 +142,11 @@ const messyTopPosts = await getWith("/dashboard/top-posts?range=90", messyEnv, m
 assert.ok(messyTopPosts.byImpressions.length <= 10);
 assert.ok(messyTopPosts.byEngagementRate.length <= 10);
 assert.ok(!messyTopPosts.byImpressions.some((row) => row.postId === "urn:li:share:messy-999"));
+
+const messyRecommendations = await getWith("/dashboard/recommendations?range=90", messyEnv, messyAuth);
+assert.ok(messyRecommendations.recommendations.length >= 4);
+assert.ok(messyRecommendations.recommendations.some((item) => item.confidence === "high"));
+assert.ok(messyRecommendations.recommendations.every((item) => Array.isArray(item.supportingPostIds)));
 
 console.log("PASS worker dashboard analytics aggregation");
 

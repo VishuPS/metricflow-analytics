@@ -579,6 +579,15 @@ function AnalyticsDashboardPage() {
           </article>
         </section>
         <section class="analytics-insight-cards" id="analyticsInsights"></section>
+        <section class="analytics-panel decision-panel">
+          <div class="section-heading">
+            <div>
+              <h2>Recommended next moves</h2>
+              <p class="muted">Rules-based decisions from this workspace history.</p>
+            </div>
+          </div>
+          <div class="decision-list" id="analyticsRecommendations"></div>
+        </section>
         <section class="analytics-table-grid" id="posts">
           <article class="analytics-panel analytics-wide-panel">
             <div class="section-heading"><h2>Top Posts</h2></div>
@@ -790,13 +799,14 @@ async function loadAnalyticsDashboard() {
   const query = analyticsQuery().toString();
   const suffix = query ? `?${query}` : "";
   setAnalyticsLoading();
-  const [summary, timeseries, topPosts, media, hashtags, insights] = await Promise.all([
+  const [summary, timeseries, topPosts, media, hashtags, insights, recommendations] = await Promise.all([
     api(`/dashboard/summary${suffix}`),
     api(`/dashboard/timeseries${suffix}`),
     api(`/dashboard/top-posts${suffix}`),
     api(`/dashboard/media-performance${suffix}`),
     api(`/dashboard/hashtag-performance${suffix}`),
-    api(`/dashboard/insights${suffix}`)
+    api(`/dashboard/insights${suffix}`),
+    api(`/dashboard/recommendations${suffix}`)
   ]);
   if (!summary.connected || !summary.totals.posts) {
     renderAnalyticsEmpty(summary);
@@ -806,6 +816,7 @@ async function loadAnalyticsDashboard() {
   renderPlanCard(summary.plan);
   renderAnalyticsOverview(summary);
   renderAnalyticsInsights(insights.insights || [], media, summary);
+  renderRecommendations("#analyticsRecommendations", recommendations.recommendations || []);
   renderLineChart("#reachChart", timeseries.timeseries || [], "reach", "Reach");
   renderLineChart("#engagementChart", timeseries.timeseries || [], "engagement", "Engagement");
   renderPostsTable("#topPostsTable", topPosts.byImpressions || []);
@@ -813,7 +824,7 @@ async function loadAnalyticsDashboard() {
 
 function setAnalyticsLoading() {
   const loading = `<p class="empty-state">Loading analytics.</p>`;
-  ["#analyticsOverview", "#analyticsInsights", "#reachChart", "#engagementChart", "#topPostsTable"].forEach((selector) => {
+  ["#analyticsOverview", "#analyticsInsights", "#analyticsRecommendations", "#reachChart", "#engagementChart", "#topPostsTable"].forEach((selector) => {
     const element = document.querySelector(selector);
     if (element) element.innerHTML = loading;
   });
@@ -869,6 +880,25 @@ function renderAnalyticsInsights(insights, media = {}, summary = {}) {
       <span>${escapeHtml(title)}</span>
       <strong>${escapeHtml(value)}</strong>
       <p>${escapeHtml(detail)}</p>
+    </article>
+  `).join("");
+}
+
+function renderRecommendations(selector, recommendations) {
+  const target = document.querySelector(selector);
+  if (!target) return;
+  if (!recommendations.length) {
+    target.innerHTML = `<p class="empty-state">Sync more LinkedIn posts to generate recommendations.</p>`;
+    return;
+  }
+  target.innerHTML = recommendations.map((item) => `
+    <article class="decision-card">
+      <div>
+        <span>${escapeHtml(uiTitleCase(item.category || "decision"))} / ${escapeHtml(item.confidence || "early")} confidence</span>
+        <strong>${escapeHtml(item.title || "Recommendation")}</strong>
+        <p>${escapeHtml(item.action || "")}</p>
+      </div>
+      <small>${escapeHtml(item.reason || "")}</small>
     </article>
   `).join("");
 }
@@ -1252,9 +1282,12 @@ async function loadPageInspiration() {
   if (!list) return;
   list.innerHTML = `<p class="empty-state">Loading your page signals.</p>`;
   try {
-    const state = dashboardState || await loadDashboardState();
+    const [state, recommendationResult] = await Promise.all([
+      dashboardState || loadDashboardState(),
+      api("/dashboard/recommendations?range=90").catch(() => ({ recommendations: [] }))
+    ]);
     const posts = state.postRankings || state.posts || [];
-    list.innerHTML = PageInspirationResults(posts);
+    list.innerHTML = PageInspirationResults(posts, recommendationResult.recommendations || []);
   } catch (error) {
     list.innerHTML = `<p class="empty-state">${escapeHtml(userMessage(error, "Unable to load page signals."))}</p>`;
   }
@@ -1333,7 +1366,7 @@ function AdSourceLinks(ads) {
   `;
 }
 
-function PageInspirationResults(posts) {
+function PageInspirationResults(posts, recommendations = []) {
   const insights = buildPageInspirationInsights(posts);
   if (!posts.length) {
     return `
@@ -1354,6 +1387,23 @@ function PageInspirationResults(posts) {
   }
   return `
     <div class="ad-insight-panel">
+      ${recommendations.length ? `
+        <section class="ad-insight-group">
+          <h3>Recommended next moves</h3>
+          <div class="decision-list compact">
+            ${recommendations.slice(0, 3).map((item) => `
+              <article class="decision-card">
+                <div>
+                  <span>${escapeHtml(uiTitleCase(item.category || "decision"))} / ${escapeHtml(item.confidence || "early")} confidence</span>
+                  <strong>${escapeHtml(item.title || "Recommendation")}</strong>
+                  <p>${escapeHtml(item.action || "")}</p>
+                </div>
+                <small>${escapeHtml(item.reason || "")}</small>
+              </article>
+            `).join("")}
+          </div>
+        </section>
+      ` : ""}
       <div class="ad-insight-header">
         <strong>Your page signals from ${insights.sourceCount} synced post${insights.sourceCount === 1 ? "" : "s"}</strong>
         <span>Weighted by post performance where available</span>
@@ -1711,6 +1761,10 @@ function escapeAttribute(value) {
     "\"": "&quot;",
     "'": "&#39;"
   }[char]));
+}
+
+function uiTitleCase(value) {
+  return String(value || "").replace(/[-_]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function userMessage(error, fallback = "Something went wrong. Please try again.") {

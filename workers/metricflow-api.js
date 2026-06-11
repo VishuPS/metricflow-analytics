@@ -67,7 +67,7 @@ export default {
         const account = await requireAccount(request, env);
         return json(await userStatePayload(env, account.id), env);
       }
-      const dashboardRoute = url.pathname.match(/^\/(?:api\/)?dashboard\/(summary|timeseries|top-posts|media-performance|hashtag-performance|insights)$/);
+      const dashboardRoute = url.pathname.match(/^\/(?:api\/)?dashboard\/(summary|timeseries|top-posts|media-performance|hashtag-performance|insights|recommendations)$/);
       if (request.method === "GET" && dashboardRoute) {
         const account = await requireAccount(request, env);
         return json(await dashboardPayload(dashboardRoute[1], request, env, account), env);
@@ -1539,6 +1539,7 @@ async function dashboardPayload(section, request, env, account) {
   if (section === "media-performance") return { filters, plan, mediaPerformance: dashboardMediaPerformance(posts), postingDays: bestPostingDays(posts), postingHours: bestPostingHours(posts) };
   if (section === "hashtag-performance") return { filters, plan, hashtagPerformance: dashboardHashtagPerformance(posts) };
   if (section === "insights") return { filters, plan, insights: dashboardInsights(context) };
+  if (section === "recommendations") return { filters, plan, recommendations: dashboardRecommendations(context) };
   return { filters, plan };
 }
 
@@ -1775,6 +1776,149 @@ function dashboardInsights({ posts, previousPosts, plan }) {
     insights.push({ title: `Engagement rate is ${direction}`, detail: `Your engagement rate is ${direction} compared with the previous period.` });
   }
   return insights.slice(0, 6);
+}
+
+function dashboardRecommendations({ posts, previousPosts, plan }) {
+  if (!posts.length) {
+    return [{
+      id: "connect-and-sync",
+      title: "Sync LinkedIn posts first",
+      action: "Connect LinkedIn and run Sync Data before using recommendations.",
+      reason: "Metrillix needs post history before it can make workspace-specific decisions.",
+      confidence: "setup",
+      category: "setup",
+      supportingPostIds: []
+    }];
+  }
+
+  const recommendations = [];
+  const media = dashboardMediaPerformance(posts);
+  const bestMedia = media[0];
+  const days = bestPostingDays(posts);
+  const hours = bestPostingHours(posts);
+  const hashtags = dashboardHashtagPerformance(posts);
+  const bestPost = [...posts].sort((a, b) => postScore(b) - postScore(a))[0] || null;
+  const questionPosts = posts.filter((post) => postTextValue(post).includes("?"));
+  const nonQuestionPosts = posts.filter((post) => !postTextValue(post).includes("?"));
+  const questionComments = average(questionPosts.map((post) => postComments(post)));
+  const nonQuestionComments = average(nonQuestionPosts.map((post) => postComments(post)));
+  const currentTotals = postTotals(posts);
+  const previousTotals = postTotals(previousPosts);
+  const currentRate = currentTotals.impressions ? (currentTotals.engagement / currentTotals.impressions) * 100 : 0;
+  const previousRate = previousTotals.impressions ? (previousTotals.engagement / previousTotals.impressions) * 100 : 0;
+  const confidence = posts.length >= 25 ? "high" : posts.length >= 8 ? "medium" : "early";
+
+  if (bestMedia) {
+    recommendations.push({
+      id: "recommended-format",
+      title: `Use ${titleCase(bestMedia.mediaType)} as the next format`,
+      action: `Create the next post as a ${bestMedia.mediaType} post.`,
+      reason: `${titleCase(bestMedia.mediaType)} has the strongest engagement rate in this period.`,
+      confidence,
+      category: "format",
+      metric: {
+        label: "Engagement rate",
+        value: Number(bestMedia.engagementRate.toFixed(2))
+      },
+      supportingPostIds: topPostIdsBy(posts.filter((post) => postMediaType(post) === bestMedia.mediaType), postScore, 3)
+    });
+  }
+
+  if (days[0] && hours[0]) {
+    recommendations.push({
+      id: "recommended-time",
+      title: `Post on ${days[0].key}`,
+      action: `Schedule or publish near ${hours[0].key} on ${days[0].key}.`,
+      reason: "That day and hour range produced the strongest historical engagement rate.",
+      confidence,
+      category: "timing",
+      metric: {
+        label: "Best hour engagement rate",
+        value: Number(hours[0].engagementRate.toFixed(2))
+      },
+      supportingPostIds: []
+    });
+  }
+
+  if (questionPosts.length >= 2 && questionComments > nonQuestionComments) {
+    recommendations.push({
+      id: "question-cta",
+      title: "Use a question CTA",
+      action: "End the next draft with a simple question to invite comments.",
+      reason: `Question posts average ${Number(questionComments.toFixed(1))} comments versus ${Number(nonQuestionComments.toFixed(1))} for other posts.`,
+      confidence,
+      category: "copy",
+      supportingPostIds: topPostIdsBy(questionPosts, postComments, 3)
+    });
+  }
+
+  if (hashtags[0]) {
+    const topTags = hashtags.slice(0, 3).map((row) => row.hashtag);
+    recommendations.push({
+      id: "hashtag-set",
+      title: "Reuse proven hashtags carefully",
+      action: `Try ${topTags.join(", ")} when relevant.`,
+      reason: "These hashtags appear in your strongest recent page posts.",
+      confidence,
+      category: "hashtags",
+      supportingPostIds: []
+    });
+  }
+
+  if (bestPost) {
+    recommendations.push({
+      id: "model-best-post",
+      title: "Model the next draft on your best post",
+      action: `Use a similar structure to "${truncateForRecommendation(postTextValue(bestPost), 72)}".`,
+      reason: `It generated ${postImpressions(bestPost).toLocaleString()} reach and ${Number(postEngagementRate(bestPost).toFixed(2))}% engagement rate.`,
+      confidence,
+      category: "content",
+      supportingPostIds: [bestPost.post_id || bestPost.id || ""].filter(Boolean)
+    });
+  }
+
+  if (previousPosts.length) {
+    recommendations.push({
+      id: "momentum-check",
+      title: currentRate >= previousRate ? "Double down on current themes" : "Refresh the next post angle",
+      action: currentRate >= previousRate ? "Continue using the current top-performing themes and formats." : "Test a clearer hook, stronger visual, or different format in the next post.",
+      reason: `Engagement rate is ${currentRate >= previousRate ? "improving" : "declining"} compared with the previous period.`,
+      confidence,
+      category: "trend",
+      metric: {
+        label: "Engagement rate",
+        value: Number(currentRate.toFixed(2))
+      },
+      supportingPostIds: []
+    });
+  }
+
+  if (posts.length < 8) {
+    recommendations.push({
+      id: "collect-more-history",
+      title: "Treat recommendations as early signals",
+      action: "Sync more posts before making major content decisions.",
+      reason: `Only ${posts.length} post${posts.length === 1 ? "" : "s"} are available in this period.`,
+      confidence: "early",
+      category: "data-quality",
+      supportingPostIds: []
+    });
+  }
+
+  return recommendations.slice(0, 6);
+}
+
+function topPostIdsBy(posts, scoreFn, limit = 3) {
+  return [...posts]
+    .sort((a, b) => scoreFn(b) - scoreFn(a))
+    .slice(0, limit)
+    .map((post) => post.post_id || post.id || "")
+    .filter(Boolean);
+}
+
+function truncateForRecommendation(value, limit) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > limit ? `${text.slice(0, limit - 1)}...` : text;
 }
 
 function postTotals(posts) {
