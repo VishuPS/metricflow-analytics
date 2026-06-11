@@ -1450,7 +1450,8 @@ function linkedInDate(value) {
 function linkedInDateOrNull(value) {
   if (!value) return null;
   const date = Number.isFinite(Number(value)) ? new Date(Number(value)) : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  if (Number.isNaN(date.getTime()) || date.getUTCFullYear() < 2000) return null;
+  return date.toISOString();
 }
 
 function demoLinkedInPosts() {

@@ -1492,10 +1492,21 @@ function normalizeCountryInput(value) {
 }
 
 function dateRangeLabel(ad) {
-  const first = formatDateTime(ad.firstImpressionDate);
-  const latest = formatDateTime(ad.latestImpressionDate);
-  if (first && latest && first !== "Unknown" && latest !== "Unknown") return `${first} - ${latest}`;
-  return "Dates unavailable";
+  const first = formatAdDate(ad.firstImpressionDate);
+  const latest = formatAdDate(ad.latestImpressionDate);
+  if (first && latest && first !== latest) return `${first} - ${latest}`;
+  if (first || latest) return first || latest;
+  return "Impression dates unavailable";
+}
+
+function formatAdDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime()) || date.getUTCFullYear() < 2000) return "";
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
 }
 
 function impressionRange(ad) {

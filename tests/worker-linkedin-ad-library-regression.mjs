@@ -42,7 +42,7 @@ globalThis.fetch = async (url, options = {}) => {
   assert.equal(options.headers["x-restli-protocol-version"], "2.0.0");
   assert.equal(options.headers["linkedin-version"], "202605");
   return jsonResponse({
-    paging: { start: 0, count: 6, total: 1 },
+    paging: { start: 0, count: 6, total: 2 },
     elements: [{
       adUrl: "https://www.linkedin.com/ad-library/detail/123",
       details: {
@@ -64,6 +64,17 @@ globalThis.fetch = async (url, options = {}) => {
         }
       },
       isRestricted: false
+    }, {
+      adUrl: "https://www.linkedin.com/ad-library/detail/placeholder-date",
+      details: {
+        advertiser: { localizedName: "Placeholder Date Advertiser" },
+        adType: "SPONSORED_UPDATE",
+        statistics: {
+          firstImpressionDate: "0",
+          latestImpressionDate: 0
+        }
+      },
+      isRestricted: false
     }]
   });
 };
@@ -79,7 +90,7 @@ try {
   assert.ok(adLibraryUrls[0].includes("q=criteria"));
   assert.ok(adLibraryUrls[0].includes("keyword=marketing+automation") || adLibraryUrls[0].includes("keyword=marketing%20automation"));
   assert.ok(adLibraryUrls[0].includes("countries=List(GB,US)"));
-  assert.equal(body.ads.length, 1);
+  assert.equal(body.ads.length, 2);
   assert.deepEqual(body.ads[0], {
     adUrl: "https://www.linkedin.com/ad-library/detail/123",
     adType: "SPONSORED_UPDATE",
@@ -94,6 +105,8 @@ try {
     latestImpressionDate: "2024-02-01T00:00:00.000Z",
     isRestricted: false
   });
+  assert.equal(body.ads[1].firstImpressionDate, null);
+  assert.equal(body.ads[1].latestImpressionDate, null);
   assert.equal(kv.writes.length, 0, "ad library responses are not persisted");
   console.log("PASS worker LinkedIn Ad Library inspiration");
 } finally {
