@@ -39,6 +39,10 @@ function clearSession() {
   localStorage.removeItem(sessionKey);
 }
 
+function hasActiveSession() {
+  return Boolean(session.email || session.accountId || session.token);
+}
+
 function showToast(message) {
   toast.textContent = message;
   toast.classList.add("show");
@@ -193,7 +197,7 @@ function TopNav({ right = "login" } = {}) {
 
   return `
     <header class="top-nav">
-      <a class="brand-link" href="/" data-route="/" aria-label="Metrillix home">
+      <a class="brand-link" href="/" data-route="/" data-brand-home aria-label="Metrillix home">
         <img class="brand-logo" src="/assets/metric-flow-logo.png?v=20260525-metrillix-logo" alt="Metrillix">
       </a>
       <nav>${links}</nav>
@@ -478,6 +482,7 @@ function Dashboard() {
         <div class="dashboard-actions">
           <button class="primary-button" data-sync-linkedin>Sync Data</button>
           <button class="secondary-button" data-route="/create-post">Create Post</button>
+          <button class="secondary-button" data-route="/dashboard/analytics">Dashboard View</button>
           <details class="workspace-menu">
             <summary>Workspace Actions</summary>
             <div>
@@ -1713,7 +1718,7 @@ function userMessage(error, fallback = "Something went wrong. Please try again."
   if (/api route not found|route not found|worker api|publishing backend|backend is not deployed|not deployed/.test(lower)) {
     return "This feature is still being updated. Please try again shortly.";
   }
-  if (/field value validation failed|param validation|data processing exception|restli|ugc posts api|social actions api|analytics api|organization lookup|linkedin .*api/.test(lower)) {
+  if (/multiple errors occurred|field value validation failed|param validation|parameter|data processing exception|restli|ugc posts api|social actions api|analytics api|organization lookup|linkedin .*api/.test(lower)) {
     return "LinkedIn could not complete this request. Reconnect LinkedIn or choose another company page, then try again.";
   }
   if (/organization selection required|select a linkedin page|missing linkedin organization|organization is not available/.test(lower)) {
@@ -1722,7 +1727,16 @@ function userMessage(error, fallback = "Something went wrong. Please try again."
   if (/ad library access unavailable/.test(lower)) {
     return "LinkedIn Ad Library access is unavailable for this account.";
   }
-  if (/request failed|server error|internal error|fetch failed|networkerror|failed to fetch/.test(lower)) {
+  if (status === 404) {
+    return "This feature is not available yet. Please refresh and try again shortly.";
+  }
+  if (status === 429 || /rate limit|too many requests/.test(lower)) {
+    return "Too many requests right now. Please wait a minute and try again.";
+  }
+  if (status >= 500 || /request failed|server error|internal error|exception|stack|trace|fetch failed|networkerror|failed to fetch/.test(lower)) {
+    return fallback;
+  }
+  if (status >= 400 && /json|syntax|undefined|null|object object|bad request|invalid request/.test(lower)) {
     return fallback;
   }
   return message;
@@ -1745,6 +1759,10 @@ async function handleAppClick(event) {
   const routeTarget = event.target.closest("[data-route]");
   if (routeTarget) {
     event.preventDefault();
+    if (routeTarget.closest("[data-brand-home]") && hasActiveSession() && window.location.pathname !== "/") {
+      const confirmed = window.confirm("Do you want to leave your dashboard and go to the public homepage?");
+      if (!confirmed) return;
+    }
     navigate(routeTarget.dataset.route);
     return;
   }
