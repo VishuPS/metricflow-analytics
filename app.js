@@ -884,7 +884,7 @@ function renderAnalyticsOverview(summary) {
     ["Avg Engagement", formatPercent(totals.engagementRate), summary.deltas?.engagementRate],
     ["Rate", totals.clickThroughRate === null ? "No clicks" : formatPercent(totals.clickThroughRate), null],
     ["Posts", formatNumber(totals.posts), summary.deltas?.posts],
-    ["Followers", formatNumber(totals.followerGrowth), null]
+    ["Follower Growth", formatNumber(totals.followerGrowth), null]
   ];
   target.innerHTML = cards.map(([label, value, delta]) => `
     <article class="analytics-card">
