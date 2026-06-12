@@ -5,6 +5,7 @@ const appUrl = window.METRICFLOW_CLOUDFLARE_APP_URL || window.location.origin;
 const sessionKey = "metricflow.session";
 const cookieConsentKey = "metrillix.cookieConsent";
 const previousPathKey = "metrillix.previousPath";
+const themePreferenceKey = "metrillix.theme";
 
 let session = readSession();
 let dashboardState = null;
@@ -27,6 +28,30 @@ const routes = {
 
 function readSession() {
   return JSON.parse(localStorage.getItem(sessionKey) || "null") || {};
+}
+
+function systemTheme() {
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function currentTheme() {
+  return localStorage.getItem(themePreferenceKey) || systemTheme();
+}
+
+function applyTheme(theme = currentTheme()) {
+  const nextTheme = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = nextTheme;
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+    button.textContent = nextTheme === "dark" ? "Light mode" : "Dark mode";
+    button.setAttribute("aria-label", `Switch to ${nextTheme === "dark" ? "light" : "dark"} mode`);
+    button.setAttribute("aria-pressed", String(nextTheme === "dark"));
+  });
+}
+
+function toggleTheme() {
+  const nextTheme = currentTheme() === "dark" ? "light" : "dark";
+  localStorage.setItem(themePreferenceKey, nextTheme);
+  applyTheme(nextTheme);
 }
 
 function saveSession(nextSession) {
@@ -183,14 +208,16 @@ async function loadDashboardState() {
 }
 
 function TopNav({ right = "login" } = {}) {
+  const themeButton = `<button class="theme-toggle" type="button" data-theme-toggle aria-pressed="${currentTheme() === "dark"}">${currentTheme() === "dark" ? "Light mode" : "Dark mode"}</button>`;
   const links = right === "dashboard"
-    ? `<button class="nav-link" data-route="/dashboard">Dashboard</button><button class="nav-link" data-logout>Log out</button>`
+    ? `<button class="nav-link" data-route="/dashboard">Dashboard</button>${themeButton}<button class="nav-link" data-logout>Log out</button>`
     : `
       <button class="nav-link" data-route="/">Home</button>
       <a class="nav-link" href="#about">About</a>
       <a class="nav-link" href="#privacy">Privacy Policy</a>
       <a class="nav-link" href="#terms">Terms</a>
       <button class="nav-link" data-route="/cookie-policy">Cookies</button>
+      ${themeButton}
       <button class="nav-link" data-route="/login">Log In</button>
       <button class="nav-signup" data-route="/signup">Sign Up</button>
     `;
@@ -1946,6 +1973,12 @@ function userMessage(error, fallback = "Something went wrong. Please try again."
 }
 
 async function handleAppClick(event) {
+  if (event.target.closest("[data-theme-toggle]")) {
+    event.preventDefault();
+    toggleTheme();
+    return;
+  }
+
   if (event.target.closest("[data-accept-cookies]")) {
     localStorage.setItem(cookieConsentKey, "accepted");
     renderCookieBanner();
@@ -2134,8 +2167,10 @@ function organizationName(organization) {
 }
 
 async function render() {
+  applyTheme();
   const path = window.location.pathname;
   const route = routes[path] ? path : "/";
+  document.body.dataset.page = route === "/" ? "home" : "app";
   const isPrivate = route.startsWith("/dashboard") || route === "/create-post";
 
   if (isPrivate && !session.email && !session.accountId) {
@@ -2146,6 +2181,7 @@ async function render() {
   }
 
   app.innerHTML = routes[route]();
+  applyTheme();
 
   wirePageEvents();
 
@@ -2162,6 +2198,10 @@ async function render() {
 
 window.addEventListener("popstate", render);
 document.addEventListener("click", handleAppClick);
+window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", () => {
+  if (!localStorage.getItem(themePreferenceKey)) applyTheme(systemTheme());
+});
+applyTheme();
 captureOAuthReturn();
 render();
 
