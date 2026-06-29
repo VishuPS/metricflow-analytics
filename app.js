@@ -214,6 +214,7 @@ function TopNav({ right = "login" } = {}) {
     : `
       <button class="nav-link" data-route="/">Home</button>
       <a class="nav-link" href="#about">About</a>
+      <a class="nav-link" href="#pricing">Pricing</a>
       <a class="nav-link" href="#privacy">Privacy Policy</a>
       <a class="nav-link" href="#terms">Terms</a>
       <button class="nav-link" data-route="/cookie-policy">Cookies</button>
@@ -225,7 +226,7 @@ function TopNav({ right = "login" } = {}) {
   return `
     <header class="top-nav">
       <a class="brand-link" href="/" data-route="/" data-brand-home aria-label="Metrillix home">
-        <img class="brand-logo" src="/assets/metric-flow-logo.png?v=20260525-metrillix-logo" alt="Metrillix">
+        <img class="brand-logo" src="/assets/metric-flow-logo-small.png?v=20260618-light-logo" alt="Metrillix">
       </a>
       <nav>${links}</nav>
     </header>
@@ -239,8 +240,8 @@ function BackButton({ fallback = "/" } = {}) {
 function WelcomePage() {
   return `
     ${TopNav()}
-    <main class="marketing-page">
-      <section class="front-hero" id="home">
+    <main class="simple-home">
+      <section class="simple-hero" id="home">
         <h1>Analytics for LinkedIn, Simplified</h1>
         <p>Track LinkedIn company page performance with clean, actionable insights for founders, creators, and marketing teams.</p>
         <div class="hero-actions">
@@ -249,55 +250,82 @@ function WelcomePage() {
         </div>
       </section>
 
-      <section class="front-section" id="features">
-        <div class="section-intro">
-          <p class="eyebrow">Features</p>
-          <h2>Understand what works, what grows, and what deserves your next move.</h2>
-        </div>
-        <div class="feature-grid">
-          <article class="feature-card">
-            <span class="feature-placeholder">01</span>
-            <h3>Post Performance Insights</h3>
-            <p>See which company page posts resonate with your audience. Track impressions, clicks, reactions, comments, and shares in one place.</p>
-          </article>
-          <article class="feature-card">
-            <span class="feature-placeholder">02</span>
-            <h3>Audience Growth Tracking</h3>
-            <p>Understand how your page audience is evolving and what content appears to support growth over time.</p>
-          </article>
-          <article class="feature-card">
-            <span class="feature-placeholder">03</span>
-            <h3>Engagement Analytics</h3>
-            <p>Measure engagement quality, identify trends, and discover the content formats that consistently perform best.</p>
-          </article>
-        </div>
-      </section>
-
-      <section class="front-section about-section" id="about">
-        <p class="eyebrow">About Us</p>
+      <section class="simple-section" id="about">
         <h2>Metrillix helps professionals understand their LinkedIn impact.</h2>
         <p>We built Metrillix for businesses that want simple LinkedIn page analytics without digging through scattered reports. Metrillix turns authorized company page data into clear insights for content planning, performance review, and publishing decisions.</p>
       </section>
 
-      <section class="front-section policy-section" id="privacy">
-        <p class="eyebrow">Privacy Policy</p>
+      <section class="simple-section pricing-section" id="pricing">
+        <div class="pricing-heading">
+          <div>
+            <p class="eyebrow">Pricing</p>
+            <h2>Start free. Upgrade when LinkedIn becomes a growth channel.</h2>
+          </div>
+          <p>Every paid subscription starts with 1 month free. No long-term contract, no setup fee.</p>
+        </div>
+        <div class="pricing-grid">
+          <article class="pricing-card">
+            <div>
+              <span class="plan-label">Free</span>
+              <h3>Starter</h3>
+              <p>For testing Metrillix with one LinkedIn company page.</p>
+            </div>
+            <div class="plan-price"><strong>$0</strong><span>/month</span></div>
+            <ul>
+              <li>Basic LinkedIn page overview</li>
+              <li>Recent post performance</li>
+              <li>Limited analytics history</li>
+              <li>Manual sync</li>
+            </ul>
+            <button class="secondary-button full" data-route="/signup">Start free</button>
+          </article>
+          <article class="pricing-card featured">
+            <div>
+              <span class="plan-label">1 month free</span>
+              <h3>Growth</h3>
+              <p>For founders, creators, and small teams publishing consistently.</p>
+            </div>
+            <div class="plan-price"><strong>$9.99</strong><span>/month</span></div>
+            <ul>
+              <li>Full 90-day analytics history</li>
+              <li>Best posts and trend analysis</li>
+              <li>Content recommendations</li>
+              <li>Draft workspace</li>
+            </ul>
+            <button class="primary-button full" data-route="/signup">Try Growth free</button>
+          </article>
+          <article class="pricing-card">
+            <div>
+              <span class="plan-label">1 month free</span>
+              <h3>Pro</h3>
+              <p>For teams that want AI guidance and a deeper content workflow.</p>
+            </div>
+            <div class="plan-price"><strong>$19.99</strong><span>/month</span></div>
+            <ul>
+              <li>Unlimited analytics history</li>
+              <li>AI strategy recommendations</li>
+              <li>AI draft scoring</li>
+              <li>Market inspiration signals</li>
+            </ul>
+            <button class="primary-button full" data-route="/signup">Try Pro free</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="simple-section" id="privacy">
+        <h2>Privacy Policy</h2>
         <p>Metrillix only uses the data you authorize through LinkedIn OAuth for company pages you manage. We do not access personal messages, personal profile analytics, or pages you have not selected. We do not sell your analytics data, and each Metrillix account is kept separate from other accounts.</p>
       </section>
 
-      <section class="front-section policy-section" id="terms">
-        <p class="eyebrow">Terms of Service</p>
+      <section class="simple-section" id="terms">
+        <h2>Terms of Service</h2>
         <p>By using Metrillix, you agree to connect only LinkedIn company pages you are authorized to manage and to use the platform in line with LinkedIn's API terms. Drafts and page analytics remain inside your account unless you choose to publish a draft to LinkedIn.</p>
       </section>
-
-      <section class="front-cta">
-        <h2>Start analyzing your LinkedIn today</h2>
-        <p>Create your account and connect your LinkedIn Page in seconds.</p>
-        <button class="primary-button" data-route="/signup">Create Account</button>
-      </section>
     </main>
-    <footer class="front-footer">
+    <footer class="simple-footer">
       <nav>
         <a href="#about">About Us</a>
+        <a href="#pricing">Pricing</a>
         <a href="#privacy">Privacy Policy</a>
         <a href="#terms">Terms of Service</a>
         <button class="footer-link" data-route="/cookie-policy">Cookie Policy</button>
@@ -2172,10 +2200,14 @@ async function render() {
   const route = routes[path] ? path : "/";
   document.body.dataset.page = route === "/" ? "home" : "app";
   const isPrivate = route.startsWith("/dashboard") || route === "/create-post";
+  document.body.dataset.publicPage = String(!isPrivate);
 
   if (isPrivate && !session.email && !session.accountId) {
     window.history.replaceState({}, "", "/login");
+    document.body.dataset.page = "app";
+    document.body.dataset.publicPage = "true";
     app.innerHTML = LoginPage();
+    applyTheme();
     wirePageEvents();
     return;
   }
