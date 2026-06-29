@@ -261,7 +261,6 @@ function WelcomePage() {
             <p class="eyebrow">Pricing</p>
             <h2>Start free. Upgrade when LinkedIn becomes a growth channel.</h2>
           </div>
-          <p>Every paid subscription starts with 1 month free. No long-term contract, no setup fee.</p>
         </div>
         <div class="pricing-grid">
           <article class="pricing-card">
@@ -310,6 +309,7 @@ function WelcomePage() {
             <button class="primary-button full" data-route="/signup">Try Pro free</button>
           </article>
         </div>
+        <p class="pricing-note">Every paid subscription starts with 1 month free. No long-term contract, no setup fee.</p>
       </section>
 
       <section class="simple-section" id="privacy">
