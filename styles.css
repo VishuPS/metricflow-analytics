@@ -967,7 +967,7 @@ h2 {
   margin-right: auto;
 }
 
-.pricing-note {
+.simple-section .pricing-note {
   max-width: 560px;
   margin: 28px auto 0;
   color: var(--public-muted);
@@ -976,7 +976,7 @@ h2 {
 }
 
 .pricing-heading p,
-.pricing-note {
+.simple-section .pricing-note {
   margin-left: auto;
   margin-right: auto;
 }
