@@ -46,6 +46,8 @@
   --public-secondary-text: #071a33;
   --public-accent: var(--blue-dark);
   --public-accent-soft: var(--blue-soft);
+  --public-star-primary: rgba(7, 26, 51, 0.28);
+  --public-star-accent: rgba(23, 199, 215, 0.34);
   --public-shadow: 0 16px 34px rgba(7, 26, 51, 0.08);
   --shadow: 0 4px 14px rgba(7, 26, 51, 0.08);
   --shadow-soft: 0 2px 8px rgba(7, 26, 51, 0.06);
@@ -94,6 +96,8 @@
     --public-secondary-text: #eaf8ff;
     --public-accent: #57e8ff;
     --public-accent-soft: rgba(39, 220, 232, 0.14);
+    --public-star-primary: rgba(234, 248, 255, 0.72);
+    --public-star-accent: rgba(87, 232, 255, 0.84);
     --public-shadow: 0 16px 34px rgba(0, 0, 0, 0.22);
     --shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
     --shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.22);
@@ -140,6 +144,8 @@
   --public-secondary-text: #eaf8ff;
   --public-accent: #57e8ff;
   --public-accent-soft: rgba(39, 220, 232, 0.14);
+  --public-star-primary: rgba(234, 248, 255, 0.72);
+  --public-star-accent: rgba(87, 232, 255, 0.84);
   --public-shadow: 0 16px 34px rgba(0, 0, 0, 0.22);
   --shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
   --shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.22);
@@ -664,6 +670,11 @@ h2 {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .simple-home::before,
+  .simple-home::after {
+    animation: none;
+  }
+
   .primary-button,
   .secondary-button,
   .analytics-card,
@@ -818,6 +829,9 @@ h2 {
 }
 
 .simple-home {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   min-height: calc(100vh - 72px);
   background:
     linear-gradient(var(--public-bg-grid) 1px, transparent 1px),
@@ -829,8 +843,58 @@ h2 {
   color: var(--public-text);
 }
 
+.simple-home::before,
+.simple-home::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.simple-home::before {
+  background:
+    radial-gradient(circle, var(--public-star-primary) 0 1px, transparent 1.7px) 18px 24px / 128px 128px,
+    radial-gradient(circle, var(--public-star-accent) 0 1.2px, transparent 2px) 72px 88px / 184px 184px,
+    radial-gradient(circle, var(--public-star-primary) 0 0.8px, transparent 1.6px) 34px 112px / 96px 96px;
+  opacity: 0.62;
+  animation: publicStarDrift 42s linear infinite;
+}
+
+.simple-home::after {
+  background:
+    radial-gradient(circle, var(--public-star-accent) 0 1.3px, transparent 2.2px) 12% 18% / 220px 220px,
+    radial-gradient(circle, var(--public-star-primary) 0 1px, transparent 2px) 72% 42% / 260px 260px;
+  opacity: 0.42;
+  animation: publicStarTwinkle 5.6s ease-in-out infinite alternate;
+}
+
+@keyframes publicStarDrift {
+  from {
+    background-position: 18px 24px, 72px 88px, 34px 112px;
+  }
+
+  to {
+    background-position: 178px 154px, 252px 228px, 130px 208px;
+  }
+}
+
+@keyframes publicStarTwinkle {
+  from {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0.62;
+    transform: translateY(-10px);
+  }
+}
+
 .simple-hero,
 .simple-section {
+  position: relative;
+  z-index: 1;
   width: min(880px, calc(100% - 40px));
   margin: 0 auto;
 }
@@ -838,9 +902,11 @@ h2 {
 .simple-hero {
   display: grid;
   align-content: center;
+  justify-items: center;
   gap: 20px;
   min-height: 520px;
   padding: 56px 0;
+  text-align: center;
 }
 
 .simple-hero h1 {
@@ -864,14 +930,17 @@ h2 {
 }
 
 .simple-section {
+  display: grid;
+  justify-items: center;
   scroll-margin-top: 88px;
   border-top: 1px solid var(--public-border);
   padding: 52px 0;
+  text-align: center;
 }
 
 .simple-section h2 {
   max-width: 640px;
-  margin: 0 0 14px;
+  margin: 0 auto 14px;
   color: var(--public-heading);
   font-size: 28px;
   line-height: 1.2;
@@ -884,13 +953,16 @@ h2 {
 .pricing-heading {
   display: flex;
   align-items: end;
-  justify-content: space-between;
+  justify-content: center;
   gap: 28px;
   margin-bottom: 28px;
+  text-align: center;
 }
 
 .pricing-heading p {
   max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .pricing-grid {
@@ -908,6 +980,7 @@ h2 {
   border-radius: var(--radius);
   padding: 24px;
   background: var(--public-card-bg);
+  text-align: left;
 }
 
 .pricing-card.featured {
