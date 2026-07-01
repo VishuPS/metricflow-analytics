@@ -262,7 +262,7 @@ function WelcomePage() {
             <h2>Start free. Upgrade when LinkedIn becomes a growth channel.</h2>
           </div>
         </div>
-        <div class="pricing-grid">
+        <div class="pricing-grid core-pricing-grid">
           <article class="pricing-card">
             <div>
               <span class="plan-label">Free</span>
@@ -288,28 +288,35 @@ function WelcomePage() {
             <ul>
               <li>Full 90-day analytics history</li>
               <li>Best posts and trend analysis</li>
-              <li>Content recommendations</li>
+              <li>Performance-based content planning</li>
               <li>Draft workspace</li>
             </ul>
             <button class="primary-button full" data-route="/signup">Try Growth free</button>
           </article>
-          <article class="pricing-card">
-            <div>
-              <span class="plan-label">1 month free</span>
-              <h3>Pro</h3>
-              <p>For teams that want AI guidance and a deeper content workflow.</p>
-            </div>
-            <div class="plan-price"><strong>$19.99</strong><span>/month</span></div>
-            <ul>
-              <li>Unlimited analytics history</li>
-              <li>AI strategy recommendations</li>
-              <li>AI draft scoring</li>
-              <li>Market inspiration signals</li>
-            </ul>
-            <button class="primary-button full" data-route="/signup">Try Pro free</button>
-          </article>
         </div>
         <p class="pricing-note">Every paid subscription starts with 1 month free. No long-term contract, no setup fee.</p>
+      </section>
+
+      <section class="simple-section ai-coming-soon-section" id="ai-coming-soon">
+        <div class="ai-coming-soon">
+          <div class="ai-coming-soon-copy">
+            <p class="eyebrow">Coming Soon</p>
+            <h2>AI-powered analytics are being built into Metrillix.</h2>
+            <p>Upcoming premium tools will turn your LinkedIn history into strategy briefs, draft feedback, and recommendation signals designed for better publishing decisions.</p>
+            <div class="ai-coming-soon-actions">
+              <button class="primary-button" data-route="/signup">Join the waitlist</button>
+              <a class="secondary-button" href="mailto:hello@metrillix.com?subject=Metrillix%20AI%20updates">Get updates</a>
+            </div>
+          </div>
+          <div class="ai-coming-soon-panel" aria-label="Upcoming AI features">
+            <span>Premium feature preview</span>
+            <ul>
+              <li>Strategy recommendations from your strongest posts</li>
+              <li>Draft quality signals before you publish</li>
+              <li>Content opportunities based on audience response</li>
+            </ul>
+          </div>
+        </div>
       </section>
 
       <section class="simple-section" id="privacy">
@@ -640,10 +647,13 @@ function AnalyticsDashboardPage() {
               <h2>Recommended next moves</h2>
               <p class="muted">Rules-based decisions from this workspace history.</p>
             </div>
-            <button class="secondary-button" type="button" data-generate-ai-strategy>Generate AI strategy</button>
           </div>
           <div class="decision-list" id="analyticsRecommendations"></div>
-          <div class="ai-result-panel" id="aiStrategyResult" hidden></div>
+          <article class="dashboard-coming-soon">
+            <span>Coming Soon</span>
+            <strong>AI recommendations are on the way</strong>
+            <p>Premium strategy briefs and next-post recommendations will appear here once the AI analytics layer is ready.</p>
+          </article>
         </section>
         <section class="analytics-table-grid" id="posts">
           <article class="analytics-panel analytics-wide-panel">
@@ -684,12 +694,15 @@ function CreatePostPage() {
           </div>
           <div class="button-row">
             <button class="primary-button" type="submit">Save draft</button>
-            <button class="secondary-button" type="button" data-score-draft>Score draft</button>
             <button class="secondary-button" type="button" data-new-draft>New draft</button>
             <button class="secondary-button" type="button" data-route="/dashboard">Back to dashboard</button>
           </div>
         </form>
-        <div class="ai-result-panel" id="draftScoreResult" hidden></div>
+        <article class="dashboard-coming-soon dashboard-coming-soon-compact">
+          <span>Coming Soon</span>
+          <strong>AI draft feedback is planned for premium workspaces</strong>
+          <p>Draft scoring, hook ideas, and timing signals will be added here when the feature is ready.</p>
+        </article>
         <section class="draft-list-panel">
           <div class="section-heading">
             <h2>Saved drafts</h2>
