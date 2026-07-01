@@ -534,15 +534,10 @@ function PublicFooter() {
   return `
     <footer class="simple-footer">
       <nav>
-        <button class="footer-link" data-route="/about">About</button>
-        <button class="footer-link" data-route="/features">Features</button>
-        <button class="footer-link" data-route="/pricing">Pricing</button>
         <a href="/#privacy" data-route="/#privacy">Privacy Policy</a>
         <a href="/#terms" data-route="/#terms">Terms of Service</a>
         <button class="footer-link" data-route="/cookie-policy">Cookie Policy</button>
-        <a href="mailto:hello@metrillix.com">Contact</a>
       </nav>
-      <p>Copyright 2026 Metrillix - LinkedIn Analytics for Professionals</p>
     </footer>
   `;
 }

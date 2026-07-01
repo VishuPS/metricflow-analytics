@@ -1709,7 +1709,7 @@ h2 {
 
 .simple-footer {
   border-top: 1px solid var(--public-border);
-  padding: 24px 20px;
+  padding: 18px 20px;
   background: var(--public-footer-bg);
   color: var(--public-footer-text);
   text-align: center;
@@ -1718,29 +1718,19 @@ h2 {
 .simple-footer nav {
   display: flex;
   justify-content: center;
-  gap: 18px;
+  gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
 }
 
 .simple-footer a,
 .simple-footer .footer-link {
   color: var(--public-accent);
-}
-
-.footer-link {
   border: 0;
   padding: 0;
   background: transparent;
-  color: var(--public-accent);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.front-footer p {
-  margin: 0;
-  color: var(--public-footer-text);
   font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
 }
 
 .policy-page {
