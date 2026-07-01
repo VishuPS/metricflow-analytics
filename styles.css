@@ -260,6 +260,7 @@ button {
 .inline-link {
   color: var(--public-text);
   font-weight: 700;
+  text-decoration: none;
 }
 
 .nav-link:hover,
