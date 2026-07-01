@@ -1892,7 +1892,7 @@ function wirePageEvents() {
         const target = document.querySelector("#draftScoreResult");
         if (target) {
           target.hidden = false;
-          target.innerHTML = `<p class="empty-state">${escapeHtml(userMessage(error, "AI draft scoring is unavailable right now."))}</p>`;
+          target.innerHTML = `<p class="empty-state">${escapeHtml(userMessage(error, "Draft feedback is unavailable right now."))}</p>`;
         }
       }
     });
