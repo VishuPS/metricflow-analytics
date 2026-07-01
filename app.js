@@ -551,7 +551,7 @@ function WelcomePage() {
         <p>Track your LinkedIn Company Page performance with clear, actionable insights designed for founders, creators, marketing teams, and growing businesses.</p>
         <div class="hero-actions">
           <button class="primary-button" data-route="/signup">Get Started</button>
-          <a class="secondary-button" href="#dashboard-preview">View Dashboard</a>
+          <a class="secondary-button" href="#dashboard-preview">View Sample Dashboard</a>
         </div>
       </section>
 
