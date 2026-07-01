@@ -15,6 +15,7 @@ let currentDraftFigure = null;
 
 const routes = {
   "/": WelcomePage,
+  "/about": AboutPage,
   "/signup": SignupPage,
   "/login": LoginPage,
   "/forgot-password": ForgotPasswordPage,
@@ -80,15 +81,70 @@ function showError(error, fallback = "Something went wrong. Please try again.") 
 }
 
 function navigate(path, { trackPrevious = true } = {}) {
+  const [targetPath, hash = ""] = path.split("#");
+  const nextPath = targetPath || "/";
   if (trackPrevious && window.location.pathname !== path) {
     sessionStorage.setItem(previousPathKey, window.location.pathname);
   }
-  const shouldScrollTop = path === "/" || window.location.pathname === path;
-  window.history.pushState({}, "", path);
+  const shouldScrollTop = !hash && (nextPath === "/" || window.location.pathname === nextPath);
+  window.history.pushState({}, "", hash ? `${nextPath}#${hash}` : nextPath);
   render();
+  if (hash) {
+    window.requestAnimationFrame(() => scrollToSection(hash));
+    return;
+  }
   if (shouldScrollTop) {
     window.requestAnimationFrame(() => window.scrollTo(0, 0));
   }
+}
+
+function scrollToSection(id) {
+  const target = document.getElementById(id);
+  if (target) target.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
+function setPageMeta(route) {
+  const meta = {
+    "/": {
+      title: "Metrillix | LinkedIn Analytics, Simplified",
+      description: "Track LinkedIn Company Page performance with clear dashboards, trends, top posts, publishing insights, and a simple draft workspace."
+    },
+    "/about": {
+      title: "About Metrillix | Built for Better LinkedIn Analytics",
+      description: "Learn why Metrillix was built to make LinkedIn Company Page analytics clearer, simpler, and more secure for professionals."
+    },
+    "/cookie-policy": {
+      title: "Cookie Policy | Metrillix",
+      description: "How Metrillix uses essential cookies for secure login, dashboard sessions, and account preferences."
+    },
+    "/login": {
+      title: "Log In | Metrillix",
+      description: "Log in to your Metrillix analytics workspace."
+    },
+    "/signup": {
+      title: "Sign Up | Metrillix",
+      description: "Create a Metrillix account and start exploring LinkedIn Company Page analytics."
+    },
+    "/forgot-password": {
+      title: "Reset Password | Metrillix",
+      description: "Request a secure password reset link for your Metrillix account."
+    },
+    "/reset-password": {
+      title: "Set New Password | Metrillix",
+      description: "Set a new password for your Metrillix analytics workspace."
+    }
+  }[route] || {
+    title: "Metrillix",
+    description: "LinkedIn Company Page analytics for clearer content decisions."
+  };
+  document.title = meta.title;
+  let description = document.querySelector('meta[name="description"]');
+  if (!description) {
+    description = document.createElement("meta");
+    description.name = "description";
+    document.head.appendChild(description);
+  }
+  description.content = meta.description;
 }
 
 function navigateBack(fallback = "/") {
@@ -213,10 +269,10 @@ function TopNav({ right = "login" } = {}) {
     ? `<button class="nav-link" data-route="/dashboard">Dashboard</button>${themeButton}<button class="nav-link" data-logout>Log out</button>`
     : `
       <button class="nav-link" data-route="/">Home</button>
-      <a class="nav-link" href="#about">About</a>
-      <a class="nav-link" href="#pricing">Pricing</a>
-      <a class="nav-link" href="#privacy">Privacy Policy</a>
-      <a class="nav-link" href="#terms">Terms</a>
+      <button class="nav-link" data-route="/about">About</button>
+      <a class="nav-link" href="/#pricing" data-route="/#pricing">Pricing</a>
+      <a class="nav-link" href="/#privacy" data-route="/#privacy">Privacy Policy</a>
+      <a class="nav-link" href="/#terms" data-route="/#terms">Terms</a>
       <button class="nav-link" data-route="/cookie-policy">Cookies</button>
       ${themeButton}
       <button class="nav-link" data-route="/login">Log In</button>
@@ -237,109 +293,403 @@ function BackButton({ fallback = "/" } = {}) {
   return `<div class="page-back-row"><button class="back-button" type="button" data-back data-back-fallback="${escapeAttribute(fallback)}">Back</button></div>`;
 }
 
-function WelcomePage() {
+function SectionHeader({ eyebrow = "", title, text = "" }) {
   return `
-    ${TopNav()}
-    <main class="simple-home">
-      <section class="simple-hero" id="home">
-        <h1>Analytics for LinkedIn, Simplified</h1>
-        <p>Track LinkedIn company page performance with clean, actionable insights for founders, creators, and marketing teams.</p>
-        <div class="hero-actions">
-          <button class="primary-button" data-route="/signup">Get Started</button>
-          <button class="text-button" data-route="/login">Log In</button>
-        </div>
-      </section>
+    <div class="section-header reveal">
+      ${eyebrow ? `<p class="eyebrow">${escapeHtml(eyebrow)}</p>` : ""}
+      <h2>${escapeHtml(title)}</h2>
+      ${text ? `<p>${escapeHtml(text)}</p>` : ""}
+    </div>
+  `;
+}
 
-      <section class="simple-section" id="about">
-        <h2>Metrillix helps professionals understand their LinkedIn impact.</h2>
-        <p>We built Metrillix for businesses that want simple LinkedIn page analytics without digging through scattered reports. Metrillix turns authorized company page data into clear insights for content planning, performance review, and publishing decisions.</p>
-      </section>
+function FeatureCard({ title, text, label = "" }) {
+  return `
+    <article class="feature-card reveal">
+      ${label ? `<span>${escapeHtml(label)}</span>` : ""}
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+    </article>
+  `;
+}
 
-      <section class="simple-section pricing-section" id="pricing">
-        <div class="pricing-heading">
-          <div>
-            <p class="eyebrow">Pricing</p>
-            <h2>Start free. Upgrade when LinkedIn becomes a growth channel.</h2>
+function TrustCard({ title, text }) {
+  return `
+    <article class="trust-card reveal">
+      <strong>${escapeHtml(title)}</strong>
+      <p>${escapeHtml(text)}</p>
+    </article>
+  `;
+}
+
+function MetricCard({ label, value, detail = "" }) {
+  return `
+    <article class="mock-metric-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
+    </article>
+  `;
+}
+
+function FAQItem({ question, answer }) {
+  return `
+    <details class="faq-item reveal">
+      <summary>${escapeHtml(question)}</summary>
+      <p>${escapeHtml(answer)}</p>
+    </details>
+  `;
+}
+
+function PricingCard({ label, name, description, price, features, featured = false, buttonText }) {
+  return `
+    <article class="pricing-card ${featured ? "featured" : ""} reveal">
+      <div>
+        <span class="plan-label">${escapeHtml(label)}</span>
+        <h3>${escapeHtml(name)}</h3>
+        <p>${escapeHtml(description)}</p>
+      </div>
+      <div class="plan-price"><strong>${escapeHtml(price)}</strong><span>/month</span></div>
+      <ul>
+        ${features.map((feature) => `<li>${escapeHtml(feature)}</li>`).join("")}
+      </ul>
+      <button class="${featured ? "primary-button" : "secondary-button"} full" data-route="/signup">${escapeHtml(buttonText)}</button>
+    </article>
+  `;
+}
+
+function CTASection({ title, text, primary = "Get Started", secondary = "Contact" }) {
+  return `
+    <section class="simple-section cta-section reveal">
+      <div>
+        <p class="eyebrow">Start now</p>
+        <h2>${escapeHtml(title)}</h2>
+        <p>${escapeHtml(text)}</p>
+      </div>
+      <div class="hero-actions">
+        <button class="primary-button" data-route="/signup">${escapeHtml(primary)}</button>
+        <a class="secondary-button" href="mailto:hello@metrillix.com">${escapeHtml(secondary)}</a>
+      </div>
+    </section>
+  `;
+}
+
+function DashboardPreview() {
+  return `
+    <figure class="dashboard-preview reveal" aria-label="Metrillix dashboard preview">
+      <div class="preview-glow" aria-hidden="true"></div>
+      <figcaption>
+        <span>Dashboard preview</span>
+        <strong>LinkedIn performance at a glance</strong>
+      </figcaption>
+      <div class="mock-dashboard-grid">
+        ${MetricCard({ label: "Follower growth", value: "+18.4%", detail: "Last 30 days" })}
+        ${MetricCard({ label: "Best day", value: "Tuesday", detail: "Highest engagement" })}
+        ${MetricCard({ label: "Best hour", value: "10 AM", detail: "Most consistent reach" })}
+        <article class="mock-chart mock-chart-large">
+          <div><span>Reach trend</span><strong>42.8K</strong></div>
+          <svg viewBox="0 0 420 150" role="img" aria-label="Mock reach trend chart">
+            <path class="chart-grid-line" d="M0 118H420M0 82H420M0 46H420"></path>
+            <path class="chart-line chart-line-primary" d="M8 118 C58 92 76 110 118 76 S190 38 236 62 312 96 410 24"></path>
+            <g class="data-points">
+              <circle cx="118" cy="76" r="5"></circle>
+              <circle cx="236" cy="62" r="5"></circle>
+              <circle cx="410" cy="24" r="5"></circle>
+            </g>
+          </svg>
+        </article>
+        <article class="mock-chart">
+          <div><span>Engagement trend</span><strong>7.6%</strong></div>
+          <svg viewBox="0 0 260 130" role="img" aria-label="Mock engagement trend chart">
+            <path class="chart-grid-line" d="M0 100H260M0 66H260M0 32H260"></path>
+            <path class="chart-line chart-line-secondary" d="M6 96 C44 64 72 86 104 54 S166 24 204 48 230 70 254 34"></path>
+          </svg>
+        </article>
+        <article class="mock-table">
+          <div><span>Top posts</span><strong>Best performers</strong></div>
+          <p><span>Founder update</span><b>12.4K reach</b></p>
+          <p><span>Product lesson</span><b>8.8K reach</b></p>
+          <p><span>Customer story</span><b>6.1K reach</b></p>
+        </article>
+        <article class="mock-draft">
+          <span>Draft workspace</span>
+          <strong>3 posts planned</strong>
+          <p>Organize future LinkedIn posts beside your performance data.</p>
+        </article>
+        <article class="mock-ai">
+          <span>Coming Soon</span>
+          <strong>AI insights placeholder</strong>
+          <p>Strategy recommendations, draft feedback, and content opportunities.</p>
+        </article>
+      </div>
+      <span class="mock-callout callout-reach">Reach trend</span>
+      <span class="mock-callout callout-posts">Top content</span>
+      <span class="mock-callout callout-drafts">Draft workspace</span>
+    </figure>
+  `;
+}
+
+function PricingSection() {
+  return `
+    <section class="simple-section pricing-section" id="pricing">
+      ${SectionHeader({
+        eyebrow: "Pricing",
+        title: "Start free. Upgrade when LinkedIn becomes a growth channel.",
+        text: "Every paid subscription starts with 1 month free. No long-term contract, no setup fee."
+      })}
+      <div class="pricing-grid core-pricing-grid">
+        ${PricingCard({
+          label: "Free",
+          name: "Starter",
+          description: "Perfect for exploring Metrillix with one LinkedIn Company Page.",
+          price: "$0",
+          features: ["One LinkedIn Company Page", "Basic page overview", "Recent post analytics", "Manual synchronization"],
+          buttonText: "Start free"
+        })}
+        ${PricingCard({
+          label: "1 month free",
+          name: "Growth",
+          description: "Designed for businesses publishing consistently.",
+          price: "$9.99",
+          features: ["Full historical analytics", "Trend analysis", "Performance insights", "Draft workspace", "Priority updates"],
+          featured: true,
+          buttonText: "Try Growth free"
+        })}
+      </div>
+    </section>
+  `;
+}
+
+function ComingSoonSection() {
+  return `
+    <section class="simple-section ai-coming-soon-section" id="ai-coming-soon">
+      <div class="ai-coming-soon reveal">
+        <div class="ai-coming-soon-copy">
+          <p class="eyebrow">Coming Soon</p>
+          <h2>The next generation of Metrillix is already under development.</h2>
+          <p>Future premium capabilities will bring AI-powered recommendations, publishing quality analysis, audience behavior insights, performance forecasting, intelligent strategy reports, and smart content opportunities.</p>
+          <div class="ai-coming-soon-actions">
+            <button class="primary-button" data-route="/signup">Join the waitlist</button>
+            <a class="secondary-button" href="mailto:hello@metrillix.com?subject=Metrillix%20AI%20updates">Get updates</a>
           </div>
         </div>
-        <div class="pricing-grid core-pricing-grid">
-          <article class="pricing-card">
-            <div>
-              <span class="plan-label">Free</span>
-              <h3>Starter</h3>
-              <p>For testing Metrillix with one LinkedIn company page.</p>
-            </div>
-            <div class="plan-price"><strong>$0</strong><span>/month</span></div>
-            <ul>
-              <li>Basic LinkedIn page overview</li>
-              <li>Recent post performance</li>
-              <li>Limited analytics history</li>
-              <li>Manual sync</li>
-            </ul>
-            <button class="secondary-button full" data-route="/signup">Start free</button>
-          </article>
-          <article class="pricing-card featured">
-            <div>
-              <span class="plan-label">1 month free</span>
-              <h3>Growth</h3>
-              <p>For founders, creators, and small teams publishing consistently.</p>
-            </div>
-            <div class="plan-price"><strong>$9.99</strong><span>/month</span></div>
-            <ul>
-              <li>Full 90-day analytics history</li>
-              <li>Best posts and trend analysis</li>
-              <li>Performance-based content planning</li>
-              <li>Draft workspace</li>
-            </ul>
-            <button class="primary-button full" data-route="/signup">Try Growth free</button>
-          </article>
+        <div class="ai-coming-soon-panel" aria-label="Upcoming AI features">
+          <span>Premium feature preview</span>
+          <ul>
+            <li>AI-powered content recommendations</li>
+            <li>Publishing quality analysis</li>
+            <li>Performance forecasting</li>
+            <li>Intelligent strategy reports</li>
+          </ul>
         </div>
-        <p class="pricing-note">Every paid subscription starts with 1 month free. No long-term contract, no setup fee.</p>
-      </section>
+      </div>
+    </section>
+  `;
+}
 
-      <section class="simple-section ai-coming-soon-section" id="ai-coming-soon">
-        <div class="ai-coming-soon">
-          <div class="ai-coming-soon-copy">
-            <p class="eyebrow">Coming Soon</p>
-            <h2>AI-powered analytics are being built into Metrillix.</h2>
-            <p>Upcoming premium tools will turn your LinkedIn history into strategy briefs, draft feedback, and recommendation signals designed for better publishing decisions.</p>
-            <div class="ai-coming-soon-actions">
-              <button class="primary-button" data-route="/signup">Join the waitlist</button>
-              <a class="secondary-button" href="mailto:hello@metrillix.com?subject=Metrillix%20AI%20updates">Get updates</a>
-            </div>
-          </div>
-          <div class="ai-coming-soon-panel" aria-label="Upcoming AI features">
-            <span>Premium feature preview</span>
-            <ul>
-              <li>Strategy recommendations from your strongest posts</li>
-              <li>Draft quality signals before you publish</li>
-              <li>Content opportunities based on audience response</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <section class="simple-section" id="privacy">
-        <h2>Privacy Policy</h2>
-        <p>Metrillix only uses the data you authorize through LinkedIn OAuth for company pages you manage. We do not access personal messages, personal profile analytics, or pages you have not selected. We do not sell your analytics data, and each Metrillix account is kept separate from other accounts.</p>
-      </section>
-
-      <section class="simple-section" id="terms">
-        <h2>Terms of Service</h2>
-        <p>By using Metrillix, you agree to connect only LinkedIn company pages you are authorized to manage and to use the platform in line with LinkedIn's API terms. Drafts and page analytics remain inside your account unless you choose to publish a draft to LinkedIn.</p>
-      </section>
-    </main>
+function PublicFooter() {
+  return `
     <footer class="simple-footer">
       <nav>
-        <a href="#about">About Us</a>
-        <a href="#pricing">Pricing</a>
-        <a href="#privacy">Privacy Policy</a>
-        <a href="#terms">Terms of Service</a>
+        <button class="footer-link" data-route="/about">About Us</button>
+        <a href="/#pricing" data-route="/#pricing">Pricing</a>
+        <a href="/#privacy" data-route="/#privacy">Privacy Policy</a>
+        <a href="/#terms" data-route="/#terms">Terms of Service</a>
         <button class="footer-link" data-route="/cookie-policy">Cookie Policy</button>
         <a href="mailto:hello@metrillix.com">Contact</a>
       </nav>
       <p>Copyright 2026 Metrillix - LinkedIn Analytics for Professionals</p>
     </footer>
+  `;
+}
+
+function WelcomePage() {
+  return `
+    ${TopNav()}
+    <main class="simple-home">
+      <section class="simple-hero" id="home">
+        <h1>LinkedIn Analytics, Simplified.</h1>
+        <p>Track your LinkedIn Company Page performance with clear, actionable insights designed for founders, creators, marketing teams, and growing businesses.</p>
+        <div class="hero-actions">
+          <button class="primary-button" data-route="/signup">Get Started</button>
+          <a class="secondary-button" href="#dashboard-preview">View Dashboard</a>
+        </div>
+      </section>
+
+      <section class="simple-section split-section" id="why-metrillix">
+        ${SectionHeader({
+          eyebrow: "Why Metrillix",
+          title: "Focus on insights instead of scattered reports.",
+          text: "Metrillix transforms your LinkedIn analytics into intuitive dashboards that help you understand performance, identify trends, and make smarter publishing decisions."
+        })}
+        <div class="feature-grid three-card-grid">
+          ${FeatureCard({ label: "01", title: "Bring metrics together", text: "See reach, engagement, follower growth, and post activity in one workspace." })}
+          ${FeatureCard({ label: "02", title: "Spot what resonates", text: "Identify stronger posts and patterns without manually comparing reports." })}
+          ${FeatureCard({ label: "03", title: "Plan with clarity", text: "Use performance signals to support better publishing decisions." })}
+        </div>
+      </section>
+
+      <section class="simple-section wide-section" id="features">
+        ${SectionHeader({
+          eyebrow: "Everything You Need",
+          title: "Understand your LinkedIn performance without the busywork.",
+          text: "Clean analytics for page performance, historical trends, top content, publishing patterns, and draft planning."
+        })}
+        <div class="feature-grid">
+          ${FeatureCard({ title: "Performance Dashboard", text: "Monitor impressions, reach, engagement, follower growth, and post activity from one centralized dashboard." })}
+          ${FeatureCard({ title: "Historical Trends", text: "Visualize performance over time with charts that reveal long-term patterns and growth." })}
+          ${FeatureCard({ title: "Top Performing Content", text: "Quickly identify the posts that resonate most with your audience." })}
+          ${FeatureCard({ title: "Publishing Insights", text: "Discover useful timing patterns and evaluate your content consistency." })}
+          ${FeatureCard({ title: "Draft Workspace", text: "Organize and prepare future LinkedIn posts in one dedicated workspace." })}
+          ${FeatureCard({ title: "AI-Powered Insights", text: "Future AI capabilities will help transform analytics into actionable publishing recommendations.", label: "Coming Soon" })}
+        </div>
+      </section>
+
+      <section class="simple-section dashboard-preview-section" id="dashboard-preview">
+        ${SectionHeader({
+          eyebrow: "See Your Data Differently",
+          title: "A dashboard designed for confident content decisions.",
+          text: "From engagement curves and reach history to top-performing posts and publishing patterns, every chart is designed to make trends easier to understand."
+        })}
+        ${DashboardPreview()}
+      </section>
+
+      <section class="simple-section split-section" id="simplicity">
+        ${SectionHeader({
+          eyebrow: "Built Around Simplicity",
+          title: "Analytics software should reduce complexity.",
+          text: "Metrillix focuses on the metrics that matter most through a clean interface designed for everyday use."
+        })}
+        <div class="trust-grid">
+          ${TrustCard({ title: "Minutes, not hours", text: "Review page health quickly without exporting reports into spreadsheets." })}
+          ${TrustCard({ title: "One page or many", text: "Built for professionals managing a single Company Page today and more complex workflows tomorrow." })}
+          ${TrustCard({ title: "Clear next steps", text: "Turn performance history into practical planning signals." })}
+        </div>
+      </section>
+
+      <section class="simple-section" id="privacy">
+        ${SectionHeader({
+          eyebrow: "Secure by Design",
+          title: "Your privacy is fundamental.",
+          text: "Metrillix connects securely using LinkedIn OAuth and only accesses the Company Pages you explicitly authorize. We never access personal messages, private conversations, or personal profile analytics."
+        })}
+      </section>
+
+      ${PricingSection()}
+      ${ComingSoonSection()}
+
+      <section class="simple-section" id="terms">
+        <h2>Terms of Service</h2>
+        <p>By using Metrillix, you agree to connect only LinkedIn company pages you are authorized to manage and to use the platform in line with LinkedIn's API terms. Drafts and page analytics remain inside your account unless you choose to publish a draft to LinkedIn.</p>
+      </section>
+
+      ${CTASection({
+        title: "Start understanding your LinkedIn performance with clarity.",
+        text: "Connect your Company Page in minutes and begin exploring analytics designed to support better content decisions."
+      })}
+    </main>
+    ${PublicFooter()}
+  `;
+}
+
+function AboutPage() {
+  return `
+    ${TopNav()}
+    <main class="simple-home about-page">
+      <section class="simple-hero about-hero">
+        <p class="eyebrow">About Metrillix</p>
+        <h1>Built for Better LinkedIn Analytics.</h1>
+        <p>Metrillix was created to make LinkedIn Company Page analytics easier to understand by bringing performance data together into one focused workspace.</p>
+        <div class="hero-actions">
+          <button class="primary-button" data-route="/signup">Get Started</button>
+          <a class="secondary-button" href="/#pricing" data-route="/#pricing">View Pricing</a>
+        </div>
+      </section>
+
+      <section class="simple-section split-section">
+        ${SectionHeader({
+          eyebrow: "Our Mission",
+          title: "Make meaningful analytics accessible.",
+          text: "Our mission is to help organizations understand the impact of their LinkedIn presence through accessible, meaningful analytics."
+        })}
+        <p class="section-support reveal">We believe insights should be clear, actionable, and available to everyone - not only experienced marketers or data analysts.</p>
+      </section>
+
+      <section class="simple-section split-section">
+        ${SectionHeader({
+          eyebrow: "Why Metrillix Exists",
+          title: "LinkedIn reporting should not feel fragmented.",
+          text: "Many businesses publish regularly on LinkedIn but struggle to interpret performance using isolated metrics, manual comparisons, and spreadsheet exports."
+        })}
+        <div class="trust-grid">
+          ${TrustCard({ title: "Less switching", text: "Bring page analytics, trends, and post performance into a single workspace." })}
+          ${TrustCard({ title: "Less guessing", text: "Understand what is changing over time with clear visual patterns." })}
+          ${TrustCard({ title: "Less manual work", text: "Review performance without rebuilding reports by hand." })}
+        </div>
+      </section>
+
+      <section class="simple-section wide-section">
+        ${SectionHeader({
+          eyebrow: "What Makes Metrillix Different",
+          title: "Clarity, simplicity, insights, security, and growth.",
+          text: "Metrillix is designed around the metrics that matter most, with a product direction that stays focused on useful analytics."
+        })}
+        <div class="feature-grid">
+          ${FeatureCard({ title: "Clarity", text: "Clean dashboards designed around the LinkedIn metrics professionals actually review." })}
+          ${FeatureCard({ title: "Simplicity", text: "Understand performance without navigating complex reporting tools." })}
+          ${FeatureCard({ title: "Insights", text: "Transform raw analytics into useful information for better publishing decisions." })}
+          ${FeatureCard({ title: "Security", text: "OAuth authentication and strict access controls keep your data protected." })}
+          ${FeatureCard({ title: "Growth", text: "Designed to evolve with smarter recommendations and richer reporting." })}
+          ${FeatureCard({ title: "Focus", text: "Built specifically for LinkedIn Company Page analytics and content planning." })}
+        </div>
+      </section>
+
+      <section class="simple-section split-section">
+        ${SectionHeader({
+          eyebrow: "Built for Professionals",
+          title: "For teams that need clearer LinkedIn performance signals.",
+          text: "Metrillix supports startups, small businesses, marketing teams, agencies, founders, content creators, and organizations managing LinkedIn Company Pages."
+        })}
+      </section>
+
+      <section class="simple-section split-section">
+        ${SectionHeader({
+          eyebrow: "Looking Ahead",
+          title: "A clearer analytics platform, with smarter features coming.",
+          text: "Future releases will introduce AI-assisted analytics, smarter publishing guidance, collaboration tools, and richer performance reporting while maintaining simplicity and clarity."
+        })}
+      </section>
+
+      <section class="simple-section">
+        ${SectionHeader({
+          eyebrow: "Security and Privacy",
+          title: "Company Page access only.",
+          text: "Metrillix connects securely using LinkedIn OAuth and only accesses the Company Pages you explicitly authorize. We never access personal messages, private conversations, or personal profile analytics."
+        })}
+      </section>
+
+      <section class="simple-section faq-section">
+        ${SectionHeader({
+          eyebrow: "FAQ",
+          title: "Frequently Asked Questions",
+          text: "Quick answers for teams evaluating Metrillix."
+        })}
+        <div class="faq-list">
+          ${FAQItem({ question: "Do I need LinkedIn Premium?", answer: "No. Metrillix works with authorized LinkedIn Company Pages and does not require a LinkedIn Premium subscription." })}
+          ${FAQItem({ question: "Does Metrillix access my personal LinkedIn profile?", answer: "No. Metrillix only accesses Company Page data that you explicitly authorize through LinkedIn OAuth." })}
+          ${FAQItem({ question: "Is my data secure?", answer: "Yes. Authentication is handled securely through LinkedIn OAuth, and your analytics remain isolated within your account." })}
+          ${FAQItem({ question: "Can I disconnect my LinkedIn account?", answer: "Yes. You can revoke access at any time through your LinkedIn account settings." })}
+          ${FAQItem({ question: "Will AI features cost extra?", answer: "Some advanced AI capabilities may be included in future premium plans. Existing subscribers will receive updates as features become available." })}
+          ${FAQItem({ question: "Who is Metrillix for?", answer: "Metrillix is designed for businesses, founders, agencies, creators, and marketing teams who manage LinkedIn Company Pages." })}
+        </div>
+      </section>
+
+      ${CTASection({
+        title: "Ready to make LinkedIn analytics easier?",
+        text: "Start with Metrillix and explore a cleaner way to understand your Company Page performance."
+      })}
+    </main>
+    ${PublicFooter()}
   `;
 }
 
@@ -2211,6 +2561,7 @@ async function render() {
   applyTheme();
   const path = window.location.pathname;
   const route = routes[path] ? path : "/";
+  setPageMeta(route);
   document.body.dataset.page = route === "/" ? "home" : "app";
   const isPrivate = route.startsWith("/dashboard") || route === "/create-post";
   document.body.dataset.publicPage = String(!isPrivate);
@@ -2229,6 +2580,9 @@ async function render() {
   applyTheme();
 
   wirePageEvents();
+  if (window.location.hash && !isPrivate) {
+    window.requestAnimationFrame(() => scrollToSection(window.location.hash.slice(1)));
+  }
 
   try {
     if (route === "/dashboard/onboarding") await hydrateOnboarding();
