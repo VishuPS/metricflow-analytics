@@ -2469,7 +2469,42 @@ async function publishLinkedInDraft(env, accountId, draft) {
   const responseText = await response.text();
   const responsePayload = parseMaybeJson(responseText);
   if (response.status === 401) throw httpError("Reconnect LinkedIn before publishing", 401);
-  if (response.status === 403) throw httpError("LinkedIn publishing unavailable. Reconnect LinkedIn and confirm the selected page allows organization posting.", 403);
+  if (response.status === 403 && !media.length) {
+    return publishLinkedInUgcTextPost(token.accessToken, organizationUrn, commentary);
+  }
+  if (response.status === 403) throw httpError(linkedInPublishPermissionMessage(), 403);
+  if (!response.ok) throw httpError(responsePayload?.message || responseText || "LinkedIn publish failed", response.status);
+  const postUrn = response.headers.get("x-restli-id") || responsePayload?.id || "";
+  return {
+    postUrn,
+    postUrl: postUrn ? `https://www.linkedin.com/feed/update/${encodeURIComponent(postUrn)}` : "",
+    raw: responsePayload || {}
+  };
+}
+
+async function publishLinkedInUgcTextPost(accessToken, organizationUrn, commentary) {
+  const payload = {
+    author: organizationUrn,
+    lifecycleState: "PUBLISHED",
+    specificContent: {
+      "com.linkedin.ugc.ShareContent": {
+        shareCommentary: { text: commentary },
+        shareMediaCategory: "NONE"
+      }
+    },
+    visibility: {
+      "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+    }
+  };
+  const response = await fetch("https://api.linkedin.com/v2/ugcPosts", {
+    method: "POST",
+    headers: linkedInUgcWriteHeaders(accessToken),
+    body: JSON.stringify(payload)
+  });
+  const responseText = await response.text();
+  const responsePayload = parseMaybeJson(responseText);
+  if (response.status === 401) throw httpError("Reconnect LinkedIn before publishing", 401);
+  if (response.status === 403) throw httpError(linkedInPublishPermissionMessage(), 403);
   if (!response.ok) throw httpError(responsePayload?.message || responseText || "LinkedIn publish failed", response.status);
   const postUrn = response.headers.get("x-restli-id") || responsePayload?.id || "";
   return {
@@ -2513,6 +2548,18 @@ function linkedInWriteHeaders(accessToken, env) {
     "linkedin-version": linkedInMarketingVersion(env),
     "x-restli-protocol-version": "2.0.0"
   };
+}
+
+function linkedInUgcWriteHeaders(accessToken) {
+  return {
+    authorization: `Bearer ${accessToken}`,
+    "content-type": "application/json",
+    "x-restli-protocol-version": "2.0.0"
+  };
+}
+
+function linkedInPublishPermissionMessage() {
+  return "LinkedIn denied publishing permission for this Company Page. Sync can still work without publish permission. Reconnect LinkedIn to grant posting access, and confirm the LinkedIn app has the organization posting product enabled.";
 }
 
 function cleanLinkedInCommentary(value) {
@@ -2569,6 +2616,9 @@ function publicErrorMessage(error, fallback = "Something went wrong. Please try 
   const status = Number(error?.status || 0);
 
   if (!message) return fallback;
+  if (/publishing permission|posting access|organization posting|publishing unavailable|image publishing unavailable/.test(lower)) {
+    return message;
+  }
   if (status === 401 || /oauth token missing|reconnect linkedin|unauthorized|token.*expired|invalid token/.test(lower)) {
     return "Please reconnect LinkedIn, then try again.";
   }

@@ -2530,6 +2530,9 @@ function userMessage(error, fallback = "Something went wrong. Please try again."
   const status = Number(error?.status || 0);
 
   if (!message) return fallback;
+  if (/publishing permission|posting access|organization posting|publishing unavailable|image publishing unavailable/.test(lower)) {
+    return message;
+  }
   if (status === 401 || /oauth token missing|reconnect linkedin|unauthorized|token.*expired|invalid token/.test(lower)) {
     return "Please reconnect LinkedIn, then try again.";
   }
