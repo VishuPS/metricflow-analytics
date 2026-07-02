@@ -1242,6 +1242,7 @@ function CreatePostPage() {
           <label>Add figure
             <input name="figure" type="file" accept="image/*" data-draft-figure>
           </label>
+          <p class="draft-publish-note">Photo publishing is coming soon. You can save images with drafts, but remove the image before publishing to LinkedIn.</p>
           <div class="figure-preview" id="draftFigurePreview">
             <p class="empty-state">No figure attached.</p>
           </div>
@@ -1806,15 +1807,20 @@ function DraftList(drafts) {
         <strong>${escapeHtml(draft.title || "Untitled draft")}</strong>
         <span>${escapeHtml(draft.organizationName || "LinkedIn page")} - ${escapeHtml(draft.status || "draft")}</span>
         <small>${escapeHtml(formatDateTime(draft.createdAt))}</small>
+        ${hasDraftFigure(draft) && draft.status !== "published" ? `<small class="draft-note">Photo publishing coming soon. Edit and remove the image to publish text only.</small>` : ""}
       </div>
       <div class="draft-actions">
         ${draft.status === "published" && draft.linkedinPostUrl ? `<a class="secondary-button" href="${escapeAttribute(draft.linkedinPostUrl)}" target="_blank" rel="noreferrer">View post</a>` : ""}
-        ${draft.status === "published" ? "" : `<button class="primary-button" type="button" data-publish-draft="${escapeAttribute(draft.id)}">Publish</button>`}
+        ${draft.status === "published" ? "" : hasDraftFigure(draft) ? `<button class="primary-button" type="button" disabled title="Photo publishing is coming soon. Remove the image to publish text only.">Photo publishing soon</button>` : `<button class="primary-button" type="button" data-publish-draft="${escapeAttribute(draft.id)}">Publish</button>`}
         <button class="secondary-button" type="button" data-edit-draft="${escapeAttribute(draft.id)}">Edit</button>
         <button class="text-button danger" type="button" data-delete-draft="${escapeAttribute(draft.id)}">Delete</button>
       </div>
     </article>
   `).join("");
+}
+
+function hasDraftFigure(draft) {
+  return Boolean(draft?.figure?.dataUrl);
 }
 
 async function saveDraft(form) {
@@ -1967,6 +1973,7 @@ function deleteLocalDraft(draftId) {
 
 async function publishDraft(draftId) {
   const localDraft = loadLocalDrafts().find((draft) => draft.id === draftId);
+  if (hasDraftFigure(localDraft)) throw new Error("Photo publishing is coming soon. Edit this draft and remove the image to publish text only.");
   let result;
   try {
     if (localDraft) {

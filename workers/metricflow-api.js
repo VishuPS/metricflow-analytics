@@ -2443,6 +2443,9 @@ async function publishLinkedInDraft(env, accountId, draft) {
   if (!organizationUrn) throw httpError("Select a LinkedIn page before publishing", 400);
   const commentary = cleanLinkedInCommentary(draft.body || draft.topic || "");
   if (!commentary) throw httpError("Add draft text before publishing", 400);
+  if (draft.figure?.dataUrl) {
+    throw httpError("Photo publishing is coming soon. Remove the attached image to publish text only.", 400);
+  }
 
   const media = draft.figure?.dataUrl
     ? [await uploadLinkedInImage(token.accessToken, organizationUrn, draft.figure, env)]
