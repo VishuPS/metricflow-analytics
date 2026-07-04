@@ -2024,6 +2024,104 @@ textarea:focus {
   border-top: 1px solid var(--line);
 }
 
+.dashboard-split-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dashboard-workflow-card,
+.content-score-panel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(23, 199, 215, 0.16);
+  border-radius: var(--radius-sm);
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: var(--shadow-soft);
+}
+
+.content-score-panel {
+  margin-top: 18px;
+}
+
+.content-score-panel .section-heading strong {
+  color: var(--public-accent);
+  font-size: 28px;
+}
+
+.score-meter {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--public-secondary-bg);
+}
+
+.score-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--public-button-bg);
+}
+
+.score-checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.score-checklist span {
+  border: 1px solid var(--public-border);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.score-checklist .pass {
+  border-color: rgba(23, 199, 215, 0.42);
+  color: var(--public-accent);
+  background: color-mix(in srgb, var(--public-accent) 8%, transparent);
+}
+
+.snapshot-metrics,
+.best-time-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.snapshot-metrics span,
+.best-time-card {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--public-border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--public-card-bg);
+}
+
+.snapshot-metrics b,
+.best-time-card strong {
+  color: var(--ink);
+  font-size: 20px;
+}
+
+.snapshot-metrics span,
+.best-time-card span,
+.best-time-card p,
+.best-time-note {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.shared-report-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 24px;
+}
+
 .draft-list {
   display: grid;
   gap: 12px;
@@ -3236,6 +3334,9 @@ textarea:focus {
 :root[data-theme="dark"] .analytics-panel,
 :root[data-theme="dark"] .insight-card,
 :root[data-theme="dark"] .analytics-empty,
+:root[data-theme="dark"] .dashboard-workflow-card,
+:root[data-theme="dark"] .content-score-panel,
+:root[data-theme="dark"] .best-time-card,
 :root[data-theme="dark"] .cookie-banner {
   background: var(--panel);
   border-color: var(--border);
@@ -3308,6 +3409,11 @@ textarea:focus {
   color: var(--navy);
 }
 
+:root[data-theme="dark"] .snapshot-metrics b,
+:root[data-theme="dark"] .best-time-card strong {
+  color: var(--text);
+}
+
 .cookie-banner p {
   max-width: 760px;
   margin: 0;
@@ -3366,7 +3472,8 @@ textarea:focus {
   .analytics-insights,
   .analytics-insight-cards,
   .decision-list,
-  .ai-brief-grid {
+  .ai-brief-grid,
+  .dashboard-split-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -3694,7 +3801,10 @@ textarea:focus {
   .analytics-insights,
   .analytics-insight-cards,
   .decision-list,
-  .ai-brief-grid {
+  .ai-brief-grid,
+  .dashboard-split-grid,
+  .snapshot-metrics,
+  .best-time-grid {
     grid-template-columns: 1fr;
   }
 

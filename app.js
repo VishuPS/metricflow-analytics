@@ -25,6 +25,7 @@ const routes = {
   "/cookie-policy": CookiePolicyPage,
   "/dashboard/onboarding": OnboardingPage,
   "/dashboard/analytics": AnalyticsDashboardPage,
+  "/share/report": SharedReportPage,
   "/create-post": CreatePostPage,
   "/dashboard": Dashboard
 };
@@ -927,6 +928,18 @@ function CookiePolicyPage() {
   `;
 }
 
+function SharedReportPage() {
+  return `
+    ${TopNav({ right: "public" })}
+    <main class="page-shell shared-report-shell">
+      <section class="legal-page shared-report-page" id="sharedReport">
+        <p class="empty-state">Loading shared report.</p>
+      </section>
+      ${BackButton({ fallback: "/" })}
+    </main>
+  `;
+}
+
 function SignupPage() {
   return `
     ${TopNav()}
@@ -1109,6 +1122,14 @@ function Dashboard() {
       </section>
       <section class="sync-panel" id="syncStatusPanel"></section>
       <section class="metrics-grid" id="metricsGrid"></section>
+      <section class="dashboard-split-grid">
+        <article class="dashboard-workflow-card" id="weeklySnapshotPanel">
+          <p class="empty-state">Loading weekly snapshot.</p>
+        </article>
+        <article class="dashboard-workflow-card" id="shareReportPanel">
+          <p class="empty-state">Loading report sharing.</p>
+        </article>
+      </section>
       <section class="table-section">
         <div class="section-heading">
           <h2>Recent posts</h2>
@@ -1194,6 +1215,17 @@ function AnalyticsDashboardPage() {
           </article>
         </section>
         <section class="analytics-insight-cards" id="analyticsInsights"></section>
+        <section class="analytics-panel best-time-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Best Time To Post</p>
+              <h2>Timing recommendations</h2>
+            </div>
+          </div>
+          <div id="bestTimePanel">
+            <p class="empty-state">Loading timing signals.</p>
+          </div>
+        </section>
         <section class="analytics-panel decision-panel">
           <div class="section-heading">
             <div>
@@ -1251,10 +1283,17 @@ function CreatePostPage() {
             <button class="secondary-button" type="button" data-route="/dashboard">Back to dashboard</button>
           </div>
         </form>
-        <article class="dashboard-coming-soon dashboard-coming-soon-compact">
-          <span>Coming Soon</span>
-          <strong>AI draft feedback is planned for premium workspaces</strong>
-          <p>Draft scoring, hook ideas, and timing signals will be added here when the feature is ready.</p>
+        <article class="content-score-panel" id="contentScorePanel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Content Score</p>
+              <h2>Publishing readiness</h2>
+            </div>
+            <strong id="contentScoreValue">0/100</strong>
+          </div>
+          <div id="contentScoreResult">
+            <p class="empty-state">Write a draft to see a rules-based score.</p>
+          </div>
         </article>
         <section class="draft-list-panel">
           <div class="section-heading">
@@ -1364,6 +1403,10 @@ async function hydrateDashboard(stateOverride = null) {
       <strong>${Number(value || 0).toLocaleString()}</strong>
     </article>
   `).join("");
+  await Promise.all([
+    loadWeeklySnapshot(),
+    loadShareReportPanel()
+  ]);
 
   const posts = state.postRankings || [];
   document.querySelector("#postList").innerHTML = posts.length ? posts.slice(0, 8).map((post) => {
@@ -1395,6 +1438,163 @@ async function hydrateDashboard(stateOverride = null) {
     </article>
   `;
   }).join("") : `<p class="empty-state">No posts yet. Sync LinkedIn to fetch analytics for the selected organization.</p>`;
+}
+
+async function loadWeeklySnapshot() {
+  const target = document.querySelector("#weeklySnapshotPanel");
+  if (!target) return;
+  target.innerHTML = `<p class="empty-state">Loading weekly snapshot.</p>`;
+  try {
+    const result = await api("/api/weekly-snapshot");
+    target.innerHTML = WeeklySnapshotCard(result.snapshot);
+  } catch (error) {
+    target.innerHTML = `<p class="empty-state">${escapeHtml(userMessage(error, "Weekly snapshot unavailable."))}</p>`;
+  }
+}
+
+async function copyWeeklySnapshot() {
+  const result = await api("/api/weekly-snapshot");
+  const snapshot = result.snapshot || {};
+  const metrics = snapshot.metrics || {};
+  const text = [
+    snapshot.title || "Metrillix weekly snapshot",
+    snapshot.summary || "",
+    `Posts: ${metrics.posts || 0}`,
+    `Impressions: ${formatNumber(metrics.impressions || 0)}`,
+    `Engagement: ${formatNumber(metrics.engagement || 0)}`,
+    snapshot.bestTime?.day || snapshot.bestTime?.hour ? `Best time: ${[snapshot.bestTime?.day, snapshot.bestTime?.hour].filter(Boolean).join(" ")}` : "",
+    snapshot.recommendation || ""
+  ].filter(Boolean).join("\n");
+  await navigator.clipboard.writeText(text);
+  showToast("Weekly snapshot copied");
+}
+
+async function sendWeeklySnapshot(button) {
+  const previousText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Sending";
+  try {
+    const result = await api("/api/weekly-snapshot/send", { method: "POST" });
+    showToast(result.emailSent ? "Weekly snapshot sent" : "Email is not configured yet");
+  } finally {
+    button.disabled = false;
+    button.textContent = previousText;
+  }
+}
+
+function WeeklySnapshotCard(snapshot = {}) {
+  const metrics = snapshot.metrics || {};
+  return `
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Weekly Snapshot</p>
+        <h2>${escapeHtml(snapshot.title || "This week's LinkedIn summary")}</h2>
+      </div>
+    </div>
+    <div class="snapshot-metrics">
+      ${MetricMini("Posts", metrics.posts)}
+      ${MetricMini("Impressions", metrics.impressions)}
+      ${MetricMini("Engagement", metrics.engagement)}
+    </div>
+    <p>${escapeHtml(snapshot.summary || "Sync LinkedIn to generate a weekly snapshot.")}</p>
+    <div class="button-row">
+      <button class="secondary-button" type="button" data-copy-weekly-snapshot>Copy summary</button>
+      <button class="primary-button" type="button" data-send-weekly-snapshot>Send to email</button>
+    </div>
+  `;
+}
+
+function MetricMini(label, value) {
+  return `<span><b>${formatNumber(value || 0)}</b>${escapeHtml(label)}</span>`;
+}
+
+async function loadShareReportPanel() {
+  const target = document.querySelector("#shareReportPanel");
+  if (!target) return;
+  target.innerHTML = `
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Shareable Report</p>
+        <h2>Client-ready performance link</h2>
+      </div>
+    </div>
+    <p>Create a read-only report URL with this week's summary, key metrics, best post, and timing recommendation.</p>
+    <div class="button-row">
+      <button class="primary-button" type="button" data-create-share-report>Create share link</button>
+    </div>
+  `;
+}
+
+async function createShareReport(button) {
+  const previousText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Creating";
+  try {
+    const result = await api("/api/reports/share", { method: "POST", body: JSON.stringify({}) });
+    await navigator.clipboard.writeText(result.shareUrl);
+    const target = document.querySelector("#shareReportPanel");
+    if (target) {
+      target.innerHTML = `
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Shareable Report</p>
+            <h2>Report link copied</h2>
+          </div>
+        </div>
+        <p>This read-only report is ready to share with clients or teammates.</p>
+        <div class="button-row">
+          <a class="secondary-button" href="${escapeAttribute(result.shareUrl)}" target="_blank" rel="noreferrer">Open report</a>
+          <button class="primary-button" type="button" data-create-share-report>Create new link</button>
+        </div>
+      `;
+    }
+    showToast("Share report link copied");
+  } finally {
+    button.disabled = false;
+    button.textContent = previousText;
+  }
+}
+
+async function hydrateSharedReport() {
+  const target = document.querySelector("#sharedReport");
+  if (!target) return;
+  const token = window.location.pathname.split("/").filter(Boolean).pop();
+  try {
+    const result = await api(`/api/shared-reports/${encodeURIComponent(token)}`);
+    target.innerHTML = SharedReportContent(result.report);
+  } catch (error) {
+    target.innerHTML = `<p class="empty-state">${escapeHtml(userMessage(error, "Shared report unavailable."))}</p>`;
+  }
+}
+
+function SharedReportContent(report = {}) {
+  const snapshot = report.snapshot || {};
+  const metrics = snapshot.metrics || {};
+  const bestPost = snapshot.bestPost || null;
+  return `
+    <p class="eyebrow">Shared Report</p>
+    <h1>${escapeHtml(report.title || "Metrillix LinkedIn performance report")}</h1>
+    <p class="muted">Generated ${escapeHtml(formatDateTime(report.createdAt))} for ${escapeHtml(report.accountName || "Metrillix workspace")}.</p>
+    <div class="analytics-overview-grid shared-report-metrics">
+      ${["Posts", "Impressions", "Engagement", "Engagement Rate"].map((label) => {
+        const value = label === "Posts" ? metrics.posts : label === "Impressions" ? metrics.impressions : label === "Engagement" ? metrics.engagement : formatPercent(metrics.engagementRate || 0);
+        return `<article class="analytics-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(label === "Engagement Rate" ? value : formatNumber(value || 0))}</strong></article>`;
+      }).join("")}
+    </div>
+    <section class="shared-report-section">
+      <h2>Summary</h2>
+      <p>${escapeHtml(snapshot.summary || "No summary available yet.")}</p>
+      <p>${escapeHtml(snapshot.recommendation || "")}</p>
+    </section>
+    <section class="shared-report-section">
+      <h2>Best Time</h2>
+      <p>${escapeHtml([snapshot.bestTime?.day, snapshot.bestTime?.hour].filter(Boolean).join(" near ") || "More post history needed.")}</p>
+    </section>
+    <section class="shared-report-section">
+      <h2>Best Post</h2>
+      ${bestPost ? `<p>${escapeHtml(truncateText(bestPost.text || "Top post", 220))}</p><p>${formatNumber(bestPost.impressions)} impressions / ${formatPercent(bestPost.engagementRate || 0)} engagement rate</p>${bestPost.url ? `<a class="secondary-button" href="${escapeAttribute(bestPost.url)}" target="_blank" rel="noreferrer">Open LinkedIn post</a>` : ""}` : `<p>No top post available yet.</p>`}
+    </section>
+  `;
 }
 
 async function hydrateAnalyticsDashboard() {
@@ -1441,6 +1641,7 @@ async function loadAnalyticsDashboard() {
   renderPlanCard(summary.plan);
   renderAnalyticsOverview(summary);
   renderAnalyticsInsights(insights.insights || [], media, summary);
+  renderBestTimePanel(media, summary);
   renderRecommendations("#analyticsRecommendations", recommendations.recommendations || []);
   renderLineChart("#reachChart", timeseries.timeseries || [], "reach", "Reach");
   renderLineChart("#engagementChart", timeseries.timeseries || [], "engagement", "Engagement");
@@ -1449,10 +1650,43 @@ async function loadAnalyticsDashboard() {
 
 function setAnalyticsLoading() {
   const loading = `<p class="empty-state">Loading analytics.</p>`;
-  ["#analyticsOverview", "#analyticsInsights", "#analyticsRecommendations", "#reachChart", "#engagementChart", "#topPostsTable"].forEach((selector) => {
+  ["#analyticsOverview", "#analyticsInsights", "#bestTimePanel", "#analyticsRecommendations", "#reachChart", "#engagementChart", "#topPostsTable"].forEach((selector) => {
     const element = document.querySelector(selector);
     if (element) element.innerHTML = loading;
   });
+}
+
+function renderBestTimePanel(media = {}, summary = {}) {
+  const target = document.querySelector("#bestTimePanel");
+  if (!target) return;
+  const days = media.postingDays || [];
+  const hours = media.postingHours || [];
+  const bestDay = days[0];
+  const bestHour = hours[0];
+  const postCount = Number(summary.totals?.posts || summary.trackedPosts || 0);
+  const confidence = postCount >= 25 ? "High" : postCount >= 8 ? "Medium" : "Early";
+  if (!bestDay && !bestHour) {
+    target.innerHTML = `<p class="empty-state">Sync more posts to identify reliable posting windows.</p>`;
+    return;
+  }
+  target.innerHTML = `
+    <div class="best-time-grid">
+      ${BestTimeCard("Best day", bestDay?.key || "More data needed", bestDay ? `${formatPercent(bestDay.engagementRate)} engagement rate across ${bestDay.posts} posts` : "Sync more posts")}
+      ${BestTimeCard("Best hour", bestHour?.key || "More data needed", bestHour ? `${formatPercent(bestHour.engagementRate)} engagement rate across ${bestHour.posts} posts` : "Sync more posts")}
+      ${BestTimeCard("Confidence", confidence, `${postCount.toLocaleString()} synced posts in this view`)}
+    </div>
+    <p class="best-time-note">${escapeHtml(bestDay && bestHour ? `Try publishing your next post on ${bestDay.key} near ${bestHour.key}, then compare results after the next sync.` : "Metrillix will refine this recommendation as more posts are synced.")}</p>
+  `;
+}
+
+function BestTimeCard(label, value, detail) {
+  return `
+    <article class="best-time-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <p>${escapeHtml(detail)}</p>
+    </article>
+  `;
 }
 
 function renderAnalyticsEmpty(summary = {}) {
@@ -1777,6 +2011,7 @@ async function hydrateCreatePost() {
   if (form) updateAdLibrarySearchLink(form);
   currentDraftFigure = null;
   renderDraftFigurePreview();
+  renderContentScore();
   await loadDrafts();
   await loadPageInspiration();
 }
@@ -1809,7 +2044,11 @@ function DraftList(drafts) {
       </div>
       <div class="draft-actions">
         ${draft.status === "published" && draft.linkedinPostUrl ? `<a class="secondary-button" href="${escapeAttribute(draft.linkedinPostUrl)}" target="_blank" rel="noreferrer">View post</a>` : ""}
+        <button class="secondary-button" type="button" data-copy-draft="${escapeAttribute(draft.id)}">Copy text</button>
+        ${draft.figure?.dataUrl ? `<button class="secondary-button" type="button" data-download-figure="${escapeAttribute(draft.id)}">Download image</button>` : ""}
+        <a class="secondary-button" href="https://www.linkedin.com/feed/" target="_blank" rel="noreferrer">Open LinkedIn</a>
         ${draft.status === "published" ? "" : `<button class="primary-button" type="button" data-publish-draft="${escapeAttribute(draft.id)}">Publish</button>`}
+        ${draft.status === "published" ? "" : `<button class="secondary-button" type="button" data-mark-manual-draft="${escapeAttribute(draft.id)}">Mark published</button>`}
         <button class="secondary-button" type="button" data-edit-draft="${escapeAttribute(draft.id)}">Edit</button>
         <button class="text-button danger" type="button" data-delete-draft="${escapeAttribute(draft.id)}">Delete</button>
       </div>
@@ -1859,6 +2098,7 @@ async function editDraft(draftId) {
   currentDraftFigure = draft.figure || null;
   form.elements.figure.value = "";
   renderDraftFigurePreview();
+  renderContentScore();
   form.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -1881,6 +2121,106 @@ function resetDraftForm(form) {
   form.elements.draftId.value = "";
   currentDraftFigure = null;
   renderDraftFigurePreview();
+  renderContentScore();
+}
+
+async function findDraftById(draftId) {
+  const localDraft = loadLocalDrafts().find((draft) => draft.id === draftId);
+  if (localDraft) return { draft: localDraft, local: true, drafts: loadLocalDrafts() };
+  const result = await api("/api/drafts");
+  const draft = (result.drafts || []).find((item) => item.id === draftId);
+  if (!draft) throw new Error("Draft not found");
+  return { draft, drafts: result.drafts || [] };
+}
+
+async function copyDraftText(draftId) {
+  const { draft } = await findDraftById(draftId);
+  const text = [draft.topic, draft.body].filter(Boolean).join("\n\n").trim();
+  if (!text) throw new Error("This draft has no text to copy.");
+  await navigator.clipboard.writeText(text);
+  showToast("Draft text copied");
+}
+
+async function downloadDraftFigure(draftId) {
+  const { draft } = await findDraftById(draftId);
+  if (!draft.figure?.dataUrl) throw new Error("This draft has no image.");
+  const link = document.createElement("a");
+  link.href = draft.figure.dataUrl;
+  link.download = draft.figure.name || "metrillix-draft-image.png";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  showToast("Image download started");
+}
+
+async function markDraftPublishedManually(draftId) {
+  let result;
+  try {
+    result = await api(`/api/drafts/${encodeURIComponent(draftId)}/manual-publish`, { method: "POST" });
+  } catch (error) {
+    if (!isMissingDraftApi(error)) throw error;
+    result = markLocalDraftPublished(draftId, { manual: true });
+  }
+  document.querySelector("#draftList").innerHTML = DraftList(result.drafts || loadLocalDrafts());
+  showToast("Draft marked as published");
+}
+
+function renderContentScore() {
+  const form = document.querySelector("[data-draft-form]");
+  const value = document.querySelector("#contentScoreValue");
+  const target = document.querySelector("#contentScoreResult");
+  if (!form || !value || !target) return;
+  const data = new FormData(form);
+  const score = scoreDraftContent({
+    title: data.get("title"),
+    topic: data.get("topic"),
+    body: data.get("body"),
+    figure: currentDraftFigure
+  });
+  value.textContent = `${score.score}/100`;
+  target.innerHTML = `
+    <div class="score-meter" aria-label="Content score ${score.score} out of 100">
+      <span style="width: ${score.score}%"></span>
+    </div>
+    <p>${escapeHtml(score.verdict)}</p>
+    <div class="score-checklist">
+      ${score.checks.map((check) => `
+        <span class="${check.pass ? "pass" : ""}">${check.pass ? "OK" : "-"} ${escapeHtml(check.label)}</span>
+      `).join("")}
+    </div>
+  `;
+}
+
+function scoreDraftContent(draft = {}) {
+  const body = String(draft.body || "").trim();
+  const topic = String(draft.topic || "").trim();
+  const words = body ? body.split(/\s+/).filter(Boolean).length : 0;
+  const lines = body.split(/\n+/).filter((line) => line.trim()).length;
+  const checks = [
+    { label: "Clear draft text", pass: words >= 20, points: 18 },
+    { label: "Focused topic", pass: topic.length >= 8, points: 12 },
+    { label: "Strong opening line", pass: firstMeaningfulLine(body).length >= 18, points: 14 },
+    { label: "Readable length", pass: words >= 45 && words <= 220, points: 16 },
+    { label: "Uses line breaks", pass: lines >= 3, points: 10 },
+    { label: "Has a clear CTA or question", pass: /(\?|comment|share|tell me|what do you think|try|start|learn|join|book|download)/i.test(body), points: 14 },
+    { label: "Has visual support", pass: Boolean(draft.figure?.dataUrl), points: 8 },
+    { label: "Hashtag count is controlled", pass: hashtagCount(body) <= 5, points: 8 }
+  ];
+  const score = checks.reduce((sum, check) => sum + (check.pass ? check.points : 0), 0);
+  const verdict = score >= 82
+    ? "Ready to publish. The draft is clear, structured, and action-oriented."
+    : score >= 58
+      ? "Close. Improve the missing checklist items before publishing."
+      : "Early draft. Add structure, a clear hook, and a stronger next action.";
+  return { score, verdict, checks };
+}
+
+function firstMeaningfulLine(text) {
+  return String(text || "").split(/\n+/).map((line) => line.trim()).find(Boolean) || "";
+}
+
+function hashtagCount(text) {
+  return (String(text || "").match(/#[\p{L}\p{N}_]+/gu) || []).length;
 }
 
 function renderDraftFigurePreview() {
@@ -2413,6 +2753,7 @@ function wirePageEvents() {
   });
 
   document.querySelectorAll("[data-draft-form]").forEach((form) => {
+    form.addEventListener("input", renderContentScore);
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
@@ -2456,6 +2797,7 @@ function wirePageEvents() {
       try {
         currentDraftFigure = await readDraftFigure(input.files?.[0]);
         renderDraftFigurePreview();
+        renderContentScore();
       } catch (error) {
         input.value = "";
         showError(error, "Unable to attach that image.");
@@ -2668,6 +3010,66 @@ async function handleAppClick(event) {
     const figureInput = document.querySelector("[data-draft-figure]");
     if (figureInput) figureInput.value = "";
     renderDraftFigurePreview();
+    renderContentScore();
+    return;
+  }
+
+  const copyDraftTarget = event.target.closest("[data-copy-draft]");
+  if (copyDraftTarget) {
+    try {
+      await copyDraftText(copyDraftTarget.dataset.copyDraft);
+    } catch (error) {
+      showError(error, "Unable to copy this draft.");
+    }
+    return;
+  }
+
+  const downloadFigureTarget = event.target.closest("[data-download-figure]");
+  if (downloadFigureTarget) {
+    try {
+      await downloadDraftFigure(downloadFigureTarget.dataset.downloadFigure);
+    } catch (error) {
+      showError(error, "Unable to download this image.");
+    }
+    return;
+  }
+
+  const markManualTarget = event.target.closest("[data-mark-manual-draft]");
+  if (markManualTarget) {
+    try {
+      await markDraftPublishedManually(markManualTarget.dataset.markManualDraft);
+    } catch (error) {
+      showError(error, "Unable to mark this draft as published.");
+    }
+    return;
+  }
+
+  if (event.target.closest("[data-copy-weekly-snapshot]")) {
+    try {
+      await copyWeeklySnapshot();
+    } catch (error) {
+      showError(error, "Unable to copy weekly snapshot.");
+    }
+    return;
+  }
+
+  const sendSnapshotTarget = event.target.closest("[data-send-weekly-snapshot]");
+  if (sendSnapshotTarget) {
+    try {
+      await sendWeeklySnapshot(sendSnapshotTarget);
+    } catch (error) {
+      showError(error, "Unable to send weekly snapshot.");
+    }
+    return;
+  }
+
+  const createShareTarget = event.target.closest("[data-create-share-report]");
+  if (createShareTarget) {
+    try {
+      await createShareReport(createShareTarget);
+    } catch (error) {
+      showError(error, "Unable to create share report.");
+    }
     return;
   }
 
@@ -2766,7 +3168,7 @@ function organizationName(organization) {
 async function render() {
   applyTheme();
   const path = window.location.pathname;
-  const route = routes[path] ? path : "/";
+  const route = routes[path] ? path : path.startsWith("/share/report/") ? "/share/report" : "/";
   setPageMeta(route);
   document.body.dataset.page = route === "/" ? "home" : "app";
   const isPrivate = route.startsWith("/dashboard") || route === "/create-post";
@@ -2795,6 +3197,7 @@ async function render() {
     if (route === "/dashboard") await hydrateDashboard();
     if (route === "/dashboard/analytics") await hydrateAnalyticsDashboard();
     if (route === "/create-post") await hydrateCreatePost();
+    if (route === "/share/report") await hydrateSharedReport();
   } catch (error) {
     showError(error);
   }

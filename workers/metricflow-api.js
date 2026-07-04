@@ -58,6 +58,10 @@ export default {
       const route = `${request.method} ${url.pathname}`;
 
       if (route === "GET /api/health") return json({ ok: true, service: "MetricFlow Worker API" }, env);
+      const sharedReportRoute = url.pathname.match(/^\/api\/shared-reports\/([^/]+)$/);
+      if (request.method === "GET" && sharedReportRoute) {
+        return json(await loadSharedReport(env, sharedReportRoute[1]), env);
+      }
       if (route === "POST /api/signup" || route === "POST /api/auth/signup") return authJson(await signup(request, env), request, env, 201);
       if (route === "POST /api/login" || route === "POST /api/auth/login") return authJson(await login(request, env), request, env);
       if (route === "POST /api/logout" || route === "POST /api/auth/logout") return authJson({ message: "Logged out" }, request, env, 200, { clear: true });
@@ -102,6 +106,16 @@ export default {
       if (route === "GET /api/reports") {
         const account = await requireAccount(request, env);
         return json({ reports: await loadUserJson(env, userDataKey(account.id, "reports"), []) }, env);
+      }
+      if (route === "GET /api/weekly-snapshot") {
+        const account = await requireAccount(request, env);
+        return json({ snapshot: await weeklySnapshotPayload(env, account) }, env);
+      }
+      if (route === "POST /api/weekly-snapshot/send") {
+        const account = await requireAccount(request, env);
+        const snapshot = await weeklySnapshotPayload(env, account);
+        const emailSent = await sendWeeklySnapshotEmail(env, account, snapshot);
+        return json({ snapshot, emailSent }, env);
       }
       if (route === "GET /api/export.csv") {
         const account = await requireAccount(request, env);
@@ -158,6 +172,12 @@ export default {
         return json(await publishDraft(env, account.id, draftPublishRoute[1]), env);
       }
 
+      const draftManualPublishRoute = url.pathname.match(/^\/api\/drafts\/([^/]+)\/manual-publish$/);
+      if (draftManualPublishRoute && request.method === "POST") {
+        const account = await requireAccount(request, env);
+        return json(await markDraftPublishedManually(env, account.id, draftManualPublishRoute[1]), env);
+      }
+
       const draftRoute = url.pathname.match(/^\/api\/drafts\/([^/]+)$/);
       if (draftRoute && request.method === "PUT") {
         const account = await requireAccount(request, env);
@@ -201,6 +221,11 @@ export default {
         const reports = [report, ...(await loadUserJson(env, userDataKey(account.id, "reports"), []))].slice(0, 20);
         await saveUserJson(env, userDataKey(account.id, "reports"), reports);
         return json({ report, reports }, env, 201);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/reports/share") {
+        const account = await requireAccount(request, env);
+        return json(await createShareableReport(request, env, account), env, 201);
       }
 
       if (request.method === "PUT" && url.pathname === "/api/schedule") {
@@ -2314,6 +2339,113 @@ function createReport(state, body) {
   return { id: `report-${Date.now()}`, title: body.title || "Post intelligence report", audience: body.audience || "Leadership team", sections: body.sections || [], createdAt: new Date().toISOString(), summary: summary(state), recommendation: "Use normalized post rankings to choose the next creative test." };
 }
 
+async function createShareableReport(request, env, account) {
+  const body = await readJson(request).catch(() => ({}));
+  const snapshot = await weeklySnapshotPayload(env, account);
+  const token = crypto.randomUUID().replace(/-/g, "");
+  const report = {
+    id: `share-${Date.now()}`,
+    token,
+    title: body.title || "Metrillix LinkedIn performance report",
+    accountName: account.name || "Metrillix workspace",
+    createdAt: new Date().toISOString(),
+    snapshot
+  };
+  await saveUserJson(env, `shared-report:${token}`, report);
+  const reports = [report, ...(await loadUserJson(env, userDataKey(account.id, "reports"), []))].slice(0, 20);
+  await saveUserJson(env, userDataKey(account.id, "reports"), reports);
+  const baseUrl = env.PAGES_URL || new URL(request.url).origin.replace("api.", "");
+  return {
+    report,
+    shareUrl: `${baseUrl.replace(/\/$/, "")}/share/report/${token}`,
+    reports
+  };
+}
+
+async function loadSharedReport(env, token) {
+  const cleanToken = String(token || "").replace(/[^a-zA-Z0-9]/g, "");
+  const report = await loadUserJson(env, `shared-report:${cleanToken}`, null);
+  if (!report) throw httpError("Shared report not found", 404);
+  return { report };
+}
+
+async function weeklySnapshotPayload(env, account) {
+  const selectedOrganization = linkedinOrganizationUrn(await loadUserJson(env, userLinkedInKey(account.id, "organization"), null)) || null;
+  const posts = selectedOrganizationPosts(await loadUserJson(env, userLinkedInKey(account.id, "posts"), []), selectedOrganization);
+  const now = Date.now();
+  const weekStart = now - 7 * 86400000;
+  const previousStart = now - 14 * 86400000;
+  const currentPosts = posts.filter((post) => {
+    const date = postDate(post);
+    return date && date.getTime() >= weekStart && date.getTime() <= now;
+  });
+  const previousPosts = posts.filter((post) => {
+    const date = postDate(post);
+    return date && date.getTime() >= previousStart && date.getTime() < weekStart;
+  });
+  const current = postTotals(currentPosts);
+  const previous = postTotals(previousPosts);
+  const bestPost = [...currentPosts].sort((a, b) => postScore(b) - postScore(a))[0] || [...posts].sort((a, b) => postScore(b) - postScore(a))[0] || null;
+  const days = bestPostingDays(posts);
+  const hours = bestPostingHours(posts);
+  const engagementDelta = previous.engagement ? ((current.engagement - previous.engagement) / previous.engagement) * 100 : null;
+  const summaryText = currentPosts.length
+    ? `${currentPosts.length} posts generated ${current.impressions.toLocaleString()} impressions and ${current.engagement.toLocaleString()} engagements this week.`
+    : "No LinkedIn posts were synced for the last 7 days. Sync or publish new content to populate next week's snapshot.";
+  return {
+    title: "This week's LinkedIn summary",
+    generatedAt: new Date().toISOString(),
+    organizationUrn: selectedOrganization,
+    metrics: {
+      posts: currentPosts.length,
+      impressions: current.impressions,
+      engagement: current.engagement,
+      clicks: current.clicks,
+      engagementRate: current.impressions ? (current.engagement / current.impressions) * 100 : 0,
+      engagementDelta
+    },
+    bestPost: bestPost ? {
+      text: postTextValue(bestPost),
+      url: bestPost.url || "",
+      impressions: postImpressions(bestPost),
+      engagementRate: postImpressions(bestPost) ? (postEngagement(bestPost) / postImpressions(bestPost)) * 100 : 0
+    } : null,
+    bestTime: {
+      day: days[0]?.key || "",
+      hour: hours[0]?.key || ""
+    },
+    summary: summaryText,
+    recommendation: days[0] && hours[0]
+      ? `Try the next post on ${days[0].key} near ${hours[0].key}.`
+      : "Sync more history to unlock timing recommendations."
+  };
+}
+
+async function sendWeeklySnapshotEmail(env, account, snapshot) {
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return false;
+  const appUrl = env.PAGES_URL || "https://metrillix.com";
+  const html = `
+    <p>Hi ${escapeHtml(account.name || "there")},</p>
+    <p>${escapeHtml(snapshot.summary)}</p>
+    <ul>
+      <li>Posts: ${Number(snapshot.metrics.posts || 0).toLocaleString()}</li>
+      <li>Impressions: ${Number(snapshot.metrics.impressions || 0).toLocaleString()}</li>
+      <li>Engagements: ${Number(snapshot.metrics.engagement || 0).toLocaleString()}</li>
+      <li>Best time: ${escapeHtml(snapshot.bestTime.day || "More data needed")} ${escapeHtml(snapshot.bestTime.hour || "")}</li>
+    </ul>
+    <p>${escapeHtml(snapshot.recommendation)}</p>
+    <p><a href="${escapeHtml(appUrl)}/dashboard">Open Metrillix</a></p>
+  `;
+  const text = `Hi ${account.name || "there"},\n\n${snapshot.summary}\n\nPosts: ${snapshot.metrics.posts}\nImpressions: ${snapshot.metrics.impressions}\nEngagements: ${snapshot.metrics.engagement}\nBest time: ${snapshot.bestTime.day || "More data needed"} ${snapshot.bestTime.hour || ""}\n\n${snapshot.recommendation}\n\nOpen Metrillix: ${appUrl}/dashboard`;
+  return sendResendEmail(env, {
+    to: account.email,
+    subject: "Your Metrillix weekly LinkedIn snapshot",
+    html,
+    text,
+    idempotencyKey: `weekly-snapshot:${account.id}:${new Date().toISOString().slice(0, 10)}`
+  });
+}
+
 async function loadDrafts(env, accountId) {
   const drafts = await loadUserJson(env, userDataKey(accountId, "drafts"), []);
   return Array.isArray(drafts) ? drafts : [];
@@ -2379,6 +2511,22 @@ async function publishDraft(env, accountId, draftId) {
   drafts[index] = updated;
   await saveDrafts(env, accountId, drafts);
   return { draft: updated, drafts, published };
+}
+
+async function markDraftPublishedManually(env, accountId, draftId) {
+  const drafts = await loadDrafts(env, accountId);
+  const index = drafts.findIndex((draft) => draft.id === decodeURIComponent(draftId));
+  if (index === -1) throw httpError("Draft not found", 404);
+  const updated = {
+    ...drafts[index],
+    status: "published",
+    publishedMethod: "manual",
+    publishedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  drafts[index] = updated;
+  await saveDrafts(env, accountId, drafts);
+  return { draft: updated, drafts };
 }
 
 async function publishLinkedInPayload(request, env, accountId) {
