@@ -2076,26 +2076,10 @@ textarea:focus {
   font-size: 13px;
 }
 
-.draft-note {
-  color: var(--public-accent);
-  font-weight: 700;
-}
-
 .draft-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.draft-publish-note {
-  margin: -4px 0 0;
-  border: 1px solid var(--public-border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: color-mix(in srgb, var(--public-accent) 8%, var(--public-card-bg));
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.55;
 }
 
 .figure-preview {
