@@ -1445,8 +1445,11 @@ async function loadWeeklySnapshot() {
   if (!target) return;
   target.innerHTML = `<p class="empty-state">Loading weekly snapshot.</p>`;
   try {
-    const result = await api("/api/weekly-snapshot");
-    target.innerHTML = WeeklySnapshotCard(result.snapshot);
+    const [result, email] = await Promise.all([
+      api("/api/weekly-snapshot"),
+      api("/api/email-status").catch(() => ({ configured: false, missing: ["RESEND_API_KEY", "EMAIL_FROM"] }))
+    ]);
+    target.innerHTML = WeeklySnapshotCard(result.snapshot, email);
   } catch (error) {
     target.innerHTML = `<p class="empty-state">${escapeHtml(userMessage(error, "Weekly snapshot unavailable."))}</p>`;
   }
@@ -1482,8 +1485,9 @@ async function sendWeeklySnapshot(button) {
   }
 }
 
-function WeeklySnapshotCard(snapshot = {}) {
+function WeeklySnapshotCard(snapshot = {}, email = {}) {
   const metrics = snapshot.metrics || {};
+  const canSend = Boolean(email.configured);
   return `
     <div class="section-heading">
       <div>
@@ -1497,11 +1501,17 @@ function WeeklySnapshotCard(snapshot = {}) {
       ${MetricMini("Engagement", metrics.engagement)}
     </div>
     <p>${escapeHtml(snapshot.summary || "Sync LinkedIn to generate a weekly snapshot.")}</p>
+    <p class="email-status-note">${escapeHtml(canSend ? "Email delivery is configured." : `Email delivery needs setup: ${formatMissingEmailConfig(email.missing)}.`)}</p>
     <div class="button-row">
       <button class="secondary-button" type="button" data-copy-weekly-snapshot>Copy summary</button>
-      <button class="primary-button" type="button" data-send-weekly-snapshot>Send to email</button>
+      <button class="primary-button" type="button" data-send-weekly-snapshot ${canSend ? "" : "disabled"}>Send to email</button>
     </div>
   `;
+}
+
+function formatMissingEmailConfig(missing = []) {
+  const items = Array.isArray(missing) && missing.length ? missing : ["RESEND_API_KEY", "EMAIL_FROM"];
+  return items.join(", ");
 }
 
 function MetricMini(label, value) {
@@ -1575,6 +1585,10 @@ function SharedReportContent(report = {}) {
     <p class="eyebrow">Shared Report</p>
     <h1>${escapeHtml(report.title || "Metrillix LinkedIn performance report")}</h1>
     <p class="muted">Generated ${escapeHtml(formatDateTime(report.createdAt))} for ${escapeHtml(report.accountName || "Metrillix workspace")}.</p>
+    <div class="button-row report-actions">
+      <button class="primary-button" type="button" data-download-report-pdf>Download PDF</button>
+      <button class="secondary-button" type="button" data-copy-report-link>Copy link</button>
+    </div>
     <div class="analytics-overview-grid shared-report-metrics">
       ${["Posts", "Impressions", "Engagement", "Engagement Rate"].map((label) => {
         const value = label === "Posts" ? metrics.posts : label === "Impressions" ? metrics.impressions : label === "Engagement" ? metrics.engagement : formatPercent(metrics.engagementRate || 0);
@@ -1595,6 +1609,17 @@ function SharedReportContent(report = {}) {
       ${bestPost ? `<p>${escapeHtml(truncateText(bestPost.text || "Top post", 220))}</p><p>${formatNumber(bestPost.impressions)} impressions / ${formatPercent(bestPost.engagementRate || 0)} engagement rate</p>${bestPost.url ? `<a class="secondary-button" href="${escapeAttribute(bestPost.url)}" target="_blank" rel="noreferrer">Open LinkedIn post</a>` : ""}` : `<p>No top post available yet.</p>`}
     </section>
   `;
+}
+
+async function copyCurrentReportLink() {
+  await navigator.clipboard.writeText(window.location.href);
+  showToast("Report link copied");
+}
+
+function downloadSharedReportPdf() {
+  document.body.classList.add("printing-report");
+  window.print();
+  window.setTimeout(() => document.body.classList.remove("printing-report"), 800);
 }
 
 async function hydrateAnalyticsDashboard() {
@@ -2872,6 +2897,9 @@ function userMessage(error, fallback = "Something went wrong. Please try again."
   const status = Number(error?.status || 0);
 
   if (!message) return fallback;
+  if (/invalid email or password|wrong username|wrong password|invalid credentials/.test(lower)) {
+    return "Invalid email or password.";
+  }
   if (/publishing permission|posting access|organization posting|publishing unavailable|image publishing unavailable/.test(lower)) {
     return message;
   }
@@ -3069,6 +3097,20 @@ async function handleAppClick(event) {
       await createShareReport(createShareTarget);
     } catch (error) {
       showError(error, "Unable to create share report.");
+    }
+    return;
+  }
+
+  if (event.target.closest("[data-download-report-pdf]")) {
+    downloadSharedReportPdf();
+    return;
+  }
+
+  if (event.target.closest("[data-copy-report-link]")) {
+    try {
+      await copyCurrentReportLink();
+    } catch (error) {
+      showError(error, "Unable to copy report link.");
     }
     return;
   }

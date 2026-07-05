@@ -111,11 +111,15 @@ export default {
         const account = await requireAccount(request, env);
         return json({ snapshot: await weeklySnapshotPayload(env, account) }, env);
       }
+      if (route === "GET /api/email-status") {
+        await requireAccount(request, env);
+        return json(emailStatus(env), env);
+      }
       if (route === "POST /api/weekly-snapshot/send") {
         const account = await requireAccount(request, env);
         const snapshot = await weeklySnapshotPayload(env, account);
         const emailSent = await sendWeeklySnapshotEmail(env, account, snapshot);
-        return json({ snapshot, emailSent }, env);
+        return json({ snapshot, emailSent, email: emailStatus(env) }, env);
       }
       if (route === "GET /api/export.csv") {
         const account = await requireAccount(request, env);
@@ -633,6 +637,18 @@ async function sendResendEmail(env, message) {
   } catch {
     return false;
   }
+}
+
+function emailStatus(env) {
+  const missing = [];
+  if (!env.RESEND_API_KEY) missing.push("RESEND_API_KEY");
+  if (!env.EMAIL_FROM) missing.push("EMAIL_FROM");
+  return {
+    configured: missing.length === 0,
+    provider: "resend",
+    missing,
+    replyToConfigured: Boolean(env.EMAIL_REPLY_TO)
+  };
 }
 
 function escapeHtml(value) {
@@ -2764,6 +2780,9 @@ function publicErrorMessage(error, fallback = "Something went wrong. Please try 
   const status = Number(error?.status || 0);
 
   if (!message) return fallback;
+  if (/invalid email or password|wrong username|wrong password|invalid credentials/.test(lower)) {
+    return "Invalid email or password.";
+  }
   if (/publishing permission|posting access|organization posting|publishing unavailable|image publishing unavailable/.test(lower)) {
     return message;
   }

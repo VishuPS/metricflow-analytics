@@ -2111,7 +2111,8 @@ textarea:focus {
 .snapshot-metrics span,
 .best-time-card span,
 .best-time-card p,
-.best-time-note {
+.best-time-note,
+.email-status-note {
   color: var(--muted);
   font-size: 13px;
 }
@@ -2120,6 +2121,10 @@ textarea:focus {
   display: grid;
   gap: 8px;
   margin-top: 24px;
+}
+
+.report-actions {
+  margin-top: 18px;
 }
 
 .draft-list {
@@ -3832,6 +3837,51 @@ textarea:focus {
 
   .cookie-banner .button-row {
     justify-content: flex-start;
+  }
+}
+
+@media print {
+  @page {
+    margin: 18mm;
+  }
+
+  body,
+  .legal-page,
+  .shared-report-page {
+    background: #ffffff !important;
+    color: #071a33 !important;
+  }
+
+  .top-nav,
+  .back-button,
+  .cookie-banner,
+  .report-actions,
+  .toast {
+    display: none !important;
+  }
+
+  .page-shell,
+  .shared-report-shell,
+  .legal-page {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .analytics-overview-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+
+  .analytics-card,
+  .shared-report-section {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+
+  a {
+    color: #071a33 !important;
+    text-decoration: none !important;
   }
 }
 

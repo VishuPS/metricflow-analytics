@@ -55,6 +55,20 @@ const env = { USER_STATE: kv, PAGES_URL: "https://metrillix.example.test" };
 
 const headers = { authorization: `Bearer ${sessionToken}` };
 
+const loginResponse = await worker.fetch(new Request("https://api.example.test/api/login", {
+  method: "POST",
+  body: JSON.stringify({ email: "phase-one@example.test", password: "wrong-password" })
+}), env);
+const loginBody = await loginResponse.json();
+assert.equal(loginResponse.status, 401);
+assert.equal(loginBody.message, "Invalid email or password.");
+
+const emailStatusResponse = await worker.fetch(new Request("https://api.example.test/api/email-status", { headers }), env);
+const emailStatusBody = await emailStatusResponse.json();
+assert.equal(emailStatusResponse.status, 200);
+assert.equal(emailStatusBody.configured, false);
+assert.deepEqual(emailStatusBody.missing, ["RESEND_API_KEY", "EMAIL_FROM"]);
+
 const manualResponse = await worker.fetch(new Request("https://api.example.test/api/drafts/draft-manual-test/manual-publish", {
   method: "POST",
   headers
