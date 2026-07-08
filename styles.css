@@ -1352,41 +1352,43 @@ body[data-public-page="true"] h3 {
 
 .workflow-section {
   width: min(1240px, calc(100% - 40px));
+  scroll-margin-top: 118px;
 }
 
 .workflow-stepper {
-  --connector-progress: 0;
   position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(16px, 2.4vw, 28px);
+  gap: clamp(18px, 2.6vw, 34px);
   width: 100%;
-  margin: 10px 0 0;
-  padding: 42px 0 0;
+  margin: 18px 0 0;
+  padding: 76px 0 0;
   list-style: none;
-  counter-reset: workflow;
 }
 
 .workflow-stepper::before,
 .workflow-stepper::after {
   content: "";
   position: absolute;
-  left: calc(12.5% + 18px);
-  right: calc(12.5% + 18px);
-  top: 18px;
-  height: 1px;
+  left: calc(12.5% + 1px);
+  right: calc(12.5% + 1px);
+  top: 35px;
+  height: 2px;
   border-radius: 999px;
 }
 
 .workflow-stepper::before {
-  background: var(--premium-line);
+  background:
+    linear-gradient(90deg, transparent, var(--premium-line) 8%, var(--premium-line) 92%, transparent);
 }
 
 .workflow-stepper::after {
-  background: linear-gradient(90deg, var(--premium-accent), var(--premium-accent-3));
+  background:
+    linear-gradient(90deg, var(--premium-accent), var(--premium-accent-3));
+  box-shadow: 0 0 24px rgba(49, 94, 234, 0.18);
   transform: scaleX(0);
   transform-origin: left;
-  animation: workflowLine 1100ms cubic-bezier(0.16, 1, 0.3, 1) 180ms forwards;
+  animation: workflowLine 1200ms cubic-bezier(0.16, 1, 0.3, 1) 180ms forwards;
 }
 
 .workflow-step {
@@ -1399,83 +1401,125 @@ body[data-public-page="true"] h3 {
 .workflow-step:not(:last-child)::after {
   content: "";
   position: absolute;
-  top: -30px;
-  right: calc(-1 * clamp(16px, 2.4vw, 28px) / 2 - 5px);
-  width: 10px;
-  height: 10px;
-  border-top: 1px solid var(--premium-line);
-  border-right: 1px solid var(--premium-line);
+  top: -45px;
+  right: calc(-1 * clamp(18px, 2.6vw, 34px) / 2 - 6px);
+  z-index: 2;
+  width: 12px;
+  height: 12px;
+  border-top: 2px solid color-mix(in srgb, var(--premium-accent) 58%, var(--premium-line));
+  border-right: 2px solid color-mix(in srgb, var(--premium-accent) 58%, var(--premium-line));
   transform: rotate(45deg);
 }
 
 .workflow-step-marker {
   position: absolute;
-  top: -38px;
+  top: -58px;
   left: 50%;
   z-index: 2;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--premium-line);
+  width: 22px;
+  height: 22px;
+  border: 1px solid color-mix(in srgb, var(--premium-accent) 38%, var(--premium-line));
   border-radius: 999px;
   background: var(--premium-bg-soft);
-  color: var(--premium-accent);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
+  color: transparent;
+  font-size: 0;
   transform: translateX(-50%);
-  box-shadow: 0 10px 24px rgba(22, 28, 45, 0.08);
+  box-shadow:
+    0 0 0 7px var(--premium-bg-soft),
+    0 10px 24px rgba(22, 28, 45, 0.08);
+}
+
+.workflow-step-marker::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--premium-accent);
+  box-shadow: 0 0 18px rgba(49, 94, 234, 0.28);
 }
 
 :root[data-theme="dark"] .workflow-step-marker {
   background: #111725;
+  box-shadow:
+    0 0 0 7px #07111f,
+    0 10px 24px rgba(0, 0, 0, 0.2);
 }
 
 .workflow-step-panel {
+  position: relative;
+  overflow: hidden;
   display: grid;
   align-content: start;
-  gap: 14px;
-  min-height: 244px;
+  gap: 16px;
+  min-height: 236px;
   height: 100%;
-  border: 1px solid var(--premium-line);
+  border: 1px solid color-mix(in srgb, var(--premium-line) 82%, transparent);
   border-radius: 8px;
-  padding: clamp(20px, 2vw, 26px);
+  padding: clamp(24px, 2.6vw, 34px);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent),
-    var(--premium-glass);
-  box-shadow: 0 16px 44px rgba(22, 28, 45, 0.07);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 56%),
+    color-mix(in srgb, var(--premium-glass) 54%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 10px 28px rgba(22, 28, 45, 0.035);
   text-align: left;
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 
+.workflow-step-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(49, 94, 234, 0.08), transparent 34%),
+    linear-gradient(90deg, rgba(49, 94, 234, 0.16), transparent 24%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
 .workflow-step-panel:hover {
   border-color: rgba(49, 94, 234, 0.28);
-  box-shadow: var(--premium-shadow-soft);
-  transform: translateY(-4px);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 58%),
+    color-mix(in srgb, var(--premium-glass-strong) 58%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    0 18px 42px rgba(22, 28, 45, 0.065);
+  transform: translateY(-3px);
+}
+
+.workflow-step-panel:hover::before {
+  opacity: 1;
 }
 
 .workflow-step-panel span {
-  color: var(--premium-accent);
-  font-size: 34px;
+  position: relative;
+  color: color-mix(in srgb, var(--premium-accent) 38%, var(--premium-heading));
+  font-size: clamp(52px, 5.3vw, 76px);
   font-weight: 850;
-  letter-spacing: -0.04em;
-  line-height: 1;
+  letter-spacing: -0.08em;
+  line-height: 0.82;
 }
 
 .workflow-step-panel h3 {
+  position: relative;
   margin: 0;
   color: var(--premium-heading);
-  font-size: 21px;
+  font-size: 20px;
   letter-spacing: -0.02em;
   line-height: 1.16;
 }
 
 .workflow-step-panel p {
+  position: relative;
   margin: 0;
   color: var(--premium-muted);
   font-size: 15px;
-  line-height: 1.62;
+  line-height: 1.68;
 }
 
 @keyframes workflowLine {
@@ -1771,18 +1815,18 @@ body[data-public-page="true"] h3 {
 
   .workflow-stepper {
     grid-template-columns: 1fr;
-    gap: 18px;
-    margin-top: 0;
-    padding: 0 0 0 38px;
+    gap: 24px;
+    margin-top: 8px;
+    padding: 4px 0 0 42px;
   }
 
   .workflow-stepper::before,
   .workflow-stepper::after {
-    left: 17px;
+    left: 15px;
     right: auto;
-    top: 18px;
-    bottom: 18px;
-    width: 1px;
+    top: 22px;
+    bottom: 22px;
+    width: 2px;
     height: auto;
   }
 
@@ -1801,20 +1845,20 @@ body[data-public-page="true"] h3 {
   }
 
   .workflow-step-marker {
-    top: 22px;
-    left: -38px;
-    width: 34px;
-    height: 34px;
+    top: 28px;
+    left: -39px;
+    width: 24px;
+    height: 24px;
     transform: none;
   }
 
   .workflow-step-panel {
     min-height: auto;
-    padding: 20px;
+    padding: 22px 20px 24px;
   }
 
   .workflow-step-panel span {
-    font-size: 30px;
+    font-size: 48px;
   }
 
   .floating-card {
