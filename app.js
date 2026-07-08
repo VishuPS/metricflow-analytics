@@ -405,15 +405,18 @@ function ComparisonTable({ rows }) {
 
 function RoadmapList({ items }) {
   return `
-    <div class="roadmap-list reveal">
+    <ol class="roadmap-timeline reveal" aria-label="Metrillix product roadmap">
       ${items.map((item, index) => `
-        <article>
-          <span>${String(index + 1).padStart(2, "0")}</span>
-          <strong>${escapeHtml(item.title)}</strong>
-          <p>${escapeHtml(item.text)}</p>
-        </article>
+        <li class="roadmap-milestone ${index === 0 ? "is-current" : ""}" style="--milestone-index: ${index};">
+          <div class="roadmap-node" aria-hidden="true"></div>
+          <article class="roadmap-panel">
+            <span class="roadmap-badge">${escapeHtml(item.phase || String(index + 1).padStart(2, "0"))}</span>
+            <strong>${escapeHtml(item.title)}</strong>
+            <p>${escapeHtml(item.text)}</p>
+          </article>
+        </li>
       `).join("")}
-    </div>
+    </ol>
   `;
 }
 
@@ -1312,10 +1315,10 @@ function AboutPage() {
           text: "The roadmap focuses on intelligence features that help teams move faster without making the product heavier."
         })}
         ${RoadmapList({ items: [
-          { title: "AI strategy summaries", text: "Sharper briefs that explain what happened and why it matters." },
-          { title: "Recommendation engine", text: "Topic, timing, format, and draft guidance based on performance patterns." },
-          { title: "Richer reports", text: "Cleaner artifacts for founders, marketing teams, and leadership reviews." },
-          { title: "Collaboration", text: "Lightweight workflows for teams and agencies managing LinkedIn together." }
+          { phase: "Now", title: "AI strategy summaries", text: "Sharper weekly briefs that explain what changed, why it matters, and what action to take next." },
+          { phase: "Next", title: "Recommendation engine", text: "Topic, timing, format, and draft guidance based on LinkedIn performance patterns." },
+          { phase: "Soon", title: "Richer reports", text: "Cleaner executive-ready artifacts for founders, marketing teams, and leadership reviews." },
+          { phase: "Later", title: "Collaboration", text: "Lightweight workflows for teams and agencies managing LinkedIn together." }
         ]})}
       </section>
 
