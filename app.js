@@ -2067,49 +2067,21 @@ function SharedReportContent(report = {}) {
   const generatedAt = snapshot.generatedAt || report.createdAt;
   const reportTitle = String(report.title || "").trim();
   const displayTitle = !reportTitle || reportTitle.toLowerCase() === "metrillix linkedin performance report"
-    ? "LinkedIn Performance Report"
+    ? "LinkedIn Performance Brief"
     : reportTitle;
   const recommendation = String(snapshot.recommendation || "").trim();
-  const kpis = [
-    { label: "Posts", value: formatNumber(metrics.posts || 0) },
-    { label: "Impressions", value: formatNumber(metrics.impressions || 0) },
-    { label: "Engagement", value: formatNumber(metrics.engagement || 0) },
-    { label: "Engagement Rate", value: formatPercent(metrics.engagementRate || 0) }
-  ];
+  const period = sharedReportPeriod(generatedAt);
+  const accountName = report.accountName || "Metrillix workspace";
   return `
     <article class="shared-report-document" aria-label="LinkedIn performance report">
-      <header class="shared-report-header">
-        <p class="eyebrow">Shared Report</p>
-        <h1>${escapeHtml(displayTitle)}</h1>
-        <p class="shared-report-subtitle">Generated ${escapeHtml(formatDateTime(generatedAt))} for ${escapeHtml(report.accountName || "Metrillix workspace")}.</p>
-      </header>
-      <div class="shared-report-kpis" aria-label="Key performance indicators">
-        ${kpis.map((item) => `
-          <article class="shared-report-kpi-card">
-            <span class="shared-report-kpi-icon" aria-hidden="true"></span>
-            <span class="shared-report-kpi-label">${escapeHtml(item.label)}</span>
-            <strong>${escapeHtml(item.value)}</strong>
-          </article>
-        `).join("")}
-      </div>
-      <section class="shared-report-section">
-        <h2>Summary</h2>
-        <p>${escapeHtml(snapshot.summary || "No summary available yet.")}</p>
-      </section>
-      <section class="shared-report-section">
-        <h2>Best Time</h2>
-        <p>${escapeHtml([snapshot.bestTime?.day, snapshot.bestTime?.hour].filter(Boolean).join(" near ") || "More post history needed.")}</p>
-      </section>
-      <section class="shared-report-section">
-        <h2>Best Post</h2>
-        ${bestPost ? `<p>${escapeHtml(truncateText(bestPost.text || "Top post", 220))}</p><p class="shared-report-detail">${formatNumber(bestPost.impressions)} impressions / ${formatPercent(bestPost.engagementRate || 0)} engagement rate</p>${bestPost.url ? `<a class="secondary-button shared-report-post-link" href="${escapeAttribute(bestPost.url)}" target="_blank" rel="noreferrer">Open LinkedIn post</a>` : ""}` : `<p>No top post available yet.</p>`}
-      </section>
-      ${recommendation ? `
-        <section class="shared-report-section">
-          <h2>Recommendations / Next Actions</h2>
-          <p>${escapeHtml(recommendation)}</p>
-        </section>
-      ` : ""}
+      ${ReportHeader({ title: displayTitle, generatedAt, accountName, period })}
+      ${ExecutiveSummary({ snapshot, metrics, bestPost })}
+      ${KpiSnapshot({ metrics })}
+      ${KeyFindings({ snapshot, metrics, bestPost })}
+      ${RecommendedActions({ snapshot, metrics, recommendation })}
+      ${TopContent({ bestPost })}
+      ${PageHealthScore({ metrics, bestPost })}
+      ${ReportFooter({ period })}
     </article>
     <div class="shared-report-actions" aria-label="Report actions">
       <button class="back-button" type="button" data-back data-back-fallback="/">Back</button>
@@ -2119,6 +2091,291 @@ function SharedReportContent(report = {}) {
       </div>
     </div>
   `;
+}
+
+function ReportHeader({ title, generatedAt, accountName, period }) {
+  return `
+    <header class="shared-report-header">
+      <div class="shared-report-brand-row">
+        <span class="shared-report-brand">Metrillix</span>
+        <span class="shared-report-status">Executive summary</span>
+      </div>
+      <div class="shared-report-title-row">
+        <div>
+          <p class="eyebrow">LinkedIn Performance Brief</p>
+          <h1>${escapeHtml(title)}</h1>
+        </div>
+        <dl class="shared-report-meta" aria-label="Report details">
+          <div><dt>Generated</dt><dd>${escapeHtml(formatReportDate(generatedAt))}</dd></div>
+          <div><dt>Company page</dt><dd>${escapeHtml(accountName)}</dd></div>
+          <div><dt>Reporting period</dt><dd>${escapeHtml(period)}</dd></div>
+        </dl>
+      </div>
+    </header>
+  `;
+}
+
+function ExecutiveSummary({ snapshot, metrics, bestPost }) {
+  return `
+    <section class="shared-report-section shared-report-summary">
+      <div class="shared-report-section-heading">
+        <span>01</span>
+        <h2>Executive summary</h2>
+      </div>
+      <p>${escapeHtml(sharedExecutiveSummary(snapshot, metrics, bestPost))}</p>
+    </section>
+  `;
+}
+
+function KpiSnapshot({ metrics }) {
+  const engagementDelta = Number.isFinite(Number(metrics.engagementDelta)) ? Number(metrics.engagementDelta) : null;
+  const items = [
+    { label: "Posts", value: formatNumber(metrics.posts || 0), badge: Number(metrics.posts || 0) ? "Active" : "Quiet" },
+    { label: "Impressions", value: formatNumber(metrics.impressions || 0), badge: Number(metrics.impressions || 0) ? "Visible" : "No reach yet" },
+    { label: "Engagement", value: formatNumber(metrics.engagement || 0), badge: engagementDelta === null ? "Baseline" : engagementDelta >= 0 ? "Up" : "Down", trend: engagementDelta },
+    { label: "Engagement Rate", value: formatPercent(metrics.engagementRate || 0), badge: sharedEngagementStatus(metrics.engagementRate) }
+  ];
+  return `
+    <section class="shared-report-section shared-report-kpi-section">
+      <div class="shared-report-section-heading">
+        <span>02</span>
+        <h2>KPI snapshot</h2>
+      </div>
+      <div class="shared-report-kpis" aria-label="Key performance indicators">
+        ${items.map((item) => `
+          <article class="shared-report-kpi-card">
+            <div class="shared-report-kpi-top">
+              <span class="shared-report-kpi-label">${escapeHtml(item.label)}</span>
+              <small>${escapeHtml(item.badge)}</small>
+            </div>
+            <strong>${escapeHtml(item.value)}</strong>
+            <div class="shared-report-sparkline" aria-hidden="true"><i></i><i></i><i></i></div>
+            ${item.trend === null || item.trend === undefined ? `<p>Current period baseline</p>` : `<p class="${item.trend >= 0 ? "positive" : "negative"}">${item.trend >= 0 ? "+" : ""}${formatPercent(item.trend)} vs previous period</p>`}
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function KeyFindings({ snapshot, metrics, bestPost }) {
+  const windowLabel = sharedBestWindow(snapshot);
+  const hasPosts = Number(metrics.posts || 0) > 0;
+  const findings = [
+    { label: "Best publishing window", text: windowLabel || "More post history is needed before a reliable publishing window can be named." },
+    { label: "Top content signal", text: bestPost ? `${truncateText(bestPost.text || "Top post", 96)} performed strongest in this sample.` : "No top content signal is available yet." },
+    { label: "Visibility driver", text: bestPost ? "Product, company, or announcement-led updates appear to be the clearest current signal." : "Visibility will become clearer after more posts are synced or published." },
+    { label: "Growth constraint", text: hasPosts ? "Low posting volume can limit confidence. A steadier cadence will make the analysis more reliable." : "No posts were detected in the reporting period, so the brief should be treated as a baseline." }
+  ];
+  return `
+    <section class="shared-report-section">
+      <div class="shared-report-section-heading">
+        <span>03</span>
+        <h2>Key findings</h2>
+      </div>
+      <div class="shared-report-finding-grid">
+        ${findings.map((item) => `
+          <article class="shared-report-finding">
+            <span>${escapeHtml(item.label)}</span>
+            <p>${escapeHtml(item.text)}</p>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function RecommendedActions({ snapshot, metrics, recommendation }) {
+  const windowLabel = sharedBestWindow(snapshot);
+  const posts = Number(metrics.posts || 0);
+  const actions = posts
+    ? [
+        {
+          priority: "High",
+          action: windowLabel ? `Publish the next product update around ${windowLabel}.` : "Publish the next product update in a controlled weekly slot.",
+          reason: windowLabel ? "This is currently the strongest observed publishing window." : "A consistent time slot will create a cleaner benchmark.",
+          outcome: "Better chance of early reach and a more reliable comparison point."
+        },
+        {
+          priority: posts < 3 ? "High" : "Medium",
+          action: "Increase posting consistency before drawing broad conclusions.",
+          reason: "A small sample limits confidence in content and timing patterns.",
+          outcome: "Clearer trend lines and stronger recommendations over time."
+        },
+        {
+          priority: "Medium",
+          action: recommendation || "Use the strongest post as the starting point for the next content test.",
+          reason: "Recent performance should inform the next creative decision.",
+          outcome: "More focused content planning and less guesswork."
+        }
+      ]
+    : [
+        {
+          priority: "High",
+          action: "Publish or sync the next LinkedIn Company Page post.",
+          reason: "The current report has insufficient performance data.",
+          outcome: "A useful baseline for future briefs."
+        },
+        {
+          priority: "Medium",
+          action: "Set a weekly publishing rhythm for the next month.",
+          reason: "Consistency is required before timing and content patterns become reliable.",
+          outcome: "Better visibility into what is working."
+        }
+      ];
+  return `
+    <section class="shared-report-section">
+      <div class="shared-report-section-heading">
+        <span>04</span>
+        <h2>Recommended actions</h2>
+      </div>
+      <div class="shared-report-action-plan">
+        ${actions.map((item) => `
+          <article class="shared-report-action-item">
+            <span class="shared-report-priority">${escapeHtml(item.priority)}</span>
+            <div>
+              <h3>${escapeHtml(item.action)}</h3>
+              <p><strong>Reason:</strong> ${escapeHtml(item.reason)}</p>
+              <p><strong>Expected outcome:</strong> ${escapeHtml(item.outcome)}</p>
+            </div>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function TopContent({ bestPost }) {
+  return `
+    <section class="shared-report-section">
+      <div class="shared-report-section-heading">
+        <span>05</span>
+        <h2>Top content</h2>
+      </div>
+      ${bestPost ? `
+        <article class="shared-report-top-content">
+          <div>
+            <span>Post preview</span>
+            <p>${escapeHtml(truncateText(bestPost.text || "Top post", 260))}</p>
+          </div>
+          <dl>
+            <div><dt>Impressions</dt><dd>${formatNumber(bestPost.impressions || 0)}</dd></div>
+            <div><dt>Engagement rate</dt><dd>${formatPercent(bestPost.engagementRate || 0)}</dd></div>
+          </dl>
+          <p class="shared-report-detail">Why it mattered: this was the clearest content signal in the available sample and should inform the next post or announcement.</p>
+          ${bestPost.url ? `<a class="secondary-button shared-report-post-link" href="${escapeAttribute(bestPost.url)}" target="_blank" rel="noreferrer">Open LinkedIn post</a>` : ""}
+        </article>
+      ` : `
+        <article class="shared-report-top-content shared-report-empty-card">
+          <p>No top post is available yet. Once LinkedIn posts are synced, this section will highlight the strongest content signal and why it matters.</p>
+        </article>
+      `}
+    </section>
+  `;
+}
+
+function PageHealthScore({ metrics, bestPost }) {
+  const score = sharedPageHealth(metrics, bestPost);
+  return `
+    <section class="shared-report-section shared-report-health-section">
+      <div class="shared-report-section-heading">
+        <span>06</span>
+        <h2>Page health</h2>
+      </div>
+      ${score.reliable ? `
+        <div class="shared-report-health">
+          <div class="shared-report-score">
+            <span>Page health</span>
+            <strong>${score.total} / 100</strong>
+          </div>
+          <div class="shared-report-health-bars">
+            ${score.parts.map((part) => `
+              <div>
+                <span>${escapeHtml(part.label)}</span>
+                <i style="--score-width: ${Math.max(0, Math.min(100, part.value))}%;"></i>
+                <strong>${part.value}</strong>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      ` : `<p class="shared-report-insufficient">Not enough data for a reliable score yet.</p>`}
+    </section>
+  `;
+}
+
+function ReportFooter({ period }) {
+  return `
+    <footer class="shared-report-footer">
+      <span>Generated by Metrillix</span>
+      <span>LinkedIn Performance Brief</span>
+      <span>${escapeHtml(period)}</span>
+    </footer>
+  `;
+}
+
+function sharedReportPeriod(generatedAt) {
+  const end = generatedAt ? new Date(generatedAt) : new Date();
+  if (Number.isNaN(end.getTime())) return "Last 7 days";
+  const start = new Date(end.getTime() - 6 * 86400000);
+  return `${formatReportDate(start)} - ${formatReportDate(end)}`;
+}
+
+function formatReportDate(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not available";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function sharedBestWindow(snapshot = {}) {
+  const day = snapshot.bestTime?.day;
+  const hour = snapshot.bestTime?.hour;
+  if (!day && !hour) return "";
+  return [day, hour].filter(Boolean).join(", ");
+}
+
+function sharedEngagementStatus(value) {
+  const rate = Number(value || 0);
+  if (rate >= 5) return "Strong";
+  if (rate >= 2) return "Healthy";
+  if (rate > 0) return "Early signal";
+  return "No signal yet";
+}
+
+function sharedExecutiveSummary(snapshot = {}, metrics = {}, bestPost = null) {
+  const posts = Number(metrics.posts || 0);
+  const impressions = Number(metrics.impressions || 0);
+  const engagement = Number(metrics.engagement || 0);
+  const windowLabel = sharedBestWindow(snapshot);
+  if (!posts) {
+    return "Your LinkedIn presence was quiet during this period. No posts were detected in the reporting window, so the most useful next step is to publish or sync new content and rebuild a reliable baseline.";
+  }
+  const volume = posts < 3 ? "remained relatively quiet" : "showed measurable activity";
+  const topSignal = bestPost ? "The strongest signal came from the top-performing post, which generated the clearest reach and engagement pattern." : "No single content signal stood out strongly yet.";
+  const timing = windowLabel ? `${windowLabel} appears to be the best observed publishing window.` : "There is not enough timing history yet to name a reliable publishing window.";
+  const consistency = posts < 4 ? "Increasing posting consistency should improve visibility and confidence in future recommendations." : "Maintaining a steady cadence should make future recommendations more reliable.";
+  return `Your LinkedIn presence ${volume} during this period, with ${formatNumber(impressions)} impressions and ${formatNumber(engagement)} engagements. ${topSignal} ${timing} ${consistency}`;
+}
+
+function sharedPageHealth(metrics = {}, bestPost = null) {
+  const posts = Number(metrics.posts || 0);
+  const impressions = Number(metrics.impressions || 0);
+  const engagementRate = Number(metrics.engagementRate || 0);
+  if (posts < 2 && !impressions) return { reliable: false, total: 0, parts: [] };
+  const visibility = Math.min(100, Math.round(impressions / 50));
+  const engagement = Math.min(100, Math.round(engagementRate * 12));
+  const consistency = Math.min(100, Math.round((posts / 4) * 100));
+  const signal = bestPost ? Math.max(35, Math.min(100, Math.round((Number(bestPost.engagementRate || 0) || engagementRate) * 10))) : 20;
+  const parts = [
+    { label: "Visibility", value: visibility },
+    { label: "Engagement", value: engagement },
+    { label: "Consistency", value: consistency },
+    { label: "Content signal", value: signal }
+  ];
+  return {
+    reliable: true,
+    total: Math.round(parts.reduce((sum, part) => sum + part.value, 0) / parts.length),
+    parts
+  };
 }
 
 async function copyCurrentReportLink() {
