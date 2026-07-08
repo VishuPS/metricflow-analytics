@@ -404,19 +404,34 @@ function ComparisonTable({ rows }) {
 }
 
 function RoadmapList({ items }) {
+  const curvePath = "M 125 44 C 245 44 255 126 375 126 S 505 44 625 44 S 755 126 875 126";
+
   return `
-    <ol class="roadmap-timeline reveal" aria-label="Metrillix product roadmap">
-      ${items.map((item, index) => `
-        <li class="roadmap-milestone ${index === 0 ? "is-current" : ""}" style="--milestone-index: ${index};">
-          <div class="roadmap-node" aria-hidden="true"></div>
-          <article class="roadmap-panel">
-            <span class="roadmap-badge">${escapeHtml(item.phase || String(index + 1).padStart(2, "0"))}</span>
-            <strong>${escapeHtml(item.title)}</strong>
-            <p>${escapeHtml(item.text)}</p>
-          </article>
-        </li>
-      `).join("")}
-    </ol>
+    <div class="roadmap-timeline-wrap reveal">
+      <svg class="roadmap-curve" viewBox="0 0 1000 170" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+        <defs>
+          <linearGradient id="roadmap-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="var(--public-accent)"></stop>
+            <stop offset="58%" stop-color="var(--public-accent)"></stop>
+            <stop offset="100%" stop-color="#18c7b8"></stop>
+          </linearGradient>
+        </defs>
+        <path class="roadmap-curve-base" d="${curvePath}" pathLength="1"></path>
+        <path class="roadmap-curve-active" d="${curvePath}" pathLength="1"></path>
+      </svg>
+      <ol class="roadmap-timeline" aria-label="Metrillix product roadmap">
+        ${items.map((item, index) => `
+          <li class="roadmap-milestone ${index === 0 ? "is-current" : ""}" style="--milestone-index: ${index};">
+            <div class="roadmap-node" aria-hidden="true"></div>
+            <article class="roadmap-panel">
+              <span class="roadmap-badge">${escapeHtml(item.phase || String(index + 1).padStart(2, "0"))}</span>
+              <strong>${escapeHtml(item.title)}</strong>
+              <p>${escapeHtml(item.text)}</p>
+            </article>
+          </li>
+        `).join("")}
+      </ol>
+    </div>
   `;
 }
 
