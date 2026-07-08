@@ -425,6 +425,7 @@ function RoadmapList({ items }) {
             <div class="roadmap-node" aria-hidden="true"></div>
             <article class="roadmap-panel">
               <span class="roadmap-badge">${escapeHtml(item.phase || String(index + 1).padStart(2, "0"))}</span>
+              ${item.meta ? `<em>${escapeHtml(item.meta)}</em>` : ""}
               <strong>${escapeHtml(item.title)}</strong>
               <p>${escapeHtml(item.text)}</p>
             </article>
@@ -1326,14 +1327,14 @@ function AboutPage() {
       <section class="simple-section wide-section">
         ${SectionHeader({
           eyebrow: "Roadmap",
-          title: "Where Metrillix is heading.",
+          title: "What's coming next.",
           text: "The roadmap focuses on intelligence features that help teams move faster without making the product heavier."
         })}
         ${RoadmapList({ items: [
-          { phase: "Now", title: "AI strategy summaries", text: "Sharper weekly briefs that explain what changed, why it matters, and what action to take next." },
-          { phase: "Next", title: "Recommendation engine", text: "Topic, timing, format, and draft guidance based on LinkedIn performance patterns." },
-          { phase: "Soon", title: "Richer reports", text: "Cleaner executive-ready artifacts for founders, marketing teams, and leadership reviews." },
-          { phase: "Later", title: "Collaboration", text: "Lightweight workflows for teams and agencies managing LinkedIn together." }
+          { phase: "Now", meta: "Available today", title: "Executive reports", text: "Generate clean, shareable reports from your LinkedIn Company Page performance, highlighting the metrics and trends that matter." },
+          { phase: "Next", meta: "Near-term", title: "AI performance summaries", text: "Transform LinkedIn analytics into concise, plain-language summaries that explain what changed, why it matters, and where to focus next." },
+          { phase: "Soon", title: "Recommendation engine", text: "Receive content recommendations based on historical performance, posting patterns, engagement trends, and audience behaviour." },
+          { phase: "Later", title: "Team collaboration", text: "Shared workspaces, review workflows, comments, and collaborative planning for marketing teams and agencies." }
         ]})}
       </section>
 

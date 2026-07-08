@@ -3392,6 +3392,18 @@ body[data-public-page="true"] h3 {
   box-shadow: 0 10px 24px rgba(49, 94, 234, 0.2);
 }
 
+.roadmap-panel em {
+  position: relative;
+  margin-top: -5px;
+  color: var(--public-muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
 .roadmap-panel strong {
   position: relative;
   color: var(--public-heading);
