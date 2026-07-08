@@ -417,6 +417,23 @@ function RoadmapList({ items }) {
   `;
 }
 
+function WorkflowStepper({ steps }) {
+  return `
+    <ol class="workflow-stepper reveal" aria-label="Metrillix workflow steps">
+      ${steps.map((step, index) => `
+        <li class="workflow-step" style="--step-index: ${index};">
+          <div class="workflow-step-marker" aria-hidden="true">${escapeHtml(step.number)}</div>
+          <article class="workflow-step-panel">
+            <span>${escapeHtml(step.number)}</span>
+            <h3>${escapeHtml(step.title)}</h3>
+            <p>${escapeHtml(step.text)}</p>
+          </article>
+        </li>
+      `).join("")}
+    </ol>
+  `;
+}
+
 function CTASection({ title, text, primary = "Get Started", secondary = "Contact" }) {
   return `
     <section class="simple-section cta-section reveal">
@@ -1090,7 +1107,6 @@ function WelcomePage() {
     <main class="simple-home premium-home">
       <section class="simple-hero home-hero premium-hero" id="home">
         <div class="hero-copy reveal">
-          <p class="eyebrow">AI LinkedIn intelligence</p>
           <h1>LinkedIn Intelligence, Simplified.</h1>
           <p>Turn your LinkedIn Company Page performance into executive-ready insights, strategic recommendations, and a clear action plan.</p>
           <div class="hero-actions">
@@ -1158,14 +1174,14 @@ function FeaturesPage() {
       <section class="simple-section workflow-section">
         ${SectionHeader({
           eyebrow: "Workflow",
-          title: "From raw performance to a usable decision.",
-          text: "Each layer strips away noise and leaves a clearer artifact for the team."
+          title: "From LinkedIn metrics to business decisions.",
+          text: "Connect your Company Page, identify the signals that matter, generate an executive-ready brief, and turn insights into your next content plan."
         })}
-        ${RoadmapList({ items: [
-          { title: "Connect LinkedIn", text: "Authorize the Company Pages you manage with secure LinkedIn OAuth." },
-          { title: "Read the signal", text: "Review movement across reach, engagement, top posts, timing, and content patterns." },
-          { title: "Generate the brief", text: "Convert weekly performance into a concise summary with practical recommendations." },
-          { title: "Plan the next move", text: "Turn the recommendation into a draft, angle, or reporting note before momentum fades." }
+        ${WorkflowStepper({ steps: [
+          { number: "01", title: "Connect LinkedIn", text: "Authorize the Company Pages you manage using secure LinkedIn OAuth." },
+          { number: "02", title: "Read the signal", text: "Analyze engagement, reach, audience behaviour, timing, and content performance." },
+          { number: "03", title: "Generate the brief", text: "Transform performance into an executive-ready summary with practical recommendations." },
+          { number: "04", title: "Plan the next move", text: "Turn recommendations into your next content draft, reporting note, or publishing strategy." }
         ]})}
       </section>
 
