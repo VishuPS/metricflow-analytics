@@ -18,6 +18,7 @@ const routes = {
   "/features": FeaturesPage,
   "/pricing": PricingPage,
   "/about": AboutPage,
+  "/contact": ContactPage,
   "/signup": SignupPage,
   "/login": LoginPage,
   "/forgot-password": ForgotPasswordPage,
@@ -109,20 +110,24 @@ function scrollToSection(id) {
 function setPageMeta(route) {
   const meta = {
     "/": {
-      title: "Metrillix | LinkedIn Analytics, Simplified",
-      description: "Track LinkedIn Company Page performance with clear dashboards, trends, top posts, publishing insights, and a simple content workspace."
+      title: "Metrillix | AI LinkedIn Intelligence",
+      description: "Metrillix turns LinkedIn performance into executive-ready summaries, recommendations, reports, and content planning."
     },
     "/about": {
-      title: "About Metrillix | Company, Mission, and Roadmap",
-      description: "Learn about Metrillix, our mission, vision, story, principles, privacy commitment, and roadmap for clearer professional analytics."
+      title: "About Metrillix | Calm LinkedIn Intelligence",
+      description: "Learn why Metrillix is building an AI-powered LinkedIn intelligence platform for clearer business decisions."
     },
     "/features": {
-      title: "Features | Metrillix LinkedIn Analytics Platform",
-      description: "Explore Metrillix features including analytics dashboards, performance trends, content performance, historical analytics, workspace tools, and upcoming AI insights."
+      title: "Features | Metrillix AI LinkedIn Intelligence",
+      description: "Explore the Metrillix intelligence workflow: AI summaries, recommendations, reports, content planning, and secure LinkedIn data."
     },
     "/pricing": {
       title: "Pricing | Metrillix Plans",
-      description: "Compare Metrillix pricing plans for LinkedIn Company Page analytics, including Free, Growth, and future Enterprise options."
+      description: "Compare simple Metrillix plans for LinkedIn intelligence, reports, and content planning."
+    },
+    "/contact": {
+      title: "Contact | Metrillix",
+      description: "Contact Metrillix for product questions, support, partnerships, and early customer conversations."
     },
     "/cookie-policy": {
       title: "Cookie Policy | Metrillix",
@@ -283,7 +288,7 @@ function TopNav({ right = "login" } = {}) {
       <button class="nav-link" data-route="/features">Features</button>
       <button class="nav-link" data-route="/pricing">Pricing</button>
       <button class="nav-link" data-route="/about">About</button>
-      <a class="nav-link" href="mailto:hello@metrillix.com">Contact</a>
+      <button class="nav-link" data-route="/contact">Contact</button>
       ${themeButton}
       <button class="nav-link" data-route="/login">Log In</button>
       <button class="nav-signup" data-route="/signup">Get Started</button>
@@ -313,6 +318,15 @@ function SectionHeader({ eyebrow = "", title, text = "" }) {
   `;
 }
 
+function HeroSignal({ value, label }) {
+  return `
+    <article class="hero-signal">
+      <strong>${escapeHtml(value)}</strong>
+      <span>${escapeHtml(label)}</span>
+    </article>
+  `;
+}
+
 function FeatureCard({ title, text, label = "" }) {
   return `
     <article class="feature-card reveal">
@@ -338,6 +352,7 @@ function MetricCard({ label, value, detail = "" }) {
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(value)}</strong>
       ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
+      <i aria-hidden="true"></i>
     </article>
   `;
 }
@@ -420,55 +435,61 @@ function CTASection({ title, text, primary = "Get Started", secondary = "Contact
 
 function DashboardPreview() {
   return `
-    <figure class="dashboard-preview reveal" aria-label="Metrillix dashboard preview">
-      <div class="preview-glow" aria-hidden="true"></div>
-      <figcaption>
-        <span>Dashboard preview</span>
-        <strong>LinkedIn performance at a glance</strong>
-      </figcaption>
-      <div class="mock-dashboard-grid">
-        ${MetricCard({ label: "Follower growth", value: "+18.4%", detail: "Last 30 days" })}
-        ${MetricCard({ label: "Best day", value: "Tuesday", detail: "Highest engagement" })}
-        ${MetricCard({ label: "Best hour", value: "10 AM", detail: "Most consistent reach" })}
-        <article class="mock-chart mock-chart-large">
-          <div><span>Reach trend</span><strong>42.8K</strong></div>
-          <svg viewBox="0 0 420 150" role="img" aria-label="Mock reach trend chart">
-            <path class="chart-grid-line" d="M0 118H420M0 82H420M0 46H420"></path>
-            <path class="chart-line chart-line-primary" d="M8 118 C58 92 76 110 118 76 S190 38 236 62 312 96 410 24"></path>
-            <g class="data-points">
-              <circle cx="118" cy="76" r="5"></circle>
-              <circle cx="236" cy="62" r="5"></circle>
-              <circle cx="410" cy="24" r="5"></circle>
-            </g>
+    <figure class="dashboard-preview studio-preview reveal" aria-label="Metrillix product preview">
+      <div class="studio-toolbar">
+        <div>
+          <span>Metrillix Studio</span>
+          <strong>Weekly LinkedIn review</strong>
+        </div>
+        <small>Ready to brief</small>
+      </div>
+      <div class="studio-grid">
+        <article class="studio-brief">
+          <span>Strategy brief</span>
+          <h3>Your strongest signal is founder-led practical content.</h3>
+          <p>Double down on short posts that connect product lessons to proof. Publish the next one Tuesday morning.</p>
+          <div class="brief-actions" aria-hidden="true">
+            <i>Use this angle</i>
+            <i>Prepare draft</i>
+          </div>
+        </article>
+        <article class="studio-metric">
+          <span>Page momentum</span>
+          <strong>+18.4%</strong>
+          <small>Follower growth over 30 days</small>
+          <svg viewBox="0 0 180 54" role="img" aria-label="Small upward follower growth trend">
+            <path d="M4 42 C34 34 42 38 62 24 S102 14 122 24 148 32 176 10"></path>
           </svg>
         </article>
-        <article class="mock-chart">
-          <div><span>Engagement trend</span><strong>7.6%</strong></div>
-          <svg viewBox="0 0 260 130" role="img" aria-label="Mock engagement trend chart">
-            <path class="chart-grid-line" d="M0 100H260M0 66H260M0 32H260"></path>
-            <path class="chart-line chart-line-secondary" d="M6 96 C44 64 72 86 104 54 S166 24 204 48 230 70 254 34"></path>
-          </svg>
+        <article class="studio-report">
+          <span>Report card</span>
+          <h3>Board-ready summary</h3>
+          <div class="report-lines" aria-hidden="true">
+            <i></i><i></i><i></i><i></i>
+          </div>
+          <p>Reach, engagement, top post, timing, and next action condensed into one shareable brief.</p>
         </article>
-        <article class="mock-table">
-          <div><span>Top posts</span><strong>Best performers</strong></div>
-          <p><span>Founder update</span><b>12.4K reach</b></p>
-          <p><span>Product lesson</span><b>8.8K reach</b></p>
-          <p><span>Customer story</span><b>6.1K reach</b></p>
-        </article>
-        <article class="mock-draft">
+        <article class="studio-queue">
           <span>Content workspace</span>
-          <strong>3 posts planned</strong>
-          <p>Organize future LinkedIn posts beside your performance data.</p>
+          <div class="queue-item">
+            <strong>Founder POV</strong>
+            <small>Recommended next</small>
+          </div>
+          <div class="queue-item">
+            <strong>Customer proof</strong>
+            <small>Needs stronger hook</small>
+          </div>
+          <div class="queue-item">
+            <strong>Product lesson</strong>
+            <small>Schedule after review</small>
+          </div>
         </article>
-        <article class="mock-ai">
-          <span>Coming Soon</span>
-          <strong>AI insights placeholder</strong>
-          <p>Strategy recommendations, draft feedback, and content opportunities.</p>
+        <article class="studio-insight">
+          <span>AI note</span>
+          <strong>Keep the insight, remove the jargon.</strong>
+          <p>Draft feedback focuses on clarity, proof, and timing instead of more charts.</p>
         </article>
       </div>
-      <span class="mock-callout callout-reach">Reach trend</span>
-      <span class="mock-callout callout-posts">Top content</span>
-      <span class="mock-callout callout-drafts">Content workspace</span>
     </figure>
   `;
 }
@@ -509,21 +530,21 @@ function ComingSoonSection() {
     <section class="simple-section ai-coming-soon-section" id="ai-coming-soon">
       <div class="ai-coming-soon reveal">
         <div class="ai-coming-soon-copy">
-          <p class="eyebrow">Coming Soon</p>
-          <h2>The next generation of Metrillix is already under development.</h2>
-          <p>Future premium capabilities will bring AI-powered recommendations, publishing quality analysis, audience behavior insights, performance forecasting, intelligent strategy reports, and smart content opportunities.</p>
+          <p class="eyebrow">Premium Intelligence</p>
+          <h2>The next generation of Metrillix turns reporting into strategy.</h2>
+          <p>Upcoming premium capabilities will surface AI recommendations, publishing quality checks, audience behavior signals, forecasting, and concise strategy briefs for every review cycle.</p>
           <div class="ai-coming-soon-actions">
             <button class="primary-button" data-route="/signup">Join the waitlist</button>
             <a class="secondary-button" href="mailto:hello@metrillix.com?subject=Metrillix%20AI%20updates">Get updates</a>
           </div>
         </div>
         <div class="ai-coming-soon-panel" aria-label="Upcoming AI features">
-          <span>Premium feature preview</span>
+          <span>Intelligence layer</span>
           <ul>
-            <li>AI-powered content recommendations</li>
-            <li>Publishing quality analysis</li>
-            <li>Performance forecasting</li>
-            <li>Intelligent strategy reports</li>
+            <li>Best next post angle</li>
+            <li>Draft quality scoring</li>
+            <li>Reach and engagement forecasts</li>
+            <li>Board-ready strategy summaries</li>
           </ul>
         </div>
       </div>
@@ -547,49 +568,58 @@ function WelcomePage() {
   return `
     ${TopNav()}
     <main class="simple-home">
-      <section class="simple-hero" id="home">
-        <h1>LinkedIn Analytics, Simplified.</h1>
-        <p>Track your LinkedIn Company Page performance with clear, actionable insights designed for founders, creators, marketing teams, and growing businesses.</p>
-        <div class="hero-actions">
-          <button class="primary-button" data-route="/signup">Get Started</button>
-          <a class="secondary-button" href="#dashboard-preview">View Sample Dashboard</a>
+      <section class="simple-hero home-hero" id="home">
+        <div class="hero-copy reveal">
+          <p class="eyebrow">LinkedIn intelligence studio</p>
+          <h1>Turn LinkedIn performance into a clear next move.</h1>
+          <p>Metrillix gives founders and marketing teams a calm workspace for page health, winning content, shareable reports, and practical recommendations without drowning the screen in charts.</p>
+          <div class="hero-actions">
+            <button class="primary-button" data-route="/signup">Start free</button>
+            <a class="secondary-button" href="#dashboard-preview">View the studio</a>
+          </div>
+          <div class="hero-proof" aria-label="Metrillix platform highlights">
+            ${HeroSignal({ value: "Briefs", label: "Shareable weekly performance summaries" })}
+            ${HeroSignal({ value: "Signals", label: "Top posts, timing, and page momentum" })}
+            ${HeroSignal({ value: "Drafts", label: "Plan content beside the insight" })}
+          </div>
         </div>
+        ${DashboardPreview()}
       </section>
 
       <section class="simple-section split-section" id="why-metrillix">
         ${SectionHeader({
           eyebrow: "Why Metrillix",
-          title: "Focus on insights instead of scattered reports.",
-          text: "Metrillix transforms your LinkedIn analytics into intuitive dashboards that help you understand performance, identify trends, and make smarter publishing decisions."
+          title: "A calmer loop from review to action.",
+          text: "Metrillix keeps the useful signals visible, turns the rest into plain-language summaries, and helps you plan what to publish next."
         })}
         <div class="feature-grid three-card-grid">
-          ${FeatureCard({ label: "01", title: "Bring metrics together", text: "See reach, engagement, follower growth, and post activity in one workspace." })}
-          ${FeatureCard({ label: "02", title: "Spot what resonates", text: "Identify stronger posts and patterns without manually comparing reports." })}
-          ${FeatureCard({ label: "03", title: "Plan with clarity", text: "Use performance signals to support better publishing decisions." })}
+          ${FeatureCard({ label: "01", title: "Summarize the week", text: "See the story behind performance without exporting data or comparing screens by hand." })}
+          ${FeatureCard({ label: "02", title: "Find the winning angle", text: "Understand which topics, hooks, and proof points are worth repeating." })}
+          ${FeatureCard({ label: "03", title: "Plan the next post", text: "Move from insight to draft while the signal is still fresh." })}
         </div>
       </section>
 
       <section class="simple-section wide-section" id="features">
         ${SectionHeader({
-          eyebrow: "Everything You Need",
-          title: "Understand your LinkedIn performance without the busywork.",
-          text: "Clean analytics for page performance, historical trends, top content, publishing patterns, and draft planning."
+          eyebrow: "Product Studio",
+          title: "Built for decisions, not dashboard fatigue.",
+          text: "The interface prioritizes readable summaries, focused signals, and content workflow artifacts over dense chart collections."
         })}
         <div class="feature-grid">
-          ${FeatureCard({ title: "Performance Dashboard", text: "Monitor impressions, reach, engagement, follower growth, and post activity from one centralized dashboard." })}
-          ${FeatureCard({ title: "Historical Trends", text: "Visualize performance over time with charts that reveal long-term patterns and growth." })}
-          ${FeatureCard({ title: "Top Performing Content", text: "Quickly identify the posts that resonate most with your audience." })}
-          ${FeatureCard({ title: "Publishing Insights", text: "Discover useful timing patterns and evaluate your content consistency." })}
-          ${FeatureCard({ title: "Content Workspace", text: "Organize and prepare future LinkedIn posts in one dedicated workspace." })}
-          ${FeatureCard({ title: "AI-Powered Insights", text: "Future AI capabilities will help transform analytics into actionable publishing recommendations.", label: "Coming Soon" })}
+          ${FeatureCard({ title: "Weekly performance brief", text: "Condense page movement, strongest content, and recommended action into a report your team can read quickly." })}
+          ${FeatureCard({ title: "Focused signal cards", text: "Show only the metrics that explain what changed and what to do about it." })}
+          ${FeatureCard({ title: "Content pattern finder", text: "Surface the post angles and proof points your audience responds to." })}
+          ${FeatureCard({ title: "Publishing guidance", text: "Use best-window signals and content history to plan with more intent." })}
+          ${FeatureCard({ title: "Workspace for drafts", text: "Keep upcoming post ideas connected to the performance evidence behind them." })}
+          ${FeatureCard({ title: "AI recommendations", text: "Upcoming intelligence turns the review into draft feedback, next actions, and concise strategy notes.", label: "AI Layer" })}
         </div>
       </section>
 
       <section class="simple-section dashboard-preview-section" id="dashboard-preview">
         ${SectionHeader({
           eyebrow: "See Your Data Differently",
-          title: "A dashboard designed for confident content decisions.",
-          text: "From engagement curves and reach history to top-performing posts and publishing patterns, every chart is designed to make trends easier to understand."
+          title: "A studio view with fewer charts and stronger artifacts.",
+          text: "The preview combines a strategy brief, one trend cue, a report card, and a content queue so the product feels useful before it feels busy."
         })}
         ${DashboardPreview()}
       </section>
@@ -897,6 +927,425 @@ function AboutPage() {
   `;
 }
 
+function CTASection({ title, text, primary = "Get Started", secondary = "Contact" }) {
+  return `
+    <section class="simple-section cta-section final-cta reveal">
+      <div class="cta-copy">
+        <p class="eyebrow">Start with clarity</p>
+        <h2>${escapeHtml(title)}</h2>
+        <p>${escapeHtml(text)}</p>
+      </div>
+      <div class="hero-actions">
+        <button class="primary-button" data-route="/signup">${escapeHtml(primary)}</button>
+        <button class="secondary-button" data-route="/contact">${escapeHtml(secondary)}</button>
+      </div>
+    </section>
+  `;
+}
+
+function DashboardPreview() {
+  return `
+    <figure class="intelligence-showcase reveal" aria-label="Metrillix intelligence studio product preview" data-parallax-card>
+      <div class="showcase-orbit showcase-orbit-one" aria-hidden="true"></div>
+      <div class="showcase-orbit showcase-orbit-two" aria-hidden="true"></div>
+      <div class="studio-window">
+        <div class="studio-toolbar">
+          <div class="window-controls" aria-hidden="true"><i></i><i></i><i></i></div>
+          <span>Executive review</span>
+          <strong>LinkedIn intelligence brief</strong>
+          <small>Ready in 2 min</small>
+        </div>
+        <div class="studio-command">
+          <span>AI summary</span>
+          <h3>Founder-led practical posts are creating the clearest demand signal.</h3>
+          <p>Keep the educational angle, tighten the opening line, and publish the follow-up while the conversation is still active.</p>
+        </div>
+        <div class="studio-evidence-grid">
+          <article>
+            <span>Best next action</span>
+            <strong>Turn the top post into a 3-part series</strong>
+          </article>
+          <article>
+            <span>Audience signal</span>
+            <strong>Decision makers saved the practical checklist</strong>
+          </article>
+        </div>
+        <div class="studio-footer-strip">
+          <div>
+            <span>Report quality</span>
+            <strong>Board-ready</strong>
+          </div>
+          <div>
+            <span>Content plan</span>
+            <strong>4 drafts queued</strong>
+          </div>
+        </div>
+      </div>
+      <div class="floating-card floating-card-score">
+        <span>Recommendation</span>
+        <strong>Ship the follow-up Tuesday</strong>
+        <p>Higher executive engagement window detected.</p>
+      </div>
+      <div class="floating-card floating-card-report">
+        <span>Weekly report</span>
+        <div class="report-lines" aria-hidden="true"><i></i><i></i><i></i></div>
+        <strong>Summary exported</strong>
+      </div>
+      <div class="floating-card floating-card-plan">
+        <span>Content queue</span>
+        <strong>Proof, lesson, opinion</strong>
+      </div>
+    </figure>
+  `;
+}
+
+function InsightPill({ label, value }) {
+  return `
+    <article class="insight-pill reveal">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </article>
+  `;
+}
+
+function BenefitPanel({ label, title, text }) {
+  return `
+    <article class="benefit-panel reveal">
+      <span>${escapeHtml(label)}</span>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+    </article>
+  `;
+}
+
+function PricingSection({ compact = false } = {}) {
+  return `
+    <section class="simple-section pricing-section premium-pricing" id="pricing">
+      ${SectionHeader({
+        eyebrow: "Pricing",
+        title: compact ? "Start free. Upgrade when LinkedIn becomes a decision system." : "Pricing that stays simple while the product gets smarter.",
+        text: "Every paid subscription starts with 1 month free. No setup fee, no long-term contract."
+      })}
+      <div class="pricing-grid core-pricing-grid">
+        ${PricingCard({
+          label: "Free",
+          name: "Starter",
+          description: "For one LinkedIn Company Page and a clearer first read on performance.",
+          price: "$0",
+          features: ["One Company Page", "Core page overview", "Recent post signals", "Manual sync", "Content workspace preview"],
+          buttonText: "Start free"
+        })}
+        ${PricingCard({
+          label: "1 month free",
+          name: "Growth",
+          description: "For teams that want reporting, planning, and priority intelligence features.",
+          price: "$9.99",
+          features: ["Historical intelligence", "Weekly report briefs", "Content planning workspace", "Priority feature access", "Future AI recommendations"],
+          featured: true,
+          buttonText: "Try Growth free"
+        })}
+      </div>
+    </section>
+  `;
+}
+
+function SecurityStrip() {
+  return `
+    <section class="simple-section security-strip" id="privacy">
+      <div class="security-copy reveal">
+        <p class="eyebrow">Security</p>
+        <h2>Connected carefully. Reported clearly.</h2>
+        <p>Metrillix uses LinkedIn OAuth and only accesses the Company Pages you explicitly authorize. We do not access personal messages, private conversations, or personal profile analytics.</p>
+      </div>
+      <div class="security-grid">
+        ${TrustCard({ title: "OAuth authorization", text: "No LinkedIn passwords are stored by Metrillix." })}
+        ${TrustCard({ title: "Company Page scope", text: "Access is limited to authorized organization data." })}
+        ${TrustCard({ title: "Account isolation", text: "Reports, drafts, and workspace data stay inside your account." })}
+      </div>
+    </section>
+  `;
+}
+
+function PublicFooter() {
+  return `
+    <footer class="simple-footer">
+      <div class="footer-brand">
+        <strong>Metrillix</strong>
+        <span>AI LinkedIn intelligence for clearer business decisions.</span>
+      </div>
+      <nav>
+        <button class="footer-link" data-route="/features">Features</button>
+        <button class="footer-link" data-route="/pricing">Pricing</button>
+        <button class="footer-link" data-route="/about">About</button>
+        <button class="footer-link" data-route="/contact">Contact</button>
+        <button class="footer-link" data-route="/cookie-policy">Cookie Policy</button>
+      </nav>
+    </footer>
+  `;
+}
+
+function WelcomePage() {
+  return `
+    ${TopNav()}
+    <main class="simple-home premium-home">
+      <section class="simple-hero home-hero premium-hero" id="home">
+        <div class="hero-copy reveal">
+          <p class="eyebrow">AI LinkedIn intelligence</p>
+          <h1>LinkedIn Intelligence, Simplified.</h1>
+          <p>Turn your LinkedIn Company Page performance into executive-ready insights, strategic recommendations, and a clear action plan.</p>
+          <div class="hero-actions">
+            <button class="primary-button" data-route="/signup">Start free</button>
+            <button class="secondary-button" data-route="/features">View features</button>
+          </div>
+        </div>
+        ${DashboardPreview()}
+      </section>
+
+      <section class="simple-section problem-section" id="problem">
+        ${SectionHeader({
+          eyebrow: "The problem",
+          title: "Most LinkedIn analytics stop before the decision.",
+          text: "Teams do not need another wall of charts. They need to understand what changed, why it matters, and what to publish next."
+        })}
+        <div class="insight-pill-row">
+          ${InsightPill({ label: "Instead of", value: "More dashboard noise" })}
+          ${InsightPill({ label: "Metrillix gives you", value: "A decision-ready brief" })}
+          ${InsightPill({ label: "So teams can", value: "Move from review to action" })}
+        </div>
+      </section>
+
+      <section class="simple-section benefits-section" id="benefits">
+        ${SectionHeader({
+          eyebrow: "Benefits",
+          title: "Designed for the weekly decisions that compound.",
+          text: "Metrillix helps you build a repeatable loop from performance review to better content direction."
+        })}
+        <div class="benefit-grid">
+          ${BenefitPanel({ label: "01", title: "Summaries executives can read", text: "Condense page movement, strongest content, and next steps into a brief that does not require analytics translation." })}
+          ${BenefitPanel({ label: "02", title: "Recommendations with context", text: "Understand which topics, hooks, proof points, and timing patterns deserve another bet." })}
+          ${BenefitPanel({ label: "03", title: "Planning close to the evidence", text: "Keep upcoming ideas and drafts connected to the signals that inspired them." })}
+          ${BenefitPanel({ label: "04", title: "Reporting without ceremony", text: "Share a clean performance narrative with stakeholders without building a slide deck every week." })}
+        </div>
+      </section>
+
+      ${SecurityStrip()}
+
+      ${CTASection({
+        title: "Turn LinkedIn performance into your next clear move.",
+        text: "Connect a Company Page and start building a calmer reporting rhythm today.",
+        primary: "Start free",
+        secondary: "Talk to us"
+      })}
+    </main>
+    ${PublicFooter()}
+  `;
+}
+
+function FeaturesPage() {
+  return `
+    ${TopNav()}
+    <main class="simple-home product-page premium-subpage">
+      <section class="simple-hero product-hero">
+        <p class="eyebrow">Features</p>
+        <h1>The Metrillix intelligence workflow.</h1>
+        <p>Features are organized around the job your team is trying to finish: understand the signal, make the call, and plan the next piece of content.</p>
+        <div class="hero-actions">
+          <button class="primary-button" data-route="/signup">Get started</button>
+          <button class="secondary-button" data-route="/pricing">View pricing</button>
+        </div>
+      </section>
+
+      <section class="simple-section workflow-section">
+        ${SectionHeader({
+          eyebrow: "Workflow",
+          title: "From raw performance to a usable decision.",
+          text: "Each layer strips away noise and leaves a clearer artifact for the team."
+        })}
+        ${RoadmapList({ items: [
+          { title: "Connect LinkedIn", text: "Authorize the Company Pages you manage with secure LinkedIn OAuth." },
+          { title: "Read the signal", text: "Review movement across reach, engagement, top posts, timing, and content patterns." },
+          { title: "Generate the brief", text: "Convert weekly performance into a concise summary with practical recommendations." },
+          { title: "Plan the next move", text: "Turn the recommendation into a draft, angle, or reporting note before momentum fades." }
+        ]})}
+      </section>
+
+      <section class="simple-section feature-depth-section">
+        ${SectionHeader({
+          eyebrow: "Capabilities",
+          title: "A focused toolset, not a feature dump.",
+          text: "Metrillix prioritizes interpretation and planning over dense dashboard sprawl."
+        })}
+        <div class="feature-tour-grid">
+          ${TrustCard({ title: "AI summaries", text: "Plain-language performance narratives for weekly reviews and stakeholder updates." })}
+          ${TrustCard({ title: "Actionable recommendations", text: "Guidance on topics, formats, hooks, timing, and follow-up opportunities." })}
+          ${TrustCard({ title: "Executive reports", text: "Clean summaries your team can share without exporting spreadsheets." })}
+          ${TrustCard({ title: "Content planning", text: "A workspace for turning insights into draft ideas and publishing direction." })}
+          ${TrustCard({ title: "Signal cards", text: "Selective metrics that explain what changed instead of overwhelming the page." })}
+          ${TrustCard({ title: "Secure LinkedIn connection", text: "Company Page access through OAuth with clear permission boundaries." })}
+        </div>
+      </section>
+
+      ${CTASection({
+        title: "Build a better LinkedIn review ritual.",
+        text: "Start with the workflow, then let the intelligence layer guide your next content decision.",
+        primary: "Start free",
+        secondary: "Contact"
+      })}
+    </main>
+    ${PublicFooter()}
+  `;
+}
+
+function PricingPage() {
+  const comparisonRows = [
+    { feature: "Company Pages", free: "1 page", growth: "1 page" },
+    { feature: "Core performance overview", free: "Included", growth: "Included" },
+    { feature: "Historical intelligence", free: "Limited", growth: "Included" },
+    { feature: "Report briefs", free: "Preview", growth: "Included" },
+    { feature: "Content planning", free: "Preview", growth: "Included" },
+    { feature: "AI recommendations", free: "Future preview", growth: "Priority access" },
+    { feature: "Support", free: "Standard", growth: "Priority updates" }
+  ];
+
+  return `
+    ${TopNav()}
+    <main class="simple-home pricing-page-full premium-subpage">
+      <section class="simple-hero product-hero">
+        <p class="eyebrow">Pricing</p>
+        <h1>Simple plans for a smarter reporting rhythm.</h1>
+        <p>Start free, then upgrade when your LinkedIn presence becomes a serious channel for growth, trust, and demand.</p>
+        <div class="hero-actions">
+          <button class="primary-button" data-route="/signup">Start free</button>
+          <button class="secondary-button" data-route="/contact">Contact</button>
+        </div>
+      </section>
+
+      ${PricingSection()}
+
+      <section class="simple-section comparison-section">
+        ${SectionHeader({
+          eyebrow: "Compare",
+          title: "Choose the level of intelligence you need right now.",
+          text: "Both plans are intentionally lightweight. Growth adds the deeper reporting and planning layer."
+        })}
+        ${ComparisonTable({ rows: comparisonRows })}
+      </section>
+
+      <section class="simple-section faq-section">
+        ${SectionHeader({ eyebrow: "FAQ", title: "Pricing questions", text: "Straight answers for teams evaluating Metrillix." })}
+        <div class="faq-list">
+          ${FAQItem({ question: "Can I cancel anytime?", answer: "Yes. Metrillix has no long-term contract." })}
+          ${FAQItem({ question: "Is there a free trial?", answer: "Every paid subscription begins with a one-month free trial." })}
+          ${FAQItem({ question: "Do I need LinkedIn Premium?", answer: "No. Metrillix works with authorized LinkedIn Company Pages and does not require LinkedIn Premium." })}
+          ${FAQItem({ question: "Will AI features be available to Growth users?", answer: "Growth subscribers receive priority access as advanced intelligence features roll out." })}
+        </div>
+      </section>
+
+      ${CTASection({
+        title: "Start free and upgrade when the signal is worth scaling.",
+        text: "Metrillix keeps pricing clear so your team can focus on decisions.",
+        primary: "Start free",
+        secondary: "Talk to us"
+      })}
+    </main>
+    ${PublicFooter()}
+  `;
+}
+
+function AboutPage() {
+  return `
+    ${TopNav()}
+    <main class="simple-home about-page premium-subpage">
+      <section class="simple-hero about-hero">
+        <p class="eyebrow">About Metrillix</p>
+        <h1>We believe performance data should become business clarity.</h1>
+        <p>Metrillix exists for teams that publish on LinkedIn consistently but still struggle to explain what is working and what to do next.</p>
+        <div class="hero-actions">
+          <button class="primary-button" data-route="/signup">Get started</button>
+          <button class="secondary-button" data-route="/features">Explore features</button>
+        </div>
+      </section>
+
+      <section class="simple-section split-section about-manifesto">
+        ${SectionHeader({
+          eyebrow: "Point of view",
+          title: "The future of analytics is less dashboard, more decision.",
+          text: "Marketing teams already have enough numbers. Metrillix is built around interpretation: summaries, recommendations, reporting artifacts, and planning context."
+        })}
+        <p class="section-support reveal">Our design principle is simple: remove every surface that does not help someone make a better LinkedIn decision.</p>
+      </section>
+
+      <section class="simple-section wide-section">
+        ${SectionHeader({
+          eyebrow: "Principles",
+          title: "What guides the product.",
+          text: "The platform is still growing, but the standards are already clear."
+        })}
+        <div class="benefit-grid principles-grid">
+          ${BenefitPanel({ label: "Clarity", title: "Write for the decision maker", text: "Every report should be readable by someone who does not live in the dashboard." })}
+          ${BenefitPanel({ label: "Calm", title: "Lower the cognitive load", text: "The interface should feel quiet, confident, and precise." })}
+          ${BenefitPanel({ label: "Trust", title: "Respect permission boundaries", text: "LinkedIn access should be explicit, scoped, and easy to understand." })}
+          ${BenefitPanel({ label: "Momentum", title: "Turn review into action", text: "Insights matter most when they become better content and clearer priorities." })}
+        </div>
+      </section>
+
+      <section class="simple-section wide-section">
+        ${SectionHeader({
+          eyebrow: "Roadmap",
+          title: "Where Metrillix is heading.",
+          text: "The roadmap focuses on intelligence features that help teams move faster without making the product heavier."
+        })}
+        ${RoadmapList({ items: [
+          { title: "AI strategy summaries", text: "Sharper briefs that explain what happened and why it matters." },
+          { title: "Recommendation engine", text: "Topic, timing, format, and draft guidance based on performance patterns." },
+          { title: "Richer reports", text: "Cleaner artifacts for founders, marketing teams, and leadership reviews." },
+          { title: "Collaboration", text: "Lightweight workflows for teams and agencies managing LinkedIn together." }
+        ]})}
+      </section>
+
+      ${CTASection({
+        title: "Help shape calmer LinkedIn intelligence.",
+        text: "Join early and tell us what would make your reporting workflow clearer.",
+        primary: "Start free",
+        secondary: "Contact"
+      })}
+    </main>
+    ${PublicFooter()}
+  `;
+}
+
+function ContactPage() {
+  return `
+    ${TopNav()}
+    <main class="simple-home contact-page premium-subpage">
+      <section class="simple-hero product-hero contact-hero">
+        <p class="eyebrow">Contact</p>
+        <h1>Questions, support, partnerships, or feedback.</h1>
+        <p>Tell us what you are trying to understand from LinkedIn. We read every message and use early conversations to shape the product.</p>
+        <div class="hero-actions">
+          <a class="primary-button" href="mailto:hello@metrillix.com">Email hello@metrillix.com</a>
+          <button class="secondary-button" data-route="/signup">Start free</button>
+        </div>
+      </section>
+
+      <section class="simple-section contact-options">
+        ${SectionHeader({
+          eyebrow: "How we can help",
+          title: "Choose the conversation that fits.",
+          text: "Metrillix is early, focused, and intentionally close to customer feedback."
+        })}
+        <div class="feature-tour-grid">
+          ${TrustCard({ title: "Product questions", text: "Ask how Metrillix handles reports, planning, LinkedIn access, or future AI recommendations." })}
+          ${TrustCard({ title: "Support", text: "Get help with signup, login, LinkedIn connection, organization selection, or account access." })}
+          ${TrustCard({ title: "Partnerships", text: "Reach out if you support founders, agencies, or B2B teams with LinkedIn growth." })}
+          ${TrustCard({ title: "Product feedback", text: "Share the reporting workflow you wish existed. Specific friction is especially useful." })}
+        </div>
+      </section>
+    </main>
+    ${PublicFooter()}
+  `;
+}
+
 function CookiePolicyPage() {
   return `
     ${TopNav()}
@@ -935,7 +1384,6 @@ function SharedReportPage() {
       <section class="legal-page shared-report-page" id="sharedReport">
         <p class="empty-state">Loading shared report.</p>
       </section>
-      ${BackButton({ fallback: "/" })}
     </main>
   `;
 }
@@ -1581,33 +2029,60 @@ function SharedReportContent(report = {}) {
   const snapshot = report.snapshot || {};
   const metrics = snapshot.metrics || {};
   const bestPost = snapshot.bestPost || null;
+  const generatedAt = snapshot.generatedAt || report.createdAt;
+  const reportTitle = String(report.title || "").trim();
+  const displayTitle = !reportTitle || reportTitle.toLowerCase() === "metrillix linkedin performance report"
+    ? "LinkedIn Performance Report"
+    : reportTitle;
+  const recommendation = String(snapshot.recommendation || "").trim();
+  const kpis = [
+    { label: "Posts", value: formatNumber(metrics.posts || 0) },
+    { label: "Impressions", value: formatNumber(metrics.impressions || 0) },
+    { label: "Engagement", value: formatNumber(metrics.engagement || 0) },
+    { label: "Engagement Rate", value: formatPercent(metrics.engagementRate || 0) }
+  ];
   return `
-    <p class="eyebrow">Shared Report</p>
-    <h1>${escapeHtml(report.title || "Metrillix LinkedIn performance report")}</h1>
-    <p class="muted">Generated ${escapeHtml(formatDateTime(report.createdAt))} for ${escapeHtml(report.accountName || "Metrillix workspace")}.</p>
-    <div class="button-row report-actions">
-      <button class="primary-button" type="button" data-download-report-pdf>Download PDF</button>
-      <button class="secondary-button" type="button" data-copy-report-link>Copy link</button>
+    <article class="shared-report-document" aria-label="LinkedIn performance report">
+      <header class="shared-report-header">
+        <p class="eyebrow">Shared Report</p>
+        <h1>${escapeHtml(displayTitle)}</h1>
+        <p class="shared-report-subtitle">Generated ${escapeHtml(formatDateTime(generatedAt))} for ${escapeHtml(report.accountName || "Metrillix workspace")}.</p>
+      </header>
+      <div class="shared-report-kpis" aria-label="Key performance indicators">
+        ${kpis.map((item) => `
+          <article class="shared-report-kpi-card">
+            <span class="shared-report-kpi-icon" aria-hidden="true"></span>
+            <span class="shared-report-kpi-label">${escapeHtml(item.label)}</span>
+            <strong>${escapeHtml(item.value)}</strong>
+          </article>
+        `).join("")}
+      </div>
+      <section class="shared-report-section">
+        <h2>Summary</h2>
+        <p>${escapeHtml(snapshot.summary || "No summary available yet.")}</p>
+      </section>
+      <section class="shared-report-section">
+        <h2>Best Time</h2>
+        <p>${escapeHtml([snapshot.bestTime?.day, snapshot.bestTime?.hour].filter(Boolean).join(" near ") || "More post history needed.")}</p>
+      </section>
+      <section class="shared-report-section">
+        <h2>Best Post</h2>
+        ${bestPost ? `<p>${escapeHtml(truncateText(bestPost.text || "Top post", 220))}</p><p class="shared-report-detail">${formatNumber(bestPost.impressions)} impressions / ${formatPercent(bestPost.engagementRate || 0)} engagement rate</p>${bestPost.url ? `<a class="secondary-button shared-report-post-link" href="${escapeAttribute(bestPost.url)}" target="_blank" rel="noreferrer">Open LinkedIn post</a>` : ""}` : `<p>No top post available yet.</p>`}
+      </section>
+      ${recommendation ? `
+        <section class="shared-report-section">
+          <h2>Recommendations / Next Actions</h2>
+          <p>${escapeHtml(recommendation)}</p>
+        </section>
+      ` : ""}
+    </article>
+    <div class="shared-report-actions" aria-label="Report actions">
+      <button class="back-button" type="button" data-back data-back-fallback="/">Back</button>
+      <div class="shared-report-action-buttons">
+        <button class="secondary-button" type="button" data-copy-report-link>Copy Link</button>
+        <button class="primary-button" type="button" data-download-report-pdf>Download PDF</button>
+      </div>
     </div>
-    <div class="analytics-overview-grid shared-report-metrics">
-      ${["Posts", "Impressions", "Engagement", "Engagement Rate"].map((label) => {
-        const value = label === "Posts" ? metrics.posts : label === "Impressions" ? metrics.impressions : label === "Engagement" ? metrics.engagement : formatPercent(metrics.engagementRate || 0);
-        return `<article class="analytics-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(label === "Engagement Rate" ? value : formatNumber(value || 0))}</strong></article>`;
-      }).join("")}
-    </div>
-    <section class="shared-report-section">
-      <h2>Summary</h2>
-      <p>${escapeHtml(snapshot.summary || "No summary available yet.")}</p>
-      <p>${escapeHtml(snapshot.recommendation || "")}</p>
-    </section>
-    <section class="shared-report-section">
-      <h2>Best Time</h2>
-      <p>${escapeHtml([snapshot.bestTime?.day, snapshot.bestTime?.hour].filter(Boolean).join(" near ") || "More post history needed.")}</p>
-    </section>
-    <section class="shared-report-section">
-      <h2>Best Post</h2>
-      ${bestPost ? `<p>${escapeHtml(truncateText(bestPost.text || "Top post", 220))}</p><p>${formatNumber(bestPost.impressions)} impressions / ${formatPercent(bestPost.engagementRate || 0)} engagement rate</p>${bestPost.url ? `<a class="secondary-button" href="${escapeAttribute(bestPost.url)}" target="_blank" rel="noreferrer">Open LinkedIn post</a>` : ""}` : `<p>No top post available yet.</p>`}
-    </section>
   `;
 }
 
@@ -3212,7 +3687,7 @@ async function render() {
   const path = window.location.pathname;
   const route = routes[path] ? path : path.startsWith("/share/report/") ? "/share/report" : "/";
   setPageMeta(route);
-  document.body.dataset.page = route === "/" ? "home" : "app";
+  document.body.dataset.page = route === "/" ? "home" : route === "/share/report" ? "shared-report" : "app";
   const isPrivate = route.startsWith("/dashboard") || route === "/create-post";
   document.body.dataset.publicPage = String(!isPrivate);
 
