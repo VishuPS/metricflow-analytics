@@ -110,16 +110,16 @@ function scrollToSection(id) {
 function setPageMeta(route) {
   const meta = {
     "/": {
-      title: "Metrillix | AI LinkedIn Intelligence",
+      title: "Metrillix | LinkedIn Intelligence, Simplified",
       description: "Metrillix turns LinkedIn performance into executive-ready summaries, recommendations, reports, and content planning."
     },
     "/about": {
       title: "About Metrillix | Calm LinkedIn Intelligence",
-      description: "Learn why Metrillix is building an AI-powered LinkedIn intelligence platform for clearer business decisions."
+      description: "Learn why Metrillix is building LinkedIn intelligence for clearer business decisions."
     },
     "/features": {
-      title: "Features | Metrillix AI LinkedIn Intelligence",
-      description: "Explore the Metrillix intelligence workflow: AI summaries, recommendations, reports, content planning, and secure LinkedIn data."
+      title: "Features | Metrillix",
+      description: "Explore the Metrillix intelligence workflow: AI summaries, actionable recommendations, executive reports, and content planning."
     },
     "/pricing": {
       title: "Pricing | Metrillix Plans",
@@ -399,39 +399,6 @@ function ComparisonTable({ rows }) {
           <span role="cell">${escapeHtml(row.growth)}</span>
         </div>
       `).join("")}
-    </div>
-  `;
-}
-
-function RoadmapList({ items }) {
-  const curvePath = "M 125 44 C 245 44 255 126 375 126 S 505 44 625 44 S 755 126 875 126";
-
-  return `
-    <div class="roadmap-timeline-wrap reveal">
-      <svg class="roadmap-curve" viewBox="0 0 1000 170" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-        <defs>
-          <linearGradient id="roadmap-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="var(--public-accent)"></stop>
-            <stop offset="58%" stop-color="var(--public-accent)"></stop>
-            <stop offset="100%" stop-color="#18c7b8"></stop>
-          </linearGradient>
-        </defs>
-        <path class="roadmap-curve-base" d="${curvePath}" pathLength="1"></path>
-        <path class="roadmap-curve-active" d="${curvePath}" pathLength="1"></path>
-      </svg>
-      <ol class="roadmap-timeline" aria-label="Metrillix product roadmap">
-        ${items.map((item, index) => `
-          <li class="roadmap-milestone ${index === 0 ? "is-current" : ""}" style="--milestone-index: ${index};">
-            <div class="roadmap-node" aria-hidden="true"></div>
-            <article class="roadmap-panel">
-              <span class="roadmap-badge">${escapeHtml(item.phase || String(index + 1).padStart(2, "0"))}</span>
-              ${item.meta ? `<em>${escapeHtml(item.meta)}</em>` : ""}
-              <strong>${escapeHtml(item.title)}</strong>
-              <p>${escapeHtml(item.text)}</p>
-            </article>
-          </li>
-        `).join("")}
-      </ol>
     </div>
   `;
 }
@@ -914,22 +881,6 @@ function AboutPage() {
         </div>
       </section>
 
-      <section class="simple-section wide-section">
-        ${SectionHeader({
-          eyebrow: "Roadmap",
-          title: "Looking ahead with practical improvements.",
-          text: "Our roadmap focuses on smarter guidance, richer reporting, collaboration, and broader business insight while preserving the platform's simplicity."
-        })}
-        ${RoadmapList({ items: [
-          { title: "AI-assisted recommendations", text: "Turn analytics into clearer publishing direction." },
-          { title: "Smarter publishing guidance", text: "Help teams understand when and what to publish." },
-          { title: "Enhanced reporting", text: "Add richer views for teams reviewing performance over time." },
-          { title: "Collaboration tools", text: "Support growing teams and agencies managing content together." },
-          { title: "Multi-platform analytics", text: "Explore broader analytics workflows beyond LinkedIn." },
-          { title: "Additional business insights", text: "Connect performance signals to stronger decision-making." }
-        ]})}
-      </section>
-
       <section class="simple-section">
         ${SectionHeader({
           eyebrow: "Privacy Commitment",
@@ -1107,7 +1058,7 @@ function PublicFooter() {
     <footer class="simple-footer">
       <div class="footer-brand">
         <strong>Metrillix</strong>
-        <span>AI LinkedIn intelligence for clearer business decisions.</span>
+        <span>LinkedIn intelligence for clearer business decisions.</span>
       </div>
       <nav>
         <button class="footer-link" data-route="/features">Features</button>
@@ -1138,28 +1089,19 @@ function WelcomePage() {
 
       <section class="simple-section problem-section" id="problem">
         ${SectionHeader({
-          eyebrow: "The problem",
-          title: "Most LinkedIn analytics stop before the decision.",
-          text: "Teams do not need another wall of charts. They need to understand what changed, why it matters, and what to publish next."
+          eyebrow: "Why it exists",
+          title: "LinkedIn analytics shows what happened. Metrillix helps decide what to do next.",
+          text: "Turn scattered performance signals into a calmer weekly review: what changed, what mattered, and which move deserves attention."
         })}
         <div class="insight-pill-row">
-          ${InsightPill({ label: "Instead of", value: "More dashboard noise" })}
-          ${InsightPill({ label: "Metrillix gives you", value: "A decision-ready brief" })}
-          ${InsightPill({ label: "So teams can", value: "Move from review to action" })}
+          ${InsightPill({ label: "Review", value: "Clear performance signal" })}
+          ${InsightPill({ label: "Decide", value: "Actionable recommendation" })}
+          ${InsightPill({ label: "Share", value: "Executive-ready brief" })}
         </div>
-      </section>
-
-      <section class="simple-section benefits-section" id="benefits">
-        ${SectionHeader({
-          eyebrow: "Benefits",
-          title: "Designed for the weekly decisions that compound.",
-          text: "Metrillix helps you build a repeatable loop from performance review to better content direction."
-        })}
         <div class="benefit-grid">
           ${BenefitPanel({ label: "01", title: "Summaries executives can read", text: "Condense page movement, strongest content, and next steps into a brief that does not require analytics translation." })}
-          ${BenefitPanel({ label: "02", title: "Recommendations with context", text: "Understand which topics, hooks, proof points, and timing patterns deserve another bet." })}
-          ${BenefitPanel({ label: "03", title: "Planning close to the evidence", text: "Keep upcoming ideas and drafts connected to the signals that inspired them." })}
-          ${BenefitPanel({ label: "04", title: "Reporting without ceremony", text: "Share a clean performance narrative with stakeholders without building a slide deck every week." })}
+          ${BenefitPanel({ label: "02", title: "Recommendations with context", text: "Understand which topics, timing patterns, and follow-up opportunities deserve another bet." })}
+          ${BenefitPanel({ label: "03", title: "Planning close to the evidence", text: "Turn the strongest signals into upcoming content direction without rebuilding the analysis each week." })}
         </div>
       </section>
 
@@ -1207,16 +1149,14 @@ function FeaturesPage() {
       <section class="simple-section feature-depth-section">
         ${SectionHeader({
           eyebrow: "Capabilities",
-          title: "A focused toolset, not a feature dump.",
-          text: "Metrillix prioritizes interpretation and planning over dense dashboard sprawl."
+          title: "Built around the weekly LinkedIn review workflow.",
+          text: "A focused set of capabilities for turning performance into decisions."
         })}
         <div class="feature-tour-grid">
           ${TrustCard({ title: "AI summaries", text: "Plain-language performance narratives for weekly reviews and stakeholder updates." })}
           ${TrustCard({ title: "Actionable recommendations", text: "Guidance on topics, formats, hooks, timing, and follow-up opportunities." })}
           ${TrustCard({ title: "Executive reports", text: "Clean summaries your team can share without exporting spreadsheets." })}
           ${TrustCard({ title: "Content planning", text: "A workspace for turning insights into draft ideas and publishing direction." })}
-          ${TrustCard({ title: "Signal cards", text: "Selective metrics that explain what changed instead of overwhelming the page." })}
-          ${TrustCard({ title: "Secure LinkedIn connection", text: "Company Page access through OAuth with clear permission boundaries." })}
         </div>
       </section>
 
@@ -1294,10 +1234,10 @@ function AboutPage() {
       <section class="simple-hero about-hero">
         <p class="eyebrow">About Metrillix</p>
         <h1>We believe performance data should become business clarity.</h1>
-        <p>Metrillix exists for teams that publish on LinkedIn consistently but still struggle to explain what is working and what to do next.</p>
+        <p>Metrillix exists because LinkedIn analytics shows what happened, but teams still need help deciding what to do next.</p>
         <div class="hero-actions">
           <button class="primary-button" data-route="/signup">Get started</button>
-          <button class="secondary-button" data-route="/features">Explore features</button>
+          <button class="secondary-button" data-route="/contact">Contact</button>
         </div>
       </section>
 
@@ -1324,23 +1264,9 @@ function AboutPage() {
         </div>
       </section>
 
-      <section class="simple-section wide-section">
-        ${SectionHeader({
-          eyebrow: "Roadmap",
-          title: "What's coming next.",
-          text: "The roadmap focuses on intelligence features that help teams move faster without making the product heavier."
-        })}
-        ${RoadmapList({ items: [
-          { phase: "Now", meta: "Available today", title: "Executive reports", text: "Generate clean, shareable reports from your LinkedIn Company Page performance, highlighting the metrics and trends that matter." },
-          { phase: "Next", meta: "Near-term", title: "AI performance summaries", text: "Transform LinkedIn analytics into concise, plain-language summaries that explain what changed, why it matters, and where to focus next." },
-          { phase: "Soon", title: "Recommendation engine", text: "Receive content recommendations based on historical performance, posting patterns, engagement trends, and audience behaviour." },
-          { phase: "Later", title: "Team collaboration", text: "Shared workspaces, review workflows, comments, and collaborative planning for marketing teams and agencies." }
-        ]})}
-      </section>
-
       ${CTASection({
         title: "Help shape calmer LinkedIn intelligence.",
-        text: "Join early and tell us what would make your reporting workflow clearer.",
+        text: "Tell us what would make your LinkedIn reporting workflow clearer.",
         primary: "Start free",
         secondary: "Contact"
       })}
