@@ -182,6 +182,35 @@ The Worker posts `{ type, to, name, resetUrl, subject }` for password resets and
 
 Signup and login responses also set an HttpOnly `metrillix_session` cookie for secure dashboard sessions. The frontend still accepts bearer-token sessions for backwards compatibility, but browser requests send cookies with `credentials: "include"` and logout clears the cookie. `metrillix.com` includes a cookie notice and `/cookie-policy` page covering essential session cookies, notice preferences, and LinkedIn cookies shown during OAuth.
 
+Admin access is controlled by `ADMIN_EMAILS`, a comma-separated allowlist in the Worker environment. Any normal Metrillix account whose email appears in that list can open `/admin` to review registered users, plan labels, and LinkedIn connection status. The admin endpoint does not return password hashes or salts.
+
+Stripe billing is wired for the Growth plan. For the fastest setup, Growth can use a Stripe Payment Link from browser config:
+
+```js
+window.STRIPE_PAYMENT_LINK_GROWTH = "https://buy.stripe.com/..."
+window.STRIPE_PAYMENT_LINK_ENTERPRISE = "https://buy.stripe.com/..."
+```
+
+When these values are present, the Growth and Enterprise CTAs open the matching Payment Link directly with `client_reference_id`, `locked_prefilled_email`, and UTM parameters appended. Metrillix sends `client_reference_id` as `{accountId}:{plan}` so webhooks can recover the clicked plan. This does not require `STRIPE_SECRET_KEY` just to collect payment. Enterprise is modeled as the multi-page plan for up to five LinkedIn Company Pages.
+
+To automatically update Metrillix billing status after payment, configure the Stripe webhook:
+
+```powershell
+wrangler secret put STRIPE_WEBHOOK_SECRET --config wrangler.worker.toml
+```
+
+The webhook endpoint is:
+
+```text
+https://api.metrillix.com/api/stripe/webhook
+```
+
+The billing webhook verifies `Stripe-Signature` against the raw request body before updating account plan and subscription fields.
+
+The Stripe publishable key can live in `config.js` as `window.STRIPE_PUBLISHABLE_KEY`; it is public browser config. Hosted Checkout still requires `STRIPE_SECRET_KEY` on the Worker because the Worker creates the Checkout Session server-side.
+
+If you later switch from Payment Links back to Worker-created Checkout Sessions, add `STRIPE_SECRET_KEY`, set `STRIPE_PRICE_GROWTH` and `STRIPE_PRICE_ENTERPRISE` to the recurring Price IDs, and remove the `window.STRIPE_PAYMENT_LINK_*` values.
+
 MetricFlow production storage is multi-tenant and account-scoped in `USER_STATE`. The Worker no longer reads or writes the old global `metricflow:state` analytics document.
 
 Current KV layout:

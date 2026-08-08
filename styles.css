@@ -1293,8 +1293,8 @@ body[data-public-page="true"] h3 {
 }
 
 .core-pricing-grid {
-  max-width: 850px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 1120px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .pricing-card {
@@ -1513,7 +1513,7 @@ body[data-public-page="true"] h3 {
 .comparison-table {
   overflow: hidden;
   width: 100%;
-  max-width: 920px;
+  max-width: 1120px;
   background: var(--premium-glass);
 }
 
@@ -3168,7 +3168,7 @@ body[data-public-page="true"] h3 {
 
 .comparison-table {
   display: grid;
-  width: min(960px, 100%);
+  width: min(1120px, 100%);
   border: 1px solid var(--public-border);
   border-radius: var(--radius);
   background: var(--public-card-bg);
@@ -3179,7 +3179,7 @@ body[data-public-page="true"] h3 {
 
 .comparison-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) repeat(2, minmax(140px, 1fr));
+  grid-template-columns: minmax(180px, 1.2fr) repeat(3, minmax(140px, 1fr));
   border-top: 1px solid var(--public-border);
 }
 
@@ -3521,9 +3521,9 @@ body[data-public-page="true"] h3 {
 }
 
 .core-pricing-grid {
-  max-width: 760px;
+  max-width: 1120px;
   margin: 0 auto;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .pricing-card {
@@ -5083,6 +5083,35 @@ textarea:focus {
   backdrop-filter: blur(12px);
 }
 
+.admin-shell {
+  gap: 24px;
+}
+
+.admin-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.admin-table-section {
+  overflow: hidden;
+}
+
+.admin-table td strong,
+.admin-table td small {
+  display: block;
+}
+
+.admin-table td small {
+  margin-top: 4px;
+}
+
+.admin-access-panel {
+  display: grid;
+  gap: 14px;
+  padding: 24px;
+}
+
 .metric-card {
   position: relative;
   padding: 22px;
@@ -5808,6 +5837,7 @@ textarea:focus {
 :root[data-theme="dark"] .dashboard-workflow-card,
 :root[data-theme="dark"] .content-score-panel,
 :root[data-theme="dark"] .best-time-card,
+:root[data-theme="dark"] .admin-access-panel,
 :root[data-theme="dark"] .cookie-banner {
   background: var(--panel);
   border-color: var(--border);
@@ -6007,6 +6037,10 @@ textarea:focus {
 }
 
 @media (max-width: 760px) {
+  .admin-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
   .top-nav {
     min-height: auto;
     padding: 0 20px;
@@ -6249,7 +6283,7 @@ textarea:focus {
   }
 
   .comparison-row {
-    min-width: 620px;
+    min-width: 760px;
   }
 
   .cta-section {

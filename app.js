@@ -24,6 +24,9 @@ const routes = {
   "/forgot-password": ForgotPasswordPage,
   "/reset-password": ResetPasswordPage,
   "/cookie-policy": CookiePolicyPage,
+  "/admin": AdminPage,
+  "/billing/success": BillingSuccessPage,
+  "/billing/cancel": BillingCancelPage,
   "/dashboard/onboarding": OnboardingPage,
   "/dashboard/analytics": AnalyticsDashboardPage,
   "/share/report": SharedReportPage,
@@ -111,27 +114,45 @@ function setPageMeta(route) {
   const meta = {
     "/": {
       title: "Metrillix | LinkedIn Intelligence, Simplified",
-      description: "Metrillix turns LinkedIn performance into executive-ready summaries, recommendations, reports, and content planning."
+      description: "Metrillix turns LinkedIn performance into executive-ready summaries, recommendations, reports, and content planning.",
+      index: true
     },
     "/about": {
       title: "About Metrillix | Calm LinkedIn Intelligence",
-      description: "Learn why Metrillix is building LinkedIn intelligence for clearer business decisions."
+      description: "Learn why Metrillix is building LinkedIn intelligence for clearer business decisions.",
+      index: true
     },
     "/features": {
       title: "Features | Metrillix",
-      description: "Explore the Metrillix intelligence workflow: AI summaries, actionable recommendations, executive reports, and content planning."
+      description: "Explore the Metrillix intelligence workflow: AI summaries, actionable recommendations, executive reports, and content planning.",
+      index: true
     },
     "/pricing": {
       title: "Pricing | Metrillix Plans",
-      description: "Compare simple Metrillix plans for LinkedIn intelligence, reports, and content planning."
+      description: "Compare Metrillix Starter, Growth, and Enterprise plans for LinkedIn Company Page analytics, reports, and content planning.",
+      index: true
     },
     "/contact": {
       title: "Contact | Metrillix",
-      description: "Contact Metrillix for product questions, support, partnerships, and early customer conversations."
+      description: "Contact Metrillix for product questions, support, partnerships, and early customer conversations.",
+      index: true
     },
     "/cookie-policy": {
       title: "Cookie Policy | Metrillix",
-      description: "How Metrillix uses essential cookies for secure login, dashboard sessions, and account preferences."
+      description: "How Metrillix uses essential cookies for secure login, dashboard sessions, and account preferences.",
+      index: true
+    },
+    "/admin": {
+      title: "Admin | Metrillix",
+      description: "Metrillix account administration."
+    },
+    "/billing/success": {
+      title: "Billing Started | Metrillix",
+      description: "Your Metrillix checkout completed."
+    },
+    "/billing/cancel": {
+      title: "Billing Canceled | Metrillix",
+      description: "Return to Metrillix pricing."
     },
     "/login": {
       title: "Log In | Metrillix",
@@ -154,13 +175,36 @@ function setPageMeta(route) {
     description: "LinkedIn Company Page analytics for clearer content decisions."
   };
   document.title = meta.title;
-  let description = document.querySelector('meta[name="description"]');
-  if (!description) {
-    description = document.createElement("meta");
-    description.name = "description";
-    document.head.appendChild(description);
+  const canonical = `${appUrl}${route === "/" ? "/" : route}`;
+  setMetaTag("name", "description", meta.description);
+  setMetaTag("name", "robots", meta.index ? "index,follow" : "noindex,nofollow");
+  setMetaTag("property", "og:title", meta.title);
+  setMetaTag("property", "og:description", meta.description);
+  setMetaTag("property", "og:url", canonical);
+  setMetaTag("property", "og:type", "website");
+  setMetaTag("name", "twitter:title", meta.title);
+  setMetaTag("name", "twitter:description", meta.description);
+  setLinkTag("canonical", canonical);
+}
+
+function setMetaTag(attribute, key, content) {
+  let element = document.querySelector(`meta[${attribute}="${key}"]`);
+  if (!element) {
+    element = document.createElement("meta");
+    element.setAttribute(attribute, key);
+    document.head.appendChild(element);
   }
-  description.content = meta.description;
+  element.content = content;
+}
+
+function setLinkTag(rel, href) {
+  let element = document.querySelector(`link[rel="${rel}"]`);
+  if (!element) {
+    element = document.createElement("link");
+    element.rel = rel;
+    document.head.appendChild(element);
+  }
+  element.href = href;
 }
 
 function navigateBack(fallback = "/") {
@@ -213,9 +257,58 @@ async function authenticate(mode, form) {
     name: result.name || payload.name || session.name || "",
     email: result.email || payload.email,
     token: result.token || result.accessToken || session.token || "",
-    accountId: result.userId || result.id || session.accountId || ""
+    accountId: result.userId || result.id || session.accountId || "",
+    isAdmin: Boolean(result.isAdmin)
   });
   navigate("/dashboard/onboarding");
+}
+
+async function startBillingCheckout(plan = "growth") {
+  if (!hasActiveSession()) {
+    sessionStorage.setItem(previousPathKey, "/pricing");
+    showToast("Create an account first, then choose Growth.");
+    navigate("/signup");
+    return;
+  }
+  const paymentLinks = {
+    growth: window.STRIPE_PAYMENT_LINK_GROWTH,
+    enterprise: window.STRIPE_PAYMENT_LINK_ENTERPRISE
+  };
+  const paymentLink = paymentLinks[plan] || "";
+  if (paymentLink) {
+    window.location.href = stripePaymentLinkUrl(paymentLink, plan);
+    return;
+  }
+  if (plan === "enterprise" && !window.STRIPE_PAYMENT_LINK_ENTERPRISE) {
+    showToast("Enterprise checkout is almost ready. Contact us for access.");
+    navigate("/contact");
+    return;
+  }
+  const result = await api("/api/billing/checkout", {
+    method: "POST",
+    body: JSON.stringify({ plan })
+  });
+  if (!result.url) throw new Error("Stripe checkout did not return a payment link.");
+  window.location.href = result.url;
+}
+
+function stripePaymentLinkUrl(link, plan = "growth") {
+  const url = new URL(link);
+  if (session.accountId) url.searchParams.set("client_reference_id", `${session.accountId}:${plan}`);
+  if (session.email) url.searchParams.set("locked_prefilled_email", session.email);
+  url.searchParams.set("utm_source", "metrillix");
+  url.searchParams.set("utm_medium", "app_checkout");
+  url.searchParams.set("utm_campaign", `${plan}_subscription`);
+  return url.toString();
+}
+
+async function openBillingPortal() {
+  const result = await api("/api/billing/portal", {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+  if (!result.url) throw new Error("Stripe billing portal did not return a link.");
+  window.location.href = result.url;
 }
 
 async function requestPasswordReset(form) {
@@ -281,14 +374,16 @@ async function loadDashboardState() {
 
 function TopNav({ right = "login" } = {}) {
   const themeButton = `<button class="theme-toggle" type="button" data-theme-toggle aria-pressed="${currentTheme() === "dark"}">${currentTheme() === "dark" ? "Light mode" : "Dark mode"}</button>`;
+  const adminLink = session.isAdmin ? `<button class="nav-link" data-route="/admin">Admin</button>` : "";
   const links = right === "dashboard"
-    ? `<button class="nav-link" data-route="/dashboard">Dashboard</button>${themeButton}<button class="nav-link" data-logout>Log out</button>`
+    ? `<button class="nav-link" data-route="/dashboard">Dashboard</button>${adminLink}${themeButton}<button class="nav-link" data-logout>Log out</button>`
     : `
       <button class="nav-link" data-route="/">Home</button>
       <button class="nav-link" data-route="/features">Features</button>
       <button class="nav-link" data-route="/pricing">Pricing</button>
       <button class="nav-link" data-route="/about">About</button>
       <button class="nav-link" data-route="/contact">Contact</button>
+      ${adminLink}
       ${themeButton}
       <button class="nav-link" data-route="/login">Log In</button>
       <button class="nav-signup" data-route="/signup">Get Started</button>
@@ -366,7 +461,8 @@ function FAQItem({ question, answer }) {
   `;
 }
 
-function PricingCard({ label, name, description, price, features, featured = false, buttonText, note = "" }) {
+function PricingCard({ label, name, description, price, features, featured = false, buttonText, note = "", billingPlan = "" }) {
+  const actionAttribute = billingPlan ? `data-billing-checkout="${escapeAttribute(billingPlan)}"` : `data-route="/signup"`;
   return `
     <article class="pricing-card ${featured ? "featured" : ""} reveal">
       <div>
@@ -379,7 +475,7 @@ function PricingCard({ label, name, description, price, features, featured = fal
       <ul>
         ${features.map((feature) => `<li>${escapeHtml(feature)}</li>`).join("")}
       </ul>
-      <button class="${featured ? "primary-button" : "secondary-button"} full" data-route="/signup">${escapeHtml(buttonText)}</button>
+      <button class="${featured ? "primary-button" : "secondary-button"} full" ${actionAttribute}>${escapeHtml(buttonText)}</button>
     </article>
   `;
 }
@@ -391,12 +487,14 @@ function ComparisonTable({ rows }) {
         <span role="columnheader">Feature</span>
         <span role="columnheader">Free</span>
         <span role="columnheader">Growth</span>
+        <span role="columnheader">Enterprise</span>
       </div>
       ${rows.map((row) => `
         <div class="comparison-row" role="row">
           <span role="cell">${escapeHtml(row.feature)}</span>
           <span role="cell">${escapeHtml(row.free)}</span>
           <span role="cell">${escapeHtml(row.growth)}</span>
+          <span role="cell">${escapeHtml(row.enterprise || "")}</span>
         </div>
       `).join("")}
     </div>
@@ -521,7 +619,17 @@ function PricingSection() {
           price: "$9.99",
           features: ["Full historical analytics", "Trend analysis", "Performance insights", "Content Workspace", "Priority feature access"],
           featured: true,
-          buttonText: "Try Growth free"
+          buttonText: "Try Growth free",
+          billingPlan: "growth"
+        })}
+        ${PricingCard({
+          label: "5 pages",
+          name: "Enterprise",
+          description: "For teams managing multiple LinkedIn Company Pages with stronger reporting needs.",
+          price: "Custom",
+          features: ["Up to 5 Company Pages", "Cross-page reporting", "Executive report briefs", "Priority support", "Expanded AI planning features"],
+          buttonText: "Choose Enterprise",
+          billingPlan: "enterprise"
         })}
       </div>
     </section>
@@ -730,13 +838,13 @@ function FeaturesPage() {
 
 function PricingPage() {
   const comparisonRows = [
-    { feature: "Company Pages", free: "1 page", growth: "1 page" },
-    { feature: "Historical data", free: "Recent analytics", growth: "Full historical analytics" },
-    { feature: "Trend charts", free: "Basic", growth: "Advanced" },
-    { feature: "Content Workspace", free: "Limited", growth: "Included" },
-    { feature: "AI recommendations", free: "Coming soon", growth: "Future capability" },
-    { feature: "Priority support", free: "Standard", growth: "Priority updates" },
-    { feature: "Future updates", free: "Core updates", growth: "Priority feature access" }
+    { feature: "Company Pages", free: "1 page", growth: "1 page", enterprise: "Up to 5 pages" },
+    { feature: "Historical data", free: "Recent analytics", growth: "Full historical analytics", enterprise: "Full cross-page history" },
+    { feature: "Trend charts", free: "Basic", growth: "Advanced", enterprise: "Advanced by page and portfolio" },
+    { feature: "Content Workspace", free: "Limited", growth: "Included", enterprise: "Included across pages" },
+    { feature: "AI recommendations", free: "Coming soon", growth: "Future capability", enterprise: "Expanded priority access" },
+    { feature: "Priority support", free: "Standard", growth: "Priority updates", enterprise: "Priority support" },
+    { feature: "Future updates", free: "Core updates", growth: "Priority feature access", enterprise: "Priority roadmap access" }
   ];
 
   return `
@@ -767,14 +875,15 @@ function PricingPage() {
         ${SectionHeader({
           eyebrow: "What's included",
           title: "Focused analytics without unnecessary complexity.",
-          text: "Both plans are designed around clear LinkedIn Company Page reporting, practical performance review, and a simple publishing workflow."
+          text: "Each plan is designed around clear LinkedIn Company Page reporting, practical performance review, and a simple publishing workflow."
         })}
         <div class="feature-grid">
           ${FeatureCard({ title: "Basic analytics", text: "Understand recent post insights and core page performance signals." })}
           ${FeatureCard({ title: "Trend analysis", text: "Review visual charts that help reveal changes in reach, engagement, and consistency." })}
           ${FeatureCard({ title: "Performance insights", text: "Identify stronger content and useful publishing patterns over time." })}
           ${FeatureCard({ title: "Content Workspace", text: "Keep ideas and upcoming posts organized beside your analytics." })}
-          ${FeatureCard({ title: "Priority feature access", text: "Growth subscribers receive priority access as new capabilities roll out." })}
+          ${FeatureCard({ title: "Priority feature access", text: "Growth and Enterprise subscribers receive priority access as new capabilities roll out." })}
+          ${FeatureCard({ title: "Multi-page management", text: "Enterprise supports up to five LinkedIn Company Pages from one Metrillix account." })}
           ${FeatureCard({ title: "Secure LinkedIn OAuth", text: "Connect only the Company Pages you explicitly authorize." })}
         </div>
       </section>
@@ -798,12 +907,12 @@ function PricingPage() {
             <p>Upcoming tools may include publishing recommendations, performance forecasting, audience behavior analysis, content opportunity detection, and draft quality feedback.</p>
           </div>
           <div class="ai-coming-soon-panel">
-            <span>Enterprise coming soon</span>
+            <span>Enterprise</span>
             <ul>
-              <li>Advanced collaboration</li>
-              <li>Agency and larger organization workflows</li>
-              <li>Expanded management capabilities</li>
-              <li>Future business intelligence options</li>
+              <li>Manage up to 5 LinkedIn Company Pages</li>
+              <li>Cross-page reporting for teams and agencies</li>
+              <li>Priority support and onboarding guidance</li>
+              <li>Expanded business intelligence options</li>
             </ul>
           </div>
         </div>
@@ -1029,7 +1138,17 @@ function PricingSection({ compact = false } = {}) {
           price: "$9.99",
           features: ["Historical intelligence", "Weekly report briefs", "Content planning workspace", "Priority feature access", "Future AI recommendations"],
           featured: true,
-          buttonText: "Try Growth free"
+          buttonText: "Try Growth free",
+          billingPlan: "growth"
+        })}
+        ${PricingCard({
+          label: "5 pages",
+          name: "Enterprise",
+          description: "For agencies and teams managing several LinkedIn Company Pages from one account.",
+          price: "Custom",
+          features: ["Manage up to 5 Company Pages", "Cross-page analytics", "Executive-ready reporting", "Priority support", "Expanded AI recommendations"],
+          buttonText: "Choose Enterprise",
+          billingPlan: "enterprise"
         })}
       </div>
     </section>
@@ -1173,13 +1292,13 @@ function FeaturesPage() {
 
 function PricingPage() {
   const comparisonRows = [
-    { feature: "Company Pages", free: "1 page", growth: "1 page" },
-    { feature: "Core performance overview", free: "Included", growth: "Included" },
-    { feature: "Historical intelligence", free: "Limited", growth: "Included" },
-    { feature: "Report briefs", free: "Preview", growth: "Included" },
-    { feature: "Content planning", free: "Preview", growth: "Included" },
-    { feature: "AI recommendations", free: "Future preview", growth: "Priority access" },
-    { feature: "Support", free: "Standard", growth: "Priority updates" }
+    { feature: "Company Pages", free: "1 page", growth: "1 page", enterprise: "Up to 5 pages" },
+    { feature: "Core performance overview", free: "Included", growth: "Included", enterprise: "Included across pages" },
+    { feature: "Historical intelligence", free: "Limited", growth: "Included", enterprise: "Portfolio-level history" },
+    { feature: "Report briefs", free: "Preview", growth: "Included", enterprise: "Executive and cross-page briefs" },
+    { feature: "Content planning", free: "Preview", growth: "Included", enterprise: "Included across pages" },
+    { feature: "AI recommendations", free: "Future preview", growth: "Priority access", enterprise: "Expanded priority access" },
+    { feature: "Support", free: "Standard", growth: "Priority updates", enterprise: "Priority support" }
   ];
 
   return `
@@ -1201,7 +1320,7 @@ function PricingPage() {
         ${SectionHeader({
           eyebrow: "Compare",
           title: "Choose the level of intelligence you need right now.",
-          text: "Both plans are intentionally lightweight. Growth adds the deeper reporting and planning layer."
+          text: "Starter keeps the first page simple. Growth adds deeper reporting. Enterprise expands Metrillix for up to five managed pages."
         })}
         ${ComparisonTable({ rows: comparisonRows })}
       </section>
@@ -1212,7 +1331,8 @@ function PricingPage() {
           ${FAQItem({ question: "Can I cancel anytime?", answer: "Yes. Metrillix has no long-term contract." })}
           ${FAQItem({ question: "Is there a free trial?", answer: "Every paid subscription begins with a one-month free trial." })}
           ${FAQItem({ question: "Do I need LinkedIn Premium?", answer: "No. Metrillix works with authorized LinkedIn Company Pages and does not require LinkedIn Premium." })}
-          ${FAQItem({ question: "Will AI features be available to Growth users?", answer: "Growth subscribers receive priority access as advanced intelligence features roll out." })}
+          ${FAQItem({ question: "What does Enterprise add?", answer: "Enterprise is designed for teams managing up to five LinkedIn Company Pages with cross-page reporting, priority support, and expanded AI planning access." })}
+          ${FAQItem({ question: "Will AI features be available to Growth users?", answer: "Growth subscribers receive priority access as advanced intelligence features roll out. Enterprise receives the broadest AI planning access as those features mature." })}
         </div>
       </section>
 
@@ -1389,6 +1509,77 @@ function LoginPage() {
   `;
 }
 
+function AdminPage() {
+  return `
+    ${TopNav({ right: "dashboard" })}
+    <main class="page-shell dashboard-shell admin-shell">
+      <section class="dashboard-header">
+        <div>
+          <p class="eyebrow">Admin</p>
+          <h1>Metrillix Accounts</h1>
+          <p class="muted">Review registrations, plan status, and LinkedIn connection readiness before Stripe is connected.</p>
+        </div>
+        <div class="button-row">
+          <button class="secondary-button" type="button" data-route="/">Main site</button>
+          <button class="primary-button" type="button" data-admin-refresh>Refresh</button>
+        </div>
+      </section>
+
+      <section class="admin-summary-grid" id="adminSummary">
+        <article class="metric-card"><span>Total accounts</span><strong>--</strong></article>
+        <article class="metric-card"><span>Admins</span><strong>--</strong></article>
+        <article class="metric-card"><span>LinkedIn connected</span><strong>--</strong></article>
+      </section>
+
+      <section class="table-section admin-table-section">
+        <div class="section-heading-row">
+          <div>
+            <h2>Registered Users</h2>
+            <p class="muted">Sensitive password fields are not returned to this view.</p>
+          </div>
+        </div>
+        <div id="adminAccounts">
+          <p class="empty-state">Loading accounts.</p>
+        </div>
+      </section>
+    </main>
+  `;
+}
+
+function BillingSuccessPage() {
+  return `
+    ${TopNav({ right: hasActiveSession() ? "dashboard" : "login" })}
+    <main class="page-shell auth-shell">
+      <section class="auth-card billing-result-card">
+        <p class="eyebrow">Billing</p>
+        <h1>Checkout started</h1>
+        <p class="muted">Stripe is confirming the subscription. Your account will update automatically after the billing webhook arrives.</p>
+        <div class="button-row">
+          <button class="primary-button" data-route="/dashboard">Open dashboard</button>
+          <button class="secondary-button" data-route="/pricing">Pricing</button>
+        </div>
+      </section>
+    </main>
+  `;
+}
+
+function BillingCancelPage() {
+  return `
+    ${TopNav({ right: hasActiveSession() ? "dashboard" : "login" })}
+    <main class="page-shell auth-shell">
+      <section class="auth-card billing-result-card">
+        <p class="eyebrow">Billing</p>
+        <h1>Checkout was canceled</h1>
+        <p class="muted">No payment was completed. You can return to pricing whenever you are ready.</p>
+        <div class="button-row">
+          <button class="primary-button" data-billing-checkout="growth">Try Growth free</button>
+          <button class="secondary-button" data-route="/pricing">Pricing</button>
+        </div>
+      </section>
+    </main>
+  `;
+}
+
 function ForgotPasswordPage() {
   return `
     ${TopNav()}
@@ -1520,6 +1711,7 @@ function Dashboard() {
           <button class="primary-button" data-sync-linkedin>Sync Data</button>
           <button class="secondary-button" data-route="/create-post">Create Post</button>
           <button class="secondary-button" data-route="/dashboard/analytics">Dashboard View</button>
+          <button class="secondary-button" type="button" data-billing-portal>Manage Billing</button>
           <details class="workspace-menu">
             <summary>Workspace Actions</summary>
             <div>
@@ -2692,6 +2884,90 @@ function renderHashtagTable(selector, hashtags) {
   `;
 }
 
+async function hydrateAdminAccounts() {
+  const target = document.querySelector("#adminAccounts");
+  if (!target) return;
+  target.innerHTML = `<p class="empty-state">Loading accounts.</p>`;
+  try {
+    const result = await api("/api/admin/accounts");
+    renderAdminSummary(result);
+    renderAdminAccounts(result.accounts || []);
+  } catch (error) {
+    target.innerHTML = `
+      <div class="admin-access-panel">
+        <h2>Admin access unavailable</h2>
+        <p>${escapeHtml(userMessage(error, "Log in with an email listed in ADMIN_EMAILS to view registered users."))}</p>
+        <div class="button-row">
+          <button class="primary-button" data-route="/login">Log in</button>
+          <button class="secondary-button" data-route="/">Main site</button>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function renderAdminSummary(result = {}) {
+  const target = document.querySelector("#adminSummary");
+  if (!target) return;
+  const accounts = result.accounts || [];
+  const connected = accounts.filter((account) => account.linkedin?.connected).length;
+  target.innerHTML = [
+    ["Total accounts", formatNumber(result.total || accounts.length)],
+    ["Admins", formatNumber(result.admins || 0)],
+    ["LinkedIn connected", formatNumber(connected)]
+  ].map(([label, value]) => `
+    <article class="metric-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </article>
+  `).join("");
+}
+
+function renderAdminAccounts(accounts) {
+  const target = document.querySelector("#adminAccounts");
+  if (!target) return;
+  if (!accounts.length) {
+    target.innerHTML = `<p class="empty-state">No registered accounts yet.</p>`;
+    return;
+  }
+
+  target.innerHTML = `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table admin-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Plan</th>
+            <th>Billing</th>
+            <th>LinkedIn</th>
+            <th>Joined</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${accounts.map((account) => `
+            <tr>
+              <td>
+                <strong>${escapeHtml(account.name || "Unnamed user")}</strong>
+                <small>${escapeHtml(account.email || "")}${account.isAdmin ? " - Admin" : ""}</small>
+              </td>
+              <td>${escapeHtml(account.plan || "Free trial")}</td>
+              <td>
+                ${escapeHtml(uiTitleCase(account.billingStatus || "inactive"))}
+                <small>${account.stripeCustomerId ? "Stripe customer" : "No Stripe customer"}</small>
+              </td>
+              <td>
+                ${account.linkedin?.connected ? "Connected" : "Not connected"}
+                <small>${formatNumber(account.linkedin?.organizationCount || 0)} page${Number(account.linkedin?.organizationCount || 0) === 1 ? "" : "s"}</small>
+              </td>
+              <td>${escapeHtml(formatDateTime(account.createdAt))}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
 function formatNumber(value) {
   const number = Number(value || 0);
   return Number.isFinite(number) ? number.toLocaleString() : "0";
@@ -3510,6 +3786,45 @@ function wirePageEvents() {
     });
   });
 
+  document.querySelectorAll("[data-admin-refresh]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await hydrateAdminAccounts();
+      } catch (error) {
+        showError(error, "Unable to refresh admin accounts.");
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-billing-checkout]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await startBillingCheckout(button.dataset.billingCheckout || "growth");
+      } catch (error) {
+        showError(error, "Unable to start Stripe checkout.");
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-billing-portal]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await openBillingPortal();
+      } catch (error) {
+        showError(error, "Billing portal is not available yet.");
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+
   document.querySelectorAll("[data-draft-figure]").forEach((input) => {
     input.addEventListener("change", async () => {
       try {
@@ -3906,7 +4221,7 @@ async function render() {
   const route = routes[path] ? path : path.startsWith("/share/report/") ? "/share/report" : "/";
   setPageMeta(route);
   document.body.dataset.page = route === "/" ? "home" : route === "/share/report" ? "shared-report" : "app";
-  const isPrivate = route.startsWith("/dashboard") || route === "/create-post";
+  const isPrivate = route.startsWith("/dashboard") || route === "/create-post" || route === "/admin";
   document.body.dataset.publicPage = String(!isPrivate);
 
   if (isPrivate && !session.email && !session.accountId) {
@@ -3933,6 +4248,7 @@ async function render() {
     if (route === "/dashboard/analytics") await hydrateAnalyticsDashboard();
     if (route === "/create-post") await hydrateCreatePost();
     if (route === "/share/report") await hydrateSharedReport();
+    if (route === "/admin") await hydrateAdminAccounts();
   } catch (error) {
     showError(error);
   }

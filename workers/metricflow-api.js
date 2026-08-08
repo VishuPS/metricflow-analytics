@@ -58,6 +58,7 @@ export default {
       const route = `${request.method} ${url.pathname}`;
 
       if (route === "GET /api/health") return json({ ok: true, service: "MetricFlow Worker API" }, env);
+      if (route === "POST /api/stripe/webhook" || route === "POST /webhook") return json(await stripeWebhook(request, env), env);
       const sharedReportRoute = url.pathname.match(/^\/api\/shared-reports\/([^/]+)$/);
       if (request.method === "GET" && sharedReportRoute) {
         return json(await loadSharedReport(env, sharedReportRoute[1]), env);
@@ -114,6 +115,22 @@ export default {
       if (route === "GET /api/email-status") {
         await requireAccount(request, env);
         return json(emailStatus(env), env);
+      }
+      if (route === "GET /api/billing/status") {
+        const account = await requireAccount(request, env);
+        return json(await billingStatus(env, account), env);
+      }
+      if (route === "POST /api/billing/checkout") {
+        const account = await requireAccount(request, env);
+        return json(await createBillingCheckout(request, env, account), env);
+      }
+      if (route === "POST /api/billing/portal") {
+        const account = await requireAccount(request, env);
+        return json(await createBillingPortal(request, env, account), env);
+      }
+      if (route === "GET /api/admin/accounts") {
+        const account = await requireAdmin(request, env);
+        return json(await adminAccounts(env, account), env);
       }
       if (route === "POST /api/weekly-snapshot/send") {
         const account = await requireAccount(request, env);
@@ -354,8 +371,19 @@ async function requireAccount(request, env) {
     id: session.accountId,
     name: session.name,
     email: session.email,
-    token
+    token,
+    isAdmin: isAdminEmail(env, session.email)
   };
+}
+
+async function requireAdmin(request, env) {
+  const account = await requireAccount(request, env);
+  if (!account.isAdmin) {
+    const error = new Error("Admin access required");
+    error.status = 403;
+    throw error;
+  }
+  return account;
 }
 
 async function buildUserState(env, accountId) {
@@ -446,7 +474,7 @@ async function signup(request, env) {
   await saveUserState(env, accountKey, account);
   await saveUserState(env, `auth:id:${id}`, { email });
   const emailSent = await sendWelcomeEmail(env, account, `${env.PAGES_URL || new URL(request.url).origin}/dashboard/onboarding`);
-  return { ...authPayload(account, await createSession(env, account)), emailSent };
+  return { ...authPayload(account, await createSession(env, account), env), emailSent };
 }
 
 async function login(request, env) {
@@ -461,7 +489,7 @@ async function login(request, env) {
     error.status = 401;
     throw error;
   }
-  return authPayload(account, await createSession(env, account));
+  return authPayload(account, await createSession(env, account), env);
 }
 
 async function requestPasswordReset(request, env) {
@@ -531,6 +559,195 @@ async function resetPassword(request, env) {
   await saveUserState(env, authAccountKey(account.email), account);
   await env.USER_STATE?.delete(passwordResetKey(token));
   return { message: "Password updated. You can now log in with your new password." };
+}
+
+async function billingStatus(env, sessionAccount) {
+  const account = await loadAccountById(env, sessionAccount.id);
+  const plan = dashboardPlan(account || sessionAccount);
+  return {
+    configured: stripeConfigured(env),
+    plan: plan.label,
+    planName: plan.name,
+    status: account?.billingStatus || (plan.trialActive ? "trialing" : "inactive"),
+    stripeCustomerId: account?.stripeCustomerId || null,
+    stripeSubscriptionId: account?.stripeSubscriptionId || null,
+    trialDaysRemaining: plan.trialDaysRemaining,
+    trialActive: plan.trialActive
+  };
+}
+
+async function createBillingCheckout(request, env, sessionAccount) {
+  requireStripeConfig(env);
+  const body = await readJson(request);
+  const plan = String(body.plan || "growth").toLowerCase();
+  if (!["growth", "enterprise"].includes(plan)) throw httpError("Unsupported billing plan", 400);
+  const priceId = stripePriceForPlan(env, plan);
+  if (!priceId) throw httpError(`${uiPlanName(plan)} checkout is not configured yet`, 503);
+
+  const account = await loadAccountById(env, sessionAccount.id);
+  if (!account) throw httpError("Account not found", 404);
+  const customerId = await ensureStripeCustomer(env, account);
+  const appUrl = env.PAGES_URL || new URL(request.url).origin;
+  const trialDays = Number(env.STRIPE_TRIAL_DAYS ?? 30);
+  const params = {
+    mode: "subscription",
+    customer: customerId,
+    client_reference_id: account.id,
+    success_url: `${appUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${appUrl}/billing/cancel`,
+    allow_promotion_codes: "true",
+    "line_items[0][quantity]": "1",
+    "line_items[0][price]": priceId,
+    "metadata[accountId]": account.id,
+    "metadata[plan]": plan,
+    "subscription_data[metadata][accountId]": account.id,
+    "subscription_data[metadata][plan]": plan
+  };
+  if (Number.isFinite(trialDays) && trialDays > 0) {
+    params["subscription_data[trial_period_days]"] = String(Math.floor(trialDays));
+  }
+
+  const session = await stripeApi(env, "/v1/checkout/sessions", params);
+  return { url: session.url, sessionId: session.id };
+}
+
+async function createBillingPortal(request, env, sessionAccount) {
+  requireStripeConfig(env, { priceRequired: false });
+  const account = await loadAccountById(env, sessionAccount.id);
+  if (!account?.stripeCustomerId) throw httpError("No Stripe customer is connected to this account yet", 400);
+  const appUrl = env.PAGES_URL || new URL(request.url).origin;
+  const portal = await stripeApi(env, "/v1/billing_portal/sessions", {
+    customer: account.stripeCustomerId,
+    return_url: `${appUrl}/dashboard`
+  });
+  return { url: portal.url };
+}
+
+async function ensureStripeCustomer(env, account) {
+  if (account.stripeCustomerId) return account.stripeCustomerId;
+  const customer = await stripeApi(env, "/v1/customers", {
+    email: account.email,
+    name: account.name || account.email,
+    "metadata[accountId]": account.id
+  });
+  account.stripeCustomerId = customer.id;
+  account.billingUpdatedAt = new Date().toISOString();
+  await saveUserState(env, authAccountKey(account.email), account);
+  return customer.id;
+}
+
+async function stripeWebhook(request, env) {
+  const payload = await request.text();
+  if (env.STRIPE_WEBHOOK_SECRET) await verifyStripeSignature(payload, request.headers.get("stripe-signature"), env.STRIPE_WEBHOOK_SECRET);
+  const event = JSON.parse(payload);
+  await handleStripeEvent(env, event);
+  return { received: true };
+}
+
+async function handleStripeEvent(env, event) {
+  const object = event?.data?.object || {};
+  if (event.type === "checkout.session.completed") {
+    const reference = billingReference(object.metadata?.accountId || object.client_reference_id);
+    const account = await findStripeAccount(env, reference.accountId, object.customer);
+    if (!account) return;
+    account.stripeCustomerId = object.customer || account.stripeCustomerId || null;
+    account.stripeSubscriptionId = object.subscription || account.stripeSubscriptionId || null;
+    account.billingStatus = object.status || "checkout_completed";
+    account.plan = object.metadata?.plan || reference.plan || account.plan || "growth";
+    account.billingUpdatedAt = new Date().toISOString();
+    await saveUserState(env, authAccountKey(account.email), account);
+  }
+
+  if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
+    const account = await findStripeAccount(env, object.metadata?.accountId, object.customer);
+    if (!account) return;
+    account.stripeCustomerId = object.customer || account.stripeCustomerId || null;
+    account.stripeSubscriptionId = object.id || account.stripeSubscriptionId || null;
+    account.billingStatus = event.type === "customer.subscription.deleted" ? "canceled" : object.status || account.billingStatus || "active";
+    account.plan = account.billingStatus === "canceled" ? "free" : object.metadata?.plan || account.plan || "growth";
+    account.currentPeriodEnd = object.current_period_end ? new Date(object.current_period_end * 1000).toISOString() : account.currentPeriodEnd || null;
+    account.cancelAtPeriodEnd = Boolean(object.cancel_at_period_end);
+    account.billingUpdatedAt = new Date().toISOString();
+    await saveUserState(env, authAccountKey(account.email), account);
+  }
+}
+
+function billingReference(value) {
+  const [accountId, plan] = String(value || "").split(":");
+  return {
+    accountId: accountId || "",
+    plan: ["growth", "enterprise"].includes(plan) ? plan : ""
+  };
+}
+
+async function findStripeAccount(env, accountId, customerId) {
+  if (accountId) {
+    const account = await loadAccountById(env, accountId);
+    if (account) return account;
+  }
+  if (!customerId || !env.USER_STATE?.list) return null;
+  const page = await env.USER_STATE.list({ prefix: "auth:account:", limit: 1000 });
+  for (const key of page.keys || []) {
+    const account = await loadUserJson(env, key.name, null);
+    if (account?.stripeCustomerId === customerId) return account;
+  }
+  return null;
+}
+
+function stripeConfigured(env) {
+  return Boolean(env.STRIPE_SECRET_KEY && (env.STRIPE_PRICE_GROWTH || env.STRIPE_PRICE_ENTERPRISE));
+}
+
+function requireStripeConfig(env, { priceRequired = true } = {}) {
+  if (!env.STRIPE_SECRET_KEY || (priceRequired && !env.STRIPE_PRICE_GROWTH && !env.STRIPE_PRICE_ENTERPRISE)) {
+    throw httpError("Stripe is not configured yet", 503);
+  }
+}
+
+function stripePriceForPlan(env, plan) {
+  return plan === "enterprise" ? env.STRIPE_PRICE_ENTERPRISE : env.STRIPE_PRICE_GROWTH;
+}
+
+function uiPlanName(plan) {
+  return plan === "enterprise" ? "Enterprise" : plan === "growth" ? "Growth" : "This plan";
+}
+
+async function stripeApi(env, path, params) {
+  const response = await fetch(`https://api.stripe.com${path}`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
+      "content-type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null))
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw httpError(payload.error?.message || "Stripe request failed", response.status);
+  return payload;
+}
+
+async function verifyStripeSignature(payload, signatureHeader, secret) {
+  const parts = Object.fromEntries(String(signatureHeader || "").split(",").map((part) => part.split("=", 2)));
+  const timestamp = parts.t;
+  const signature = parts.v1;
+  if (!timestamp || !signature) throw httpError("Invalid Stripe signature header", 400);
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) throw httpError("Expired Stripe signature", 400);
+  const expected = await hmacSha256Hex(secret, `${timestamp}.${payload}`);
+  if (!timingSafeHexEqual(expected, signature)) throw httpError("Stripe webhook signature verification failed", 400);
+}
+
+async function hmacSha256Hex(secret, value) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const digest = await crypto.subtle.sign("HMAC", key, encoder.encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function timingSafeHexEqual(left, right) {
+  if (left.length !== right.length) return false;
+  let diff = 0;
+  for (let index = 0; index < left.length; index += 1) diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return diff === 0;
 }
 
 async function sendPasswordResetEmail(env, account, resetUrl) {
@@ -661,14 +878,26 @@ function escapeHtml(value) {
   }[char]));
 }
 
-function authPayload(account, token) {
+function authPayload(account, token, env = {}) {
   return {
     id: account.id,
     userId: account.id,
     name: account.name,
     email: account.email,
-    token
+    token,
+    isAdmin: isAdminEmail(env, account.email)
   };
+}
+
+function adminEmails(env) {
+  return String(env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((email) => normalizeEmail(email))
+    .filter(Boolean);
+}
+
+function isAdminEmail(env, email) {
+  return adminEmails(env).includes(normalizeEmail(email));
 }
 
 function normalizeEmail(email) {
@@ -1599,24 +1828,78 @@ async function loadAccountById(env, accountId) {
   return raw ? JSON.parse(raw) : null;
 }
 
+async function adminAccounts(env) {
+  if (!env.USER_STATE?.list) {
+    const error = new Error("Admin account listing requires USER_STATE KV list support");
+    error.status = 500;
+    throw error;
+  }
+
+  const keys = [];
+  let cursor;
+  do {
+    const page = await env.USER_STATE.list({ prefix: "auth:account:", cursor, limit: 1000 });
+    keys.push(...(page.keys || []).map((key) => key.name).filter(Boolean));
+    cursor = page.list_complete ? null : page.cursor;
+  } while (cursor);
+
+  const accounts = [];
+  for (const key of keys) {
+    const account = await loadUserJson(env, key, null);
+    if (!account?.id || !account?.email) continue;
+    const token = await loadUserJson(env, userLinkedInKey(account.id, "token"), null);
+    const organizations = await loadUserJson(env, userLinkedInKey(account.id, "organizations"), []);
+    const selectedOrganization = linkedinOrganizationUrn(await loadUserJson(env, userLinkedInKey(account.id, "organization"), null)) || null;
+    const sync = await loadUserJson(env, userLinkedInKey(account.id, "sync"), null);
+    const plan = dashboardPlan(account);
+    accounts.push({
+      id: account.id,
+      name: account.name,
+      email: account.email,
+      createdAt: account.createdAt || null,
+      isAdmin: isAdminEmail(env, account.email),
+      plan: plan.label,
+      planName: plan.name,
+      billingStatus: account.billingStatus || (plan.trialActive ? "trialing" : "inactive"),
+      stripeCustomerId: account.stripeCustomerId || null,
+      stripeSubscriptionId: account.stripeSubscriptionId || null,
+      linkedin: {
+        connected: Boolean(token?.accessToken),
+        organizationCount: Array.isArray(organizations) ? organizations.length : 0,
+        selectedOrganization,
+        lastIngestedAt: sync?.lastIngestedAt || null
+      }
+    });
+  }
+
+  accounts.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  return {
+    accounts,
+    total: accounts.length,
+    admins: accounts.filter((account) => account.isAdmin).length
+  };
+}
+
 function dashboardPlan(account, settings = {}) {
-  const name = String(settings.plan || account?.plan || "trial").toLowerCase();
+  const rawName = String(settings.plan || account?.plan || "trial").toLowerCase();
+  const name = rawName === "basic" ? "growth" : rawName === "agency" || rawName === "pro" ? "enterprise" : rawName;
   const createdAt = account?.createdAt || new Date().toISOString();
   const ageDays = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86400000));
   const trialDaysRemaining = Math.max(0, 30 - ageDays);
   const trialActive = name === "trial" && trialDaysRemaining > 0;
   const planName = trialActive ? "trial" : name;
-  const rangeLimitDays = planName === "agency" || planName === "pro" || trialActive ? 365 : 30;
+  const rangeLimitDays = planName === "enterprise" || trialActive ? 365 : planName === "growth" ? 90 : 30;
   return {
     name: planName,
-    label: planName === "agency" ? "Agency" : planName === "pro" ? "Pro" : planName === "basic" ? "Basic" : "Free trial",
+    label: planName === "enterprise" ? "Enterprise" : planName === "growth" ? "Growth" : planName === "free" ? "Free" : "Free trial",
     trialActive,
     trialDaysRemaining,
+    pageLimit: planName === "enterprise" ? 5 : 1,
     rangeLimitDays,
     features: {
-      insights: trialActive || planName === "pro" || planName === "agency",
-      reports: trialActive || planName === "pro" || planName === "agency",
-      multiProfile: planName === "agency"
+      insights: trialActive || planName === "growth" || planName === "enterprise",
+      reports: trialActive || planName === "enterprise",
+      multiProfile: planName === "enterprise"
     }
   };
 }

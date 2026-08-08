@@ -3,7 +3,7 @@ const path = require("node:path");
 
 const ROOT = path.join(__dirname, "..");
 const DIST = path.join(ROOT, "dist");
-const FILES = ["index.html", "app.js", "styles.css", "config.js", "_redirects"];
+const FILES = ["index.html", "app.js", "styles.css", "config.js", "_redirects", "robots.txt", "sitemap.xml"];
 const ASSET_DIRS = ["assets"];
 
 async function main() {
