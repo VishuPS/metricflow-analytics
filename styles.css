@@ -4111,8 +4111,7 @@ textarea:focus {
 .snapshot-metrics span,
 .best-time-card span,
 .best-time-card p,
-.best-time-note,
-.email-status-note {
+.best-time-note {
   color: var(--muted);
   font-size: 13px;
 }

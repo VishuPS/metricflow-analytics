@@ -2046,11 +2046,8 @@ async function loadWeeklySnapshot() {
   if (!target) return;
   target.innerHTML = `<p class="empty-state">Loading weekly snapshot.</p>`;
   try {
-    const [result, email] = await Promise.all([
-      api("/api/weekly-snapshot"),
-      api("/api/email-status").catch(() => ({ configured: false, missing: ["RESEND_API_KEY", "EMAIL_FROM"] }))
-    ]);
-    target.innerHTML = WeeklySnapshotCard(result.snapshot, email);
+    const result = await api("/api/weekly-snapshot");
+    target.innerHTML = WeeklySnapshotCard(result.snapshot);
   } catch (error) {
     target.innerHTML = `<p class="empty-state">${escapeHtml(userMessage(error, "Weekly snapshot unavailable."))}</p>`;
   }
@@ -2073,22 +2070,8 @@ async function copyWeeklySnapshot() {
   showToast("Weekly snapshot copied");
 }
 
-async function sendWeeklySnapshot(button) {
-  const previousText = button.textContent;
-  button.disabled = true;
-  button.textContent = "Sending";
-  try {
-    const result = await api("/api/weekly-snapshot/send", { method: "POST" });
-    showToast(result.emailSent ? "Weekly snapshot sent" : "Email is not configured yet");
-  } finally {
-    button.disabled = false;
-    button.textContent = previousText;
-  }
-}
-
-function WeeklySnapshotCard(snapshot = {}, email = {}) {
+function WeeklySnapshotCard(snapshot = {}) {
   const metrics = snapshot.metrics || {};
-  const canSend = Boolean(email.configured);
   return `
     <div class="section-heading">
       <div>
@@ -2102,17 +2085,10 @@ function WeeklySnapshotCard(snapshot = {}, email = {}) {
       ${MetricMini("Engagement", metrics.engagement)}
     </div>
     <p>${escapeHtml(snapshot.summary || "Sync LinkedIn to generate a weekly snapshot.")}</p>
-    <p class="email-status-note">${escapeHtml(canSend ? "Email delivery is configured." : `Email delivery needs setup: ${formatMissingEmailConfig(email.missing)}.`)}</p>
     <div class="button-row">
       <button class="secondary-button" type="button" data-copy-weekly-snapshot>Copy summary</button>
-      <button class="primary-button" type="button" data-send-weekly-snapshot ${canSend ? "" : "disabled"}>Send to email</button>
     </div>
   `;
-}
-
-function formatMissingEmailConfig(missing = []) {
-  const items = Array.isArray(missing) && missing.length ? missing : ["RESEND_API_KEY", "EMAIL_FROM"];
-  return items.join(", ");
 }
 
 function MetricMini(label, value) {
@@ -4090,16 +4066,6 @@ async function handleAppClick(event) {
       await copyWeeklySnapshot();
     } catch (error) {
       showError(error, "Unable to copy weekly snapshot.");
-    }
-    return;
-  }
-
-  const sendSnapshotTarget = event.target.closest("[data-send-weekly-snapshot]");
-  if (sendSnapshotTarget) {
-    try {
-      await sendWeeklySnapshot(sendSnapshotTarget);
-    } catch (error) {
-      showError(error, "Unable to send weekly snapshot.");
     }
     return;
   }
