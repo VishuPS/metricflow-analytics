@@ -489,6 +489,9 @@ async function login(request, env) {
     error.status = 401;
     throw error;
   }
+  account.lastLoginAt = new Date().toISOString();
+  account.loginCount = Number(account.loginCount || 0) + 1;
+  await saveUserState(env, authAccountKey(account.email), account);
   return authPayload(account, await createSession(env, account), env);
 }
 
@@ -1857,6 +1860,8 @@ async function adminAccounts(env) {
       name: account.name,
       email: account.email,
       createdAt: account.createdAt || null,
+      lastLoginAt: account.lastLoginAt || null,
+      loginCount: Number(account.loginCount || 0),
       isAdmin: isAdminEmail(env, account.email),
       plan: plan.label,
       planName: plan.name,

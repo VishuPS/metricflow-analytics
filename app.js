@@ -2940,6 +2940,7 @@ function renderAdminAccounts(accounts) {
             <th>Plan</th>
             <th>Billing</th>
             <th>LinkedIn</th>
+            <th>Last Login</th>
             <th>Joined</th>
           </tr>
         </thead>
@@ -2958,6 +2959,10 @@ function renderAdminAccounts(accounts) {
               <td>
                 ${account.linkedin?.connected ? "Connected" : "Not connected"}
                 <small>${formatNumber(account.linkedin?.organizationCount || 0)} page${Number(account.linkedin?.organizationCount || 0) === 1 ? "" : "s"}</small>
+              </td>
+              <td>
+                ${escapeHtml(account.lastLoginAt ? formatDateTime(account.lastLoginAt) : "Never")}
+                <small>${formatNumber(account.loginCount || 0)} login${Number(account.loginCount || 0) === 1 ? "" : "s"}</small>
               </td>
               <td>${escapeHtml(formatDateTime(account.createdAt))}</td>
             </tr>
