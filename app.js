@@ -626,12 +626,13 @@ function PricingSection() {
           label: "5 pages",
           name: "Enterprise",
           description: "For teams managing multiple LinkedIn Company Pages with stronger reporting needs.",
-          price: "Custom",
+          price: "$29.99",
           features: ["Up to 5 Company Pages", "Cross-page reporting", "Executive report briefs", "Priority support", "Expanded AI planning features"],
           buttonText: "Choose Enterprise",
           billingPlan: "enterprise"
         })}
       </div>
+      <p class="pricing-note">Have variable needs, more pages, or a custom workflow? Reach out and we can discuss the right Metrillix setup for your team.</p>
     </section>
   `;
 }
@@ -1145,12 +1146,13 @@ function PricingSection({ compact = false } = {}) {
           label: "5 pages",
           name: "Enterprise",
           description: "For agencies and teams managing several LinkedIn Company Pages from one account.",
-          price: "Custom",
+          price: "$29.99",
           features: ["Manage up to 5 Company Pages", "Cross-page analytics", "Executive-ready reporting", "Priority support", "Expanded AI recommendations"],
           buttonText: "Choose Enterprise",
           billingPlan: "enterprise"
         })}
       </div>
+      <p class="pricing-note">Have variable needs, more pages, or a custom workflow? Reach out and we can discuss the right Metrillix setup for your team.</p>
     </section>
   `;
 }
